@@ -124,7 +124,9 @@ window.SDGui.generateUi = (() => {
 	}
 
 	function activeConfig() {
-		return SECTION_CONFIG[activeGenerateSection] || SECTION_CONFIG["generate-image"];
+		return (
+			SECTION_CONFIG[activeGenerateSection] || SECTION_CONFIG["generate-image"]
+		);
 	}
 
 	function getActiveSection() {
@@ -290,6 +292,24 @@ window.SDGui.generateUi = (() => {
 		}
 	}
 
+	// Directory picker (control-video frame folders). Mirrors browsePath but
+	// hits the directory-select route which returns a folder path.
+	async function browseDir(flagId, title) {
+		try {
+			var res = await window.SDGui.fetchJson("/api/select-directory", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ title: title }),
+			});
+			if (res && res.selected && res.path) {
+				window.SDGui.flagCore.setFlagValue(flagId, res.path);
+				syncControl(flagId);
+			}
+		} catch (e) {
+			window.SDGui.toast(e.message, "error");
+		}
+	}
+
 	function bindBrowse(buttonId, handler) {
 		var btn = $(buttonId);
 		if (btn) btn.addEventListener("click", handler);
@@ -424,6 +444,7 @@ window.SDGui.generateUi = (() => {
 		bindSliderNumber("gen-cfg", "cfg_scale", 0, 30, 0.1, true);
 		bindEnum("gen-sampler", "sampling_method");
 		bindEnum("gen-scheduler", "scheduler");
+		bindNumber("gen-flow-shift", "flow_shift", true);
 		bindNumber("gen-seed", "seed");
 		bindNumber("gen-batch", "batch_count");
 		bindNumber("gen-threads", "threads");
@@ -463,6 +484,13 @@ window.SDGui.generateUi = (() => {
 		bindBrowse("btn-browse-video-end-img", () =>
 			browsePath("end_img", "image", "Select end frame"),
 		);
+
+		bindText("gen-control-video", "control_video");
+		bindBrowse("btn-browse-control-video", () =>
+			browseDir("control_video", "Select control video frames"),
+		);
+		bindNumber("gen-moe-boundary", "moe_boundary", true);
+		bindText("gen-extra-tiling-args", "extra_tiling_args");
 
 		bindText("gen-upscale-init-img", "init_img");
 		bindBrowse("btn-browse-upscale-init-img", () =>

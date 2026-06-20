@@ -372,6 +372,7 @@ API_ROUTER = (
     .add("POST", "/api/restart", lifecycle_routes.post_restart)
     .add("POST", "/api/open-folder", lifecycle_routes.post_open_folder)
     .add("POST", "/api/select-file", file_picker_routes.select_file)
+    .add("POST", "/api/select-directory", file_picker_routes.select_directory)
     .add("POST", "/api/presets", presets_routes.save_preset)
     .add("POST", "/api/presets/shortcut", presets_routes.export_preset_shortcut)
     .add_prefix("GET", "/api/image/", images_routes.serve_image, "name")

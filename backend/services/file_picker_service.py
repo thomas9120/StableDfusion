@@ -159,6 +159,63 @@ def select_file_in_native_dialog(
         root.destroy()
 
 
+def select_directory_with_osascript(
+    title: str = "Select Folder",
+    initial_dir: Path | None = None,
+) -> str:
+    initial = Path(initial_dir or Path.home()).expanduser()
+    script = (
+        "set dialogTitle to item 1 of argv\n"
+        "set initialDir to item 2 of argv\n"
+        "set selectedFolder to choose folder with prompt dialogTitle "
+        "default location (POSIX file initialDir)\n"
+        "return POSIX path of selectedFolder\n"
+    )
+    result = subprocess.run(
+        ["osascript", "-e", f"on run argv\n{script}end run", str(title), str(initial)],
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    if result.returncode == 1 and "User canceled" in result.stderr:
+        return ""
+    if result.returncode != 0:
+        message = (result.stderr or result.stdout or "macOS folder picker failed.").strip()
+        raise RuntimeError(message)
+    return result.stdout.strip()
+
+
+def select_directory_in_native_dialog(
+    title: str = "Select Folder",
+    initial_dir: Path | None = None,
+) -> str:
+    if platform.system() == "Darwin":
+        return select_directory_with_osascript(title, initial_dir)
+
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+    except Exception as exc:
+        raise RuntimeError(f"Native folder picker unavailable: {exc}") from exc
+
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        root.attributes("-topmost", True)
+    except Exception:
+        pass
+
+    dialog_options: dict[str, Any] = {"title": title, "parent": root, "mustexist": True}
+    if initial_dir:
+        dialog_options["initialdir"] = str(initial_dir)
+
+    try:
+        root.update()
+        return filedialog.askdirectory(**dialog_options) or ""
+    finally:
+        root.destroy()
+
+
 def get_select_file_options(
     ctx: AppContext, purpose: Any, title: Any
 ) -> tuple[str, Path, FileTypes]:
@@ -184,4 +241,14 @@ def select_file(ctx: AppContext, purpose: str, title: str | None = None) -> dict
     selected = select_file_in_native_dialog(
         title=norm_title, initial_dir=initial_dir, filetypes=filetypes
     )
+    return {"selected": bool(selected), "path": selected}
+
+
+def select_directory(ctx: AppContext, title: str | None = None) -> dict:
+    # Control-video frame directories live in user/workspace space (e.g.
+    # ``output/frames``), not the model store, so default to the project root
+    # rather than a model-purpose directory. mustexist=True (native dialog)
+    # guarantees an existing folder; we don't pre-create one.
+    norm_title = str(title or "").strip() or "Select Folder"
+    selected = select_directory_in_native_dialog(title=norm_title, initial_dir=ctx.paths.root)
     return {"selected": bool(selected), "path": selected}

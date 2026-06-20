@@ -304,6 +304,7 @@ def _prepare(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
         "cfg_scale": params.get("cfg_scale"),
         "sampling_method": params.get("sampling_method"),
         "scheduler": params.get("scheduler"),
+        "flow_shift": params.get("flow_shift"),  # flow models: SD3/Wan (blank = auto)
         "model": params.get("model", ""),
         "diffusion_model": params.get("diffusion_model", ""),
         "image": params.get("image", ""),  # metadata mode input
@@ -321,6 +322,8 @@ def _prepare(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
         "vace_strength": params.get("vace_strength"),
         "end_img": params.get("end_img", ""),  # last frame (flf2v)
         "control_video": params.get("control_video", ""),
+        "moe_boundary": params.get("moe_boundary"),  # Wan2.2 MoE
+        "extra_tiling_args": params.get("extra_tiling_args", ""),  # LTX VAE tiling
         "timestamp": ts,
         "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
     }

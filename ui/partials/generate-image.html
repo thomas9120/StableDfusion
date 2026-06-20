@@ -187,6 +187,15 @@
                 <option>default</option>
               </select>
             </div>
+            <div class="form-group">
+              <label class="form-label" for="gen-flow-shift"
+                >Flow shift
+                <span class="help-text"
+                  >(flow models: SD3/Wan; blank = auto)</span
+                ></label
+              >
+              <input type="number" id="gen-flow-shift" min="0" step="0.01" />
+            </div>
           </div>
           <div class="form-row">
             <div class="form-group">
@@ -434,6 +443,55 @@
                 >
                   Browse
                 </button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label"
+                >Control video
+                <span class="help-text"
+                  >(optional, directory of control frames in order)</span
+                ></label
+              >
+              <div class="field-row">
+                <input
+                  type="text"
+                  id="gen-control-video"
+                  placeholder="output/frames"
+                />
+                <button
+                  id="btn-browse-control-video"
+                  class="btn btn-sm"
+                  type="button"
+                >
+                  Browse
+                </button>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="gen-moe-boundary"
+                  >MoE boundary
+                  <span class="help-text">(Wan2.2 MoE)</span></label
+                >
+                <input
+                  type="number"
+                  id="gen-moe-boundary"
+                  min="0"
+                  max="1"
+                  step="0.001"
+                  value="0.875"
+                />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="gen-extra-tiling-args"
+                  >Extra tiling args
+                  <span class="help-text">(LTX VAE tiling)</span></label
+                >
+                <input
+                  type="text"
+                  id="gen-extra-tiling-args"
+                  placeholder="size=512,overlap=64"
+                />
               </div>
             </div>
           </div>
