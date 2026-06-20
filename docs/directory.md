@@ -123,7 +123,7 @@ tab switching + status polling; other modules attach to `window.SDGui.*`.
 | `flag-core.js` | Shared flag state (`window.SDGui.flagCore`), `setFlagValue`, `getLaunchArgs` |
 | `flag-validation.js` | Flag value validation and coercion |
 | `config-flags-ui.js` | Configure tab: search/filter, category collapse, command preview, expand/collapse-all buttons |
-| `generate-ui.js` | Shared Generate workbench: mode tabs, prompt, dimensions, bundles, history grid |
+| `generate-ui.js` | Generate coordinator: section routing, helper-module initialization, public methods used by app/presets/HF download |
 | `gallery-rendering.js` | Image gallery rendering helpers |
 | `hf-download-ui.js` | HF Download tab UI |
 | `server-ui.js` | Server tab UI |
@@ -131,6 +131,28 @@ tab switching + status polling; other modules attach to `window.SDGui.*`.
 | `remote-tunnel-ui.js` | Remote tunnel status and controls |
 | `presets.js` | Presets save/load/export |
 | `app-data.js` | Shared app data helpers |
+
+#### Generate subsystem (`ui/js/generate/`)
+
+The Generate tab is split into focused global modules loaded before
+`generate-ui.js`. Each module attaches to `window.SDGui.*`; there are no ES
+modules or bundler assumptions.
+
+| Module | Namespace | Role |
+|---|---|---|
+| `dom.js` | `window.SDGui.generateDom` | Shared safe DOM helpers (`$`, `el`, `setHidden`, `populateEnum`) |
+| `formatters.js` | `window.SDGui.generateFormatters` | Pure formatting helpers for elapsed time, relative history time, and LoRA path/tag formatting |
+| `dimensions.js` | `window.SDGui.generateDimensions` | Dimension shape/size widget, width/height swap, snapping, and live readout |
+| `control-bindings.js` | `window.SDGui.generateControls` | Shared control registry, mirror controls, and flagCore-backed binding/sync helpers |
+| `model-fields.js` | `window.SDGui.generateModelFields` | Bundle-driven model component pickers, model file list population, Browse actions, and LoRA controls |
+| `history.js` | `window.SDGui.generateHistory` | LocalStorage history schema, render/restore/open/delete/clear actions, and history toolbar |
+| `preview-progress.js` | `window.SDGui.generatePreviewProgress` | Live preview image/video switching, progress bar, ETA/elapsed text, and empty result placeholder |
+| `results.js` | `window.SDGui.generateResults` | Result rendering, metadata text output, warnings/stderr display, result actions, and history entry creation |
+| `run-controller.js` | `window.SDGui.generateRunController` | Generate request body construction, LoRA prompt injection, polling, cancellation, metadata inspect, and reload-time polling resume |
+
+`generate-ui.js` remains the public coordinator. Its stable public surface is
+`init`, `renderBundleFields`, `generate`, `cancel`, `renderHistory`,
+`updateModeSections`, `syncFromState`, and `handleSectionChange`.
 
 #### Flags subsystem (`ui/js/flags/`)
 

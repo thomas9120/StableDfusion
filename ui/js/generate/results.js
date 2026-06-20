@@ -35,7 +35,19 @@ window.SDGui.generateResults = (() => {
 	// Download + Show-in-folder cover every file-management case. Do not
 	// re-add without a different mechanism.
 
-	function renderResult(snap) {
+	function addResultToHistory(snap) {
+		if (!history || typeof history.addHistoryEntry !== "function") return;
+		var files = snap.result_files || [];
+		var mode = snap.mode || getMode();
+		if (mode === "metadata") {
+			history.addHistoryEntry(snap, files[0] || "metadata");
+			return;
+		}
+		files.forEach((f) => history.addHistoryEntry(snap, f));
+	}
+
+	function renderResult(snap, options) {
+		options = options || {};
 		var box = $("gen-result");
 		var actions = $("gen-result-actions");
 		if (!box) return;
@@ -85,9 +97,7 @@ window.SDGui.generateResults = (() => {
 				box.appendChild(pre);
 			}
 			if (actions) actions.classList.add("hidden");
-			if (history && typeof history.addHistoryEntry === "function") {
-				history.addHistoryEntry(snap, files[0] || "metadata");
-			}
+			if (!options.skipHistory) addResultToHistory(snap);
 			return;
 		}
 
@@ -128,9 +138,7 @@ window.SDGui.generateResults = (() => {
 			if (dlBtn) dlBtn.onclick = () => downloadResult(first);
 		}
 		// Add to history (one entry per result file for batch).
-		if (history && typeof history.addHistoryEntry === "function") {
-			files.forEach((f) => history.addHistoryEntry(snap, f));
-		}
+		if (!options.skipHistory) addResultToHistory(snap);
 	}
 
 	// A9 - render an inline error in the result frame (instead of toast-only).
@@ -182,6 +190,7 @@ window.SDGui.generateResults = (() => {
 		init: init,
 		renderResult: renderResult,
 		renderResultError: renderResultError,
+		addResultToHistory: addResultToHistory,
 		downloadResult: downloadResult,
 		openResultFile: openResultFile,
 	};

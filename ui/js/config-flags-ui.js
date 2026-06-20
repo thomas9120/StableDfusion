@@ -88,7 +88,7 @@ window.SDGui.configFlagsUi = (() => {
 		if (!flags.length) return null;
 
 		var panel = el("div", "cfg-category");
-		var expanded = expandedCats[cat.id] !== false; // open by default
+		var expanded = expandedCats[cat.id] === true;
 		var header = el("button", "cfg-cat-header" + (expanded ? " open" : ""));
 		header.type = "button";
 		header.textContent = (expanded ? "▾ " : "▸ ") + (cat.label || cat.id);

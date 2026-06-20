@@ -161,7 +161,7 @@ window.SDGui.gallery = (() => {
 					ev.stopPropagation();
 					actions.onRestore(entry);
 				});
-		if (typeof actions.onSend === "function")
+		if (typeof actions.onSend === "function" && !isVideo)
 			bar
 				.appendChild(toolbarBtn("send", "Send to img2img", ICONS.send))
 				.addEventListener("click", (ev) => {

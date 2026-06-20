@@ -536,6 +536,24 @@ function findChromiumExecutable() {
 			() => document.querySelectorAll("#gen-result img").length,
 		);
 		check("result image rendered on done", resultCount >= 1);
+		await page.click('.nav-item[data-section="generate-video"]');
+		await page.waitForTimeout(80);
+		const videoResultCount = await page.evaluate(
+			() => document.querySelectorAll("#gen-result img, #gen-result video").length,
+		);
+		check(
+			"video tab does not inherit image result frame",
+			videoResultCount === 0,
+		);
+		await page.click('.nav-item[data-section="generate-image"]');
+		await page.waitForTimeout(80);
+		const restoredImageResultCount = await page.evaluate(
+			() => document.querySelectorAll("#gen-result img").length,
+		);
+		check(
+			"image result frame restores after tab switch",
+			restoredImageResultCount >= 1,
+		);
 
 		const historyCount = await page.evaluate(
 			() => document.querySelectorAll("#gen-history .history-item").length,
@@ -651,6 +669,65 @@ function findChromiumExecutable() {
 			histUI.afterClear === null &&
 				histUI.itemsAfterClear === 0 &&
 				histUI.emptyShown,
+		);
+
+		const filteredHistory = await page.evaluate(async () => {
+			localStorage.setItem(
+				"sdgui.generate.history",
+				JSON.stringify([
+					{
+						id: "img",
+						file: "image-smoke.png",
+						prompt: "image",
+						timestamp: Date.now(),
+						mode: "img_gen",
+						params: {},
+					},
+					{
+						id: "vid",
+						file: "video-smoke.webm",
+						prompt: "video",
+						timestamp: Date.now(),
+						mode: "vid_gen",
+						params: {},
+					},
+					{
+						id: "up",
+						file: "upscale-smoke.png",
+						prompt: "upscale",
+						timestamp: Date.now(),
+						mode: "upscale",
+						params: {},
+					},
+				]),
+			);
+			const nav = async (section) => {
+				document
+					.querySelector(`.nav-item[data-section="${section}"]`)
+					.click();
+				await new Promise((r) => setTimeout(r, 80));
+				return Array.from(
+					document.querySelectorAll("#gen-history .history-item"),
+				).map((item) => item.getAttribute("data-id"));
+			};
+			return {
+				image: await nav("generate-image"),
+				video: await nav("generate-video"),
+				upscale: await nav("upscale"),
+			};
+		});
+		check(
+			"Generate Image history filters image entries",
+			filteredHistory.image.length === 1 && filteredHistory.image[0] === "img",
+		);
+		check(
+			"Generate Video history filters video entries",
+			filteredHistory.video.length === 1 && filteredHistory.video[0] === "vid",
+		);
+		check(
+			"Upscale history filters upscale entries",
+			filteredHistory.upscale.length === 1 &&
+				filteredHistory.upscale[0] === "up",
 		);
 
 		// ── Phase 4: preset save/load preserves flagCore state + custom args.
