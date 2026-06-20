@@ -15,11 +15,28 @@ window.SDGui.generateRunController = (() => {
 	var flagCore = null;
 	var previewProgress = null;
 	var results = null;
+	var runningSection = null;
 	var activeConfig = function () {
 		return {
 			running: "Generating... your image will appear here.",
 		};
 	};
+	var getActiveSection = function () {
+		return "generate-image";
+	};
+	var sectionForMode = function (mode) {
+		return mode === "vid_gen"
+			? "generate-video"
+			: mode === "upscale"
+				? "upscale"
+				: mode === "convert"
+					? "convert"
+					: "generate-image";
+	};
+	var onRunStart = function () {};
+	var onRunProgress = function () {};
+	var onRunPreview = function () {};
+	var onRunDone = function () {};
 	var syncFromState = function () {};
 	var updateModeSections = function () {};
 
@@ -31,6 +48,24 @@ window.SDGui.generateRunController = (() => {
 		results = options.results || window.SDGui.generateResults;
 		if (typeof options.activeConfig === "function") {
 			activeConfig = options.activeConfig;
+		}
+		if (typeof options.getActiveSection === "function") {
+			getActiveSection = options.getActiveSection;
+		}
+		if (typeof options.sectionForMode === "function") {
+			sectionForMode = options.sectionForMode;
+		}
+		if (typeof options.onRunStart === "function") {
+			onRunStart = options.onRunStart;
+		}
+		if (typeof options.onRunProgress === "function") {
+			onRunProgress = options.onRunProgress;
+		}
+		if (typeof options.onRunPreview === "function") {
+			onRunPreview = options.onRunPreview;
+		}
+		if (typeof options.onRunDone === "function") {
+			onRunDone = options.onRunDone;
 		}
 		if (typeof options.syncFromState === "function") {
 			syncFromState = options.syncFromState;
@@ -51,11 +86,12 @@ window.SDGui.generateRunController = (() => {
 	async function poll() {
 		try {
 			var snap = await window.SDGui.fetchJson("/api/generate/status");
-			previewProgress.updateProgress(snap);
+			var section = runningSection || sectionForMode(snap.mode || flagCore.getMode());
+			onRunProgress(section, snap);
 			if (snap.state === "running") {
 				if (snap.preview_mtime && snap.preview_mtime !== lastPreviewMtime) {
 					lastPreviewMtime = snap.preview_mtime;
-					previewProgress.refreshPreview(snap.preview_mtime);
+					onRunPreview(section, snap.preview_mtime);
 				}
 				return;
 			}
@@ -65,18 +101,23 @@ window.SDGui.generateRunController = (() => {
 			if (snap.state === "done") {
 				previewProgress.setRunStartTime(0);
 				previewProgress.showProgressBar(false);
-				results.renderResult(snap);
+				onRunDone(section, snap);
+				if (results && typeof results.addResultToHistory === "function") {
+					results.addResultToHistory(snap);
+				}
 				window.SDGui.toast("Generation complete.", "success");
 			} else if (snap.state === "error") {
 				previewProgress.setRunStartTime(0);
 				previewProgress.showProgressBar(false);
-				results.renderResultError(snap);
+				onRunDone(section, snap);
 				window.SDGui.toast(snap.error || "Generation failed.", "error");
 			} else if (snap.state === "canceled") {
 				previewProgress.setRunStartTime(0);
 				previewProgress.showProgressBar(false);
+				onRunDone(section, snap);
 				window.SDGui.toast("Generation canceled.", "warning");
 			}
+			runningSection = null;
 		} catch (e) {
 			/* transient network - keep polling */
 		}
@@ -139,17 +180,19 @@ window.SDGui.generateRunController = (() => {
 			preview_interval: vals.preview_interval,
 			params: vals,
 		};
+		runningSection = sectionForMode(body.mode);
 
 		// Reset preview area (only relevant for img_gen/vid_gen, harmless for others).
 		lastPreviewMtime = 0;
-		previewProgress.resetPreview();
-		// A9 - reset result frame to its empty state on a fresh run.
-		previewProgress.showResultEmpty(activeConfig().running);
+		onRunStart(runningSection);
 		setGenerating(true);
 		previewProgress.setRunStartTime(Date.now());
-		previewProgress.showProgressBar(true, true);
-		var prog = $("gen-progress-text");
-		if (prog) prog.textContent = "Starting...";
+		if (runningSection === getActiveSection()) {
+			previewProgress.showProgressBar(true, true);
+			previewProgress.showResultEmpty(activeConfig().running);
+			var prog = $("gen-progress-text");
+			if (prog) prog.textContent = "Starting...";
+		}
 
 		try {
 			await window.SDGui.fetchJson("/api/generate", {
@@ -168,6 +211,12 @@ window.SDGui.generateRunController = (() => {
 				syncFromState(false);
 			}
 			setGenerating(false);
+			onRunDone(runningSection, {
+				state: "error",
+				mode: body.mode,
+				error: e.message,
+			});
+			runningSection = null;
 			window.SDGui.toast(e.message, "error");
 		}
 	}
@@ -197,7 +246,9 @@ window.SDGui.generateRunController = (() => {
 		window.SDGui.fetchJson("/api/generate/status")
 			.then((snap) => {
 				if (snap && snap.state === "running") {
+					runningSection = sectionForMode(snap.mode || flagCore.getMode());
 					setGenerating(true);
+					onRunStart(runningSection);
 					startPolling();
 				}
 			})

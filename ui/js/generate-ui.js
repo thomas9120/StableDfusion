@@ -7,6 +7,12 @@ window.SDGui = window.SDGui || {};
 window.SDGui.generateUi = (() => {
 	var activeGenerateSection = "generate-image";
 	var routingSection = false;
+	var workspaceState = {
+		"generate-image": {},
+		"generate-video": {},
+		upscale: {},
+		convert: {},
+	};
 
 	var dom = window.SDGui.generateDom;
 	var dims = window.SDGui.generateDimensions;
@@ -109,8 +115,90 @@ window.SDGui.generateUi = (() => {
 		return MODE_SECTION[mode] || "generate-image";
 	}
 
+	function modesForSection(section) {
+		var modes = [];
+		Object.keys(MODE_SECTION).forEach((mode) => {
+			if (MODE_SECTION[mode] === section) modes.push(mode);
+		});
+		return modes.length ? modes : [activeConfig().mode];
+	}
+
 	function activeConfig() {
 		return SECTION_CONFIG[activeGenerateSection] || SECTION_CONFIG["generate-image"];
+	}
+
+	function getActiveSection() {
+		return activeGenerateSection;
+	}
+
+	function getWorkspaceState(section) {
+		if (!workspaceState[section]) workspaceState[section] = {};
+		return workspaceState[section];
+	}
+
+	function renderWorkspaceState() {
+		var state = getWorkspaceState(activeGenerateSection);
+		preview.resetPreview();
+		preview.showProgressBar(!!state.running, !state.progressSnap);
+		if (state.previewMtime) preview.refreshPreview(state.previewMtime);
+
+		if (state.running) {
+			if (state.progressSnap) preview.updateProgress(state.progressSnap);
+			else preview.showResultEmpty(activeConfig().running);
+		} else if (state.errorSnap) {
+			results.renderResultError(state.errorSnap);
+		} else if (state.resultSnap) {
+			results.renderResult(state.resultSnap, { skipHistory: true });
+		} else {
+			preview.showResultEmpty(activeConfig().empty);
+			var actions = $("gen-result-actions");
+			if (actions) actions.classList.add("hidden");
+		}
+	}
+
+	function setActiveHistoryFilter() {
+		if (hist && typeof hist.setModeFilter === "function") {
+			hist.setModeFilter(modesForSection(activeGenerateSection));
+		}
+	}
+
+	function handleRunStart(section) {
+		var state = getWorkspaceState(section);
+		state.running = true;
+		state.resultSnap = null;
+		state.errorSnap = null;
+		state.progressSnap = null;
+		state.previewMtime = 0;
+		if (section === activeGenerateSection) renderWorkspaceState();
+	}
+
+	function handleRunProgress(section, snap) {
+		var state = getWorkspaceState(section);
+		state.running = snap.state === "running" || snap.state === "queued";
+		state.progressSnap = snap;
+		if (section === activeGenerateSection) preview.updateProgress(snap);
+	}
+
+	function handleRunPreview(section, mtime) {
+		var state = getWorkspaceState(section);
+		state.previewMtime = mtime || 0;
+		if (section === activeGenerateSection && state.previewMtime) {
+			preview.refreshPreview(state.previewMtime);
+		}
+	}
+
+	function handleRunDone(section, snap) {
+		var state = getWorkspaceState(section);
+		state.running = false;
+		state.progressSnap = null;
+		if (snap.state === "error") {
+			state.errorSnap = snap;
+			state.resultSnap = null;
+		} else if (snap.state === "done") {
+			state.resultSnap = snap;
+			state.errorSnap = null;
+		}
+		if (section === activeGenerateSection) renderWorkspaceState();
 	}
 
 	function moveWorkbenchTo(section) {
@@ -239,6 +327,8 @@ window.SDGui.generateUi = (() => {
 		syncSelectorsFromState();
 		updateModeSections();
 		syncAll();
+		setActiveHistoryFilter();
+		renderWorkspaceState();
 	}
 
 	function initModules() {
@@ -263,6 +353,12 @@ window.SDGui.generateUi = (() => {
 			previewProgress: preview,
 			results: results,
 			activeConfig: activeConfig,
+			getActiveSection: getActiveSection,
+			sectionForMode: sectionForMode,
+			onRunStart: handleRunStart,
+			onRunProgress: handleRunProgress,
+			onRunPreview: handleRunPreview,
+			onRunDone: handleRunDone,
 			syncFromState: syncFromState,
 			updateModeSections: updateModeSections,
 		});
@@ -429,9 +525,11 @@ window.SDGui.generateUi = (() => {
 
 	function renderInitialState() {
 		renderBundleFields();
+		setActiveHistoryFilter();
 		hist.render();
 		updateActionCopy();
 		hist.attachToolbar();
+		renderWorkspaceState();
 	}
 
 	function init() {

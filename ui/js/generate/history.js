@@ -29,6 +29,7 @@ window.SDGui.generateHistory = (() => {
 	var HISTORY_STORE_CAP = 60;
 	var HISTORY_VISIBLE_DEFAULT = 20;
 	var historyExpanded = false;
+	var modeFilter = null;
 
 	// Injected by init(). All flagCore reads/writes go through this — the
 	// module never calls `window.SDGui.flagCore` directly except as a
@@ -75,6 +76,18 @@ window.SDGui.generateHistory = (() => {
 		return entry.file || entry.name || "";
 	}
 
+	function matchesModeFilter(entry) {
+		if (!modeFilter || !modeFilter.length) return true;
+		var mode = entry && entry.mode ? entry.mode : "img_gen";
+		return modeFilter.indexOf(mode) !== -1;
+	}
+
+	function setModeFilter(modes) {
+		modeFilter = Array.isArray(modes) ? modes.slice() : null;
+		historyExpanded = false;
+		render();
+	}
+
 	function addHistoryEntry(snap, file) {
 		var fc = flagCore || window.SDGui.flagCore;
 		var vals = fc.getFlagValues();
@@ -98,11 +111,12 @@ window.SDGui.generateHistory = (() => {
 
 	function render() {
 		var all = loadHistory();
-		var total = all.length;
+		var filtered = all.filter(matchesModeFilter);
+		var total = filtered.length;
 		var shown = historyExpanded
 			? total
 			: Math.min(total, HISTORY_VISIBLE_DEFAULT);
-		var entries = all.slice(0, shown);
+		var entries = filtered.slice(0, shown);
 
 		// Header count badge.
 		var countEl = $("gen-history-count");
@@ -194,12 +208,18 @@ window.SDGui.generateHistory = (() => {
 	async function clearHistory() {
 		var ok = await window.SDGui.confirmAction(
 			"Clear history?",
-			"This removes all entries from the history list. The output image files on disk are not deleted.",
+			"This removes visible entries from the history list. The output image files on disk are not deleted.",
 			"Clear history",
 		);
 		if (!ok) return;
 		try {
-			localStorage.removeItem(HISTORY_KEY);
+			if (modeFilter && modeFilter.length) {
+				var remaining = loadHistory().filter((entry) => !matchesModeFilter(entry));
+				if (remaining.length) saveHistory(remaining);
+				else localStorage.removeItem(HISTORY_KEY);
+			} else {
+				localStorage.removeItem(HISTORY_KEY);
+			}
 		} catch (e) {
 			/* ignore */
 		}
@@ -253,6 +273,7 @@ window.SDGui.generateHistory = (() => {
 		// `historyExpanded` toggle. Kept on the module so the toolbar
 		// stays a single DOM contract owned by history concerns.
 		attachToolbar: attachToolbar,
+		setModeFilter: setModeFilter,
 		// Called from the run-controller/result path once per result file.
 		addHistoryEntry: addHistoryEntry,
 	};
