@@ -10,7 +10,8 @@ window.SDGui.apiTab = (() => {
 	}
 
 	function endpointBase(status) {
-		if (status && status.target_url) return String(status.target_url).replace(/\/+$/, "");
+		if (status && status.target_url)
+			return String(status.target_url).replace(/\/+$/, "");
 		return "http://127.0.0.1:1234";
 	}
 
@@ -23,6 +24,8 @@ window.SDGui.apiTab = (() => {
 		box.appendChild(el("div", "api-snippet-title", title));
 		var pre = el("pre", "command-preview", text);
 		box.appendChild(pre);
+		// B1 — Copy button per snippet.
+		window.SDGui.attachCopyButton(pre, () => text);
 		return box;
 	}
 
@@ -72,10 +75,14 @@ window.SDGui.apiTab = (() => {
 	}
 
 	function init() {
-		render(window.SDGui.serverUi && window.SDGui.serverUi.getStatus
-			? window.SDGui.serverUi.getStatus()
-			: null);
-		window.addEventListener("sdgui:sd-server-status", (event) => render(event.detail));
+		render(
+			window.SDGui.serverUi && window.SDGui.serverUi.getStatus
+				? window.SDGui.serverUi.getStatus()
+				: null,
+		);
+		window.addEventListener("sdgui:sd-server-status", (event) =>
+			render(event.detail),
+		);
 	}
 
 	return { init: init, render: render };

@@ -23,6 +23,63 @@ window.SDGui.generateUi = (() => {
 		metadata: "gen-metadata-inputs",
 	};
 
+	// A3/H1 - per-mode label + help text for the mode-inputs section header.
+	var MODE_META = {
+		img_gen: {
+			label: "Image references (optional)",
+			help: "Add a reference image for image-to-image, inpainting, or ControlNet.",
+		},
+		vid_gen: {
+			label: "Video inputs (optional)",
+			help: "Add a start/end frame image for video generation.",
+		},
+		upscale: {
+			label: "Upscale source",
+			help: "Select the image to upscale and a RealESRGAN model.",
+		},
+		convert: {
+			label: "Convert source",
+			help: "Source model is selected above; convert writes a GGUF/tensor file.",
+		},
+		metadata: {
+			label: "Inspect image",
+			help: "Select an image to read its embedded generation metadata.",
+		},
+	};
+
+	// A11 - run start time (epoch ms) for elapsed/ETA display.
+	var runStartTime = 0;
+
+	// A6 - dimension alignment multiple. SD needs mult of 8; many models 64.
+	var DIM_MULTIPLE = 8;
+
+	function formatElapsed(ms) {
+		var s = Math.max(0, Math.floor(ms / 1000));
+		if (s < 60) return s + "s";
+		return Math.floor(s / 60) + "m " + (s % 60) + "s";
+	}
+
+	// A6 - snap a value to the dimension multiple.
+	function snapDim(v) {
+		var n = parseInt(v, 10);
+		if (Number.isNaN(n)) n = DIM_MULTIPLE;
+		if (n < DIM_MULTIPLE) n = DIM_MULTIPLE;
+		return Math.round(n / DIM_MULTIPLE) * DIM_MULTIPLE;
+	}
+
+	// A6 - highlight the ratio chip matching the current W/H (or none).
+	function updateActiveRatioChip() {
+		var chips = document.querySelectorAll("#gen-ratio-chips .ratio-chip");
+		var vals = window.SDGui.flagCore.getFlagValues();
+		var w = Number(vals.width) || 0;
+		var h = Number(vals.height) || 0;
+		var ratio = h > 0 ? w / h : 0;
+		chips.forEach((chip) => {
+			var r = parseFloat(chip.getAttribute("data-ratio"));
+			chip.classList.toggle("active", ratio > 0 && Math.abs(r - ratio) < 0.02);
+		});
+	}
+
 	function $(id) {
 		return document.getElementById(id);
 	}
@@ -72,6 +129,50 @@ window.SDGui.generateUi = (() => {
 			});
 	}
 
+	// A7 - enhance a bare number input into a slider + number compound, both
+	// bound to flagCore. Keeps exact entry via the number field.
+	function bindSliderNumber(id, flagId, min, max, step, isFloat) {
+		var number = $(id);
+		if (!number) return;
+		var wrap = el("div", "slider-number");
+		var slider = el("input");
+		slider.type = "range";
+		slider.min = String(min);
+		slider.max = String(max);
+		slider.step = String(step);
+		slider.setAttribute(
+			"aria-label",
+			number.getAttribute("aria-label") || flagId + " slider",
+		);
+		if (number.parentNode) number.parentNode.replaceChild(wrap, number);
+		wrap.appendChild(slider);
+		wrap.appendChild(number);
+		var fmt = (v) =>
+			isFloat
+				? String(Math.round(Number(v) * 100) / 100)
+				: String(parseInt(v, 10) || 0);
+		slider.value = number.value;
+		slider.addEventListener("input", () => {
+			number.value = fmt(slider.value);
+			window.SDGui.flagCore.setFlagValue(
+				flagId,
+				isFloat ? parseFloat(slider.value) : parseInt(slider.value, 10),
+			);
+		});
+		number.addEventListener("change", () => {
+			var n = isFloat ? parseFloat(number.value) : parseInt(number.value, 10);
+			if (Number.isNaN(n)) n = 0;
+			slider.value = String(n);
+			window.SDGui.flagCore.setFlagValue(flagId, n);
+		});
+		controls[flagId] = {
+			id: id,
+			kind: "slider",
+			slider: slider,
+			number: number,
+		};
+	}
+
 	function populateEnum(id, options, current) {
 		var node = $(id);
 		if (!node) return;
@@ -88,7 +189,7 @@ window.SDGui.generateUi = (() => {
 		// Model-picker <select> (path kind).
 		if (entry.kind === "path" && entry.select) {
 			var sel = entry.select;
-			if (!sel.isConnected) return; // stale (bundle switched) — skip
+			if (!sel.isConnected) return; // stale (bundle switched) - skip
 			if (v && !Array.from(sel.options).some((o) => o.value === v)) {
 				sel.appendChild(new Option(v, v));
 			}
@@ -99,6 +200,13 @@ window.SDGui.generateUi = (() => {
 			if (!entry.slider.isConnected) return;
 			entry.slider.value = String(v);
 			if (entry.valueLabel) entry.valueLabel.textContent = String(v);
+			return;
+		}
+		if (entry.kind === "slider" && entry.slider) {
+			if (!entry.slider.isConnected) return;
+			entry.slider.value = String(v);
+			if (entry.number && document.activeElement !== entry.number)
+				entry.number.value = String(v);
 			return;
 		}
 		var node = $(entry.id);
@@ -122,9 +230,21 @@ window.SDGui.generateUi = (() => {
 		var mode = window.SDGui.flagCore.getMode();
 		var activePanelId = MODE_INPUT_PANELS[mode];
 
+		// A3 - relabel the mode-inputs header + help per active mode.
+		var label = $("gen-mode-label");
+		var help = $("gen-mode-help");
+		var meta = MODE_META[mode];
+		if (label && meta) label.textContent = meta.label;
+		if (help && meta) help.textContent = meta.help;
+		var helpWrap = $("gen-mode-inputs");
+		if (helpWrap && help) help.style.display = meta && meta.help ? "" : "none";
+
 		// Toggle which mode-inputs panel is visible.
-		Object.keys(MODE_INPUT_PANELS).forEach(function (m) {
-			setHidden($(MODE_INPUT_PANELS[m]), MODE_INPUT_PANELS[m] !== activePanelId);
+		Object.keys(MODE_INPUT_PANELS).forEach((m) => {
+			setHidden(
+				$(MODE_INPUT_PANELS[m]),
+				MODE_INPUT_PANELS[m] !== activePanelId,
+			);
 		});
 
 		// Prompt + negative prompt + dimensions/steps/seed are only relevant
@@ -133,6 +253,9 @@ window.SDGui.generateUi = (() => {
 		setHidden($("gen-prompt-section"), !usePrompt);
 		setHidden($("gen-sampling-section"), !usePrompt);
 		setHidden($("gen-advanced-section"), !usePrompt);
+
+		// Update ratio-chip highlight for the current dimensions (A6).
+		updateActiveRatioChip();
 	}
 
 	// ── Model-component pickers (bundle-driven) ───────────────────────────
@@ -178,7 +301,9 @@ window.SDGui.generateUi = (() => {
 					byFolder[folder].size += m.size || 0;
 				});
 				if (!Object.keys(byFolder).length) {
-					select.appendChild(new Option("models/loras (empty)", "models/loras"));
+					select.appendChild(
+						new Option("models/loras (empty)", "models/loras"),
+					);
 					return;
 				}
 				Object.keys(byFolder)
@@ -272,11 +397,19 @@ window.SDGui.generateUi = (() => {
 		var row = el("div", "field-row");
 		var select = el("select");
 		select.appendChild(new Option("Loading...", ""));
-		controls.lora_file = { id: null, kind: "path", select: select, purpose: "lora" };
+		controls.lora_file = {
+			id: null,
+			kind: "path",
+			select: select,
+			purpose: "lora",
+		};
 		select.addEventListener("change", () => {
 			window.SDGui.flagCore.setFlagValue("lora_file", select.value);
 			if (select.value) {
-				window.SDGui.flagCore.setFlagValue("lora_model_dir", loraFolderFromPath(select.value));
+				window.SDGui.flagCore.setFlagValue(
+					"lora_model_dir",
+					loraFolderFromPath(select.value),
+				);
 			}
 		});
 		populateLoraFileSelect(select).then(() => syncControl("lora_file"));
@@ -290,7 +423,8 @@ window.SDGui.generateUi = (() => {
 		slider.max = "2";
 		slider.step = "0.05";
 		var current = window.SDGui.flagCore.getFlagValues().lora_strength;
-		slider.value = current === undefined || current === "" ? "1" : String(current);
+		slider.value =
+			current === undefined || current === "" ? "1" : String(current);
 		var valueLabel = el("span", "help-text", formatLoraStrength(slider.value));
 		controls.lora_strength = {
 			id: null,
@@ -321,7 +455,10 @@ window.SDGui.generateUi = (() => {
 			var res = await window.SDGui.fetchJson("/api/select-file", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ purpose: field.purpose, title: fieldLabel(field.key) }),
+				body: JSON.stringify({
+					purpose: field.purpose,
+					title: fieldLabel(field.key),
+				}),
 			});
 			if (res && res.selected && res.path) {
 				window.SDGui.flagCore.setFlagValue(field.key, res.path);
@@ -398,13 +535,20 @@ window.SDGui.generateUi = (() => {
 
 			var row = el("div", "field-row");
 			var select = el("select");
-			select.appendChild(new Option("Loading…", ""));
+			select.appendChild(new Option("Loading...", ""));
 			// Track this select for syncControl via a synthetic controls entry.
-			controls[field.key] = { id: null, kind: "path", select: select, purpose: field.purpose };
+			controls[field.key] = {
+				id: null,
+				kind: "path",
+				select: select,
+				purpose: field.purpose,
+			};
 			select.addEventListener("change", () => {
 				window.SDGui.flagCore.setFlagValue(field.key, select.value);
 			});
-			populateModelSelect(select, field.purpose).then(() => syncControl(field.key));
+			populateModelSelect(select, field.purpose).then(() =>
+				syncControl(field.key),
+			);
 
 			var browse = el("button", "btn btn-sm", "Browse");
 			browse.type = "button";
@@ -475,12 +619,16 @@ window.SDGui.generateUi = (() => {
 		try {
 			localStorage.setItem(HISTORY_KEY, JSON.stringify(entries.slice(0, 60)));
 		} catch (e) {
-			/* quota — ignore */
+			/* quota - ignore */
 		}
 	}
 
 	function renderHistory() {
-		window.SDGui.gallery.renderHistoryGrid($("gen-history"), loadHistory(), restoreFromHistory);
+		window.SDGui.gallery.renderHistoryGrid(
+			$("gen-history"),
+			loadHistory(),
+			restoreFromHistory,
+		);
 	}
 
 	function restoreFromHistory(entry) {
@@ -501,23 +649,90 @@ window.SDGui.generateUi = (() => {
 		if (cancelBtn) cancelBtn.classList.toggle("hidden", !on);
 	}
 
+	function showProgressBar(visible, indeterminate) {
+		var bar = $("gen-progress");
+		if (!bar) return;
+		bar.classList.toggle("hidden", !visible);
+		bar.classList.toggle("indeterminate", !!indeterminate);
+	}
+
+	function setProgressFill(percent) {
+		var fill = $("gen-progress-fill");
+		if (fill) fill.style.width = Math.max(0, Math.min(100, percent)) + "%";
+	}
+
 	function refreshPreview(mtime) {
 		var img = $("gen-preview");
+		var empty = $("gen-preview-empty");
 		if (!img) return;
 		img.src = "/api/generate/preview?t=" + mtime;
 		img.hidden = false;
+		if (empty) empty.style.display = "none";
 	}
 
 	function updateProgress(snap) {
 		var text = $("gen-progress-text");
-		if (text) {
-			if (snap.state === "running") {
-				text.textContent =
-					(snap.message || "Generating…") +
-					(snap.total_steps ? "  (" + snap.percent + "%)" : "");
-			} else {
-				text.textContent = snap.message || snap.state;
+		var pct = $("gen-progress-pct");
+		var running = snap.state === "running";
+		showProgressBar(running || snap.state === "queued", !snap.total_steps);
+
+		if (running && snap.total_steps) {
+			setProgressFill(snap.percent || 0);
+			// A11 - elapsed since run start (server started_at if present, else client).
+			var started = snap.started_at ? snap.started_at * 1000 : runStartTime;
+			var elapsed = started ? formatElapsed(Date.now() - started) : "";
+			var eta = "";
+			if (started && snap.percent > 0) {
+				var ms = Date.now() - started;
+				var etaMs = (ms / snap.percent) * (100 - snap.percent);
+				eta = " · ETA " + formatElapsed(etaMs);
 			}
+			if (text)
+				text.textContent =
+					(snap.message || "Generating...") +
+					"  " +
+					snap.step +
+					"/" +
+					snap.total_steps +
+					(elapsed ? "  ·  " + elapsed : "");
+			if (pct) pct.textContent = (snap.percent || 0) + "%" + eta;
+		} else if (running) {
+			if (text) text.textContent = snap.message || "Starting...";
+			if (pct) pct.textContent = "";
+		} else {
+			if (text) text.textContent = snap.message || snap.state;
+			if (pct) pct.textContent = "";
+		}
+	}
+
+	function showResultEmpty(message) {
+		var box = $("gen-result");
+		if (!box) return;
+		box.replaceChildren();
+		box.classList.remove("is-error");
+		var cap = el(
+			"div",
+			"frame-empty",
+			message || "Your generated image will appear here.",
+		);
+		cap.id = "gen-result-empty";
+		box.appendChild(cap);
+	}
+
+	// A10 - copy the current result image to clipboard.
+	async function copyResultImage(name) {
+		if (!name) return;
+		try {
+			var resp = await fetch("/api/image/" + encodeURIComponent(name));
+			if (!resp.ok)
+				throw new Error("Could not load image (" + resp.status + ")");
+			var blob = await resp.blob();
+			await navigator.clipboard.write([
+				new ClipboardItem({ [blob.type]: blob }),
+			]);
+			window.SDGui.toast("Image copied to clipboard.", "success");
+		} catch (e) {
+			window.SDGui.toast("Copy image failed: " + e.message, "error");
 		}
 	}
 
@@ -526,12 +741,13 @@ window.SDGui.generateUi = (() => {
 		var actions = $("gen-result-actions");
 		if (!box) return;
 		box.replaceChildren();
+		box.classList.remove("is-error");
 
 		// Show any generation warnings (small output, suspicious files, etc.).
 		var wrn = snap.warnings || [];
 		if (wrn.length) {
 			var warnDiv = el("div", "gen-warnings");
-			wrn.forEach(function (w) {
+			wrn.forEach((w) => {
 				warnDiv.appendChild(el("div", "gen-warning-msg", "⚠ " + w));
 			});
 			box.appendChild(warnDiv);
@@ -552,9 +768,8 @@ window.SDGui.generateUi = (() => {
 		var files = snap.result_files || [];
 		var mode = snap.mode || window.SDGui.flagCore.getMode();
 
-		// Metadata mode: no image file is produced — sd-cli prints the metadata
-		// to stdout. The backend captures the tail into the sidecar (and may
-		// expose it via the status payload). Render the text into the result box.
+		// Metadata mode: no image file is produced - sd-cli prints the metadata
+		// to stdout. Render the text into the result box.
 		if (mode === "metadata") {
 			var text = (snap.stdout_excerpt || "").toString();
 			if (!text) {
@@ -576,30 +791,85 @@ window.SDGui.generateUi = (() => {
 		}
 
 		if (!files.length) {
+			showResultEmpty("No image was produced.");
 			if (actions) actions.classList.add("hidden");
 			return;
 		}
+		// A2 - batch results: show a gallery when more than one file.
+		if (files.length > 1) {
+			window.SDGui.gallery.renderResultGallery(
+				box,
+				files,
+				snap.prompt || "result",
+				Date.now(),
+			);
+		} else {
+			window.SDGui.gallery.renderResultImage(
+				box,
+				files[0],
+				snap.prompt || "result",
+				Date.now(),
+			);
+		}
 		var first = files[0];
-		window.SDGui.gallery.renderResultImage(box, first, snap.prompt || "result", Date.now());
 		if (actions) {
 			actions.classList.remove("hidden");
 			var openBtn = $("btn-open-result");
 			var sendBtn = $("btn-send-img2img");
+			var copyBtn = $("btn-copy-result");
+			var dlBtn = $("btn-download-result");
 			if (openBtn) openBtn.onclick = () => openResultFile();
 			if (sendBtn) sendBtn.onclick = () => sendToImg2img(first);
+			if (copyBtn) copyBtn.onclick = () => copyResultImage(first);
+			if (dlBtn) dlBtn.onclick = () => downloadResult(first);
 		}
-		// Add to history.
-		addHistoryEntry(snap, first);
+		// Add to history (one entry per result file for batch).
+		files.forEach((f) => addHistoryEntry(snap, f));
+	}
+
+	// A9 - render an inline error in the result frame (instead of toast-only).
+	function renderResultError(snap) {
+		var box = $("gen-result");
+		var actions = $("gen-result-actions");
+		if (actions) actions.classList.add("hidden");
+		if (!box) return;
+		box.replaceChildren();
+		box.classList.add("is-error");
+		var msg = el(
+			"div",
+			"gen-error",
+			"✗ " + (snap.error || "Generation failed."),
+		);
+		box.appendChild(msg);
+		var stderrTail = (snap.stderr_tail || "").toString().trim();
+		if (stderrTail) {
+			var details = el("details", "gen-stderr");
+			details.appendChild(
+				el("summary", "", "sd-cli diagnostic output (stderr)"),
+			);
+			var pre = el("pre", "gen-stderr-text");
+			pre.textContent = stderrTail;
+			details.appendChild(pre);
+			box.appendChild(details);
+		}
+	}
+
+	function downloadResult(name) {
+		if (!name) return;
+		var a = el("a");
+		a.href = "/api/image/" + encodeURIComponent(name) + "?download=1";
+		a.download = String(name).split("/").pop() || "result";
+		document.body.appendChild(a);
+		a.click();
+		a.remove();
 	}
 
 	function openResultFile() {
-		window.SDGui
-			.fetchJson("/api/open-folder", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ folder: "output" }),
-			})
-			.catch((e) => window.SDGui.toast(e.message, "error"));
+		window.SDGui.fetchJson("/api/open-folder", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ folder: "output" }),
+		}).catch((e) => window.SDGui.toast(e.message, "error"));
 	}
 
 	function sendToImg2img(name) {
@@ -610,7 +880,10 @@ window.SDGui.generateUi = (() => {
 		}
 		updateModeSections();
 		syncAll();
-		window.SDGui.toast("Set as init image. Adjust strength then Generate.", "info");
+		window.SDGui.toast(
+			"Set as init image. Adjust strength then Generate.",
+			"info",
+		);
 	}
 
 	function addHistoryEntry(snap, file) {
@@ -618,7 +891,7 @@ window.SDGui.generateUi = (() => {
 		var entry = {
 			name: snap.job_id || file,
 			prompt: vals.prompt || "",
-			thumb: "/api/image/" + encodeURIComponent(file),
+			thumb: "/api/image/" + encodeURIComponent(file) + "/thumbnail",
 			timestamp: Date.now(),
 			bundle: window.SDGui.flagCore.getBundle(),
 			mode: window.SDGui.flagCore.getMode(),
@@ -645,15 +918,22 @@ window.SDGui.generateUi = (() => {
 			stopPolling();
 			setGenerating(false);
 			if (snap.state === "done") {
+				runStartTime = 0;
+				showProgressBar(false);
 				renderResult(snap);
 				window.SDGui.toast("Generation complete.", "success");
 			} else if (snap.state === "error") {
+				runStartTime = 0;
+				showProgressBar(false);
+				renderResultError(snap);
 				window.SDGui.toast(snap.error || "Generation failed.", "error");
 			} else if (snap.state === "canceled") {
+				runStartTime = 0;
+				showProgressBar(false);
 				window.SDGui.toast("Generation canceled.", "warning");
 			}
 		} catch (e) {
-			/* transient network — keep polling */
+			/* transient network - keep polling */
 		}
 	}
 
@@ -684,7 +964,9 @@ window.SDGui.generateUi = (() => {
 			var loraStrength = formatLoraStrength(vals.lora_strength);
 			var loraTag = "<lora:" + loraName + ":" + loraStrength + ">";
 			vals.prompt = ((vals.prompt || "").trim() + " " + loraTag).trim();
-			var promptPair = result.args.find((pair) => pair[0] === "--prompt" || pair[0] === "-p");
+			var promptPair = result.args.find(
+				(pair) => pair[0] === "--prompt" || pair[0] === "-p",
+			);
 			if (promptPair) {
 				promptPair[1] = vals.prompt;
 			} else {
@@ -710,11 +992,17 @@ window.SDGui.generateUi = (() => {
 		// Reset preview area (only relevant for img_gen/vid_gen, harmless for others).
 		lastPreviewMtime = 0;
 		var img = $("gen-preview");
+		var previewEmpty = $("gen-preview-empty");
 		if (img) {
 			img.hidden = true;
 			img.removeAttribute("src");
 		}
+		if (previewEmpty) previewEmpty.style.display = "";
+		// A9 — reset result frame to its empty state on a fresh run.
+		showResultEmpty("Generating… your image will appear here.");
 		setGenerating(true);
+		runStartTime = Date.now();
+		showProgressBar(true, true);
 		var prog = $("gen-progress-text");
 		if (prog) prog.textContent = "Starting…";
 
@@ -747,14 +1035,25 @@ window.SDGui.generateUi = (() => {
 		// Generate defaults: enable live preview (sd-cli defaults to none).
 		var vals = window.SDGui.flagCore.getFlagValues();
 		if (!vals.preview || vals.preview === "none") {
-			window.SDGui.flagCore.setFlagValue("preview", window.SDGui.DEFAULT_PREVIEW_METHOD || "vae");
+			window.SDGui.flagCore.setFlagValue(
+				"preview",
+				window.SDGui.DEFAULT_PREVIEW_METHOD || "vae",
+			);
 		}
 
 		// Populate enum selects from the canonical option lists.
-		populateEnum("gen-sampler", window.SDGui.SAMPLING_METHODS, vals.sampling_method);
+		populateEnum(
+			"gen-sampler",
+			window.SDGui.SAMPLING_METHODS,
+			vals.sampling_method,
+		);
 		populateEnum("gen-scheduler", window.SDGui.SCHEDULERS, vals.scheduler);
 		populateEnum("gen-type", window.SDGui.WEIGHT_TYPES, vals.type);
-		populateEnum("gen-preview-method", window.SDGui.PREVIEW_METHODS, vals.preview);
+		populateEnum(
+			"gen-preview-method",
+			window.SDGui.PREVIEW_METHODS,
+			vals.preview,
+		);
 
 		// Bundle dropdown.
 		var bundleSelect = $("gen-model-bundle");
@@ -791,8 +1090,9 @@ window.SDGui.generateUi = (() => {
 		bindText("gen-negative", "negative_prompt");
 		bindNumber("gen-width", "width");
 		bindNumber("gen-height", "height");
-		bindNumber("gen-steps", "steps");
-		bindNumber("gen-cfg", "cfg_scale", true);
+		// A7 — continuous params as slider + number compounds.
+		bindSliderNumber("gen-steps", "steps", 1, 150, 1, false);
+		bindSliderNumber("gen-cfg", "cfg_scale", 0, 30, 0.1, true);
 		bindEnum("gen-sampler", "sampling_method");
 		bindEnum("gen-scheduler", "scheduler");
 		bindNumber("gen-seed", "seed");
@@ -808,11 +1108,14 @@ window.SDGui.generateUi = (() => {
 
 		// img2img / vid_gen mode inputs.
 		bindText("gen-init-img", "init_img");
-		bindBrowse("btn-browse-init-img", () => browsePath("init_img", "image", "Select init image"));
-		bindNumber("gen-strength", "strength", true);
+		bindBrowse("btn-browse-init-img", () =>
+			browsePath("init_img", "image", "Select init image"),
+		);
 		bindNumber("gen-control-strength", "control_strength", true);
 		bindText("gen-mask", "mask");
-		bindBrowse("btn-browse-mask", () => browsePath("mask", "image", "Select mask image"));
+		bindBrowse("btn-browse-mask", () =>
+			browsePath("mask", "image", "Select mask image"),
+		);
 		bindText("gen-control-image", "control_image");
 		bindBrowse("btn-browse-control-image", () =>
 			browsePath("control_image", "image", "Select control image"),
@@ -849,6 +1152,88 @@ window.SDGui.generateUi = (() => {
 		var cancelBtn = $("btn-generate-cancel");
 		if (cancelBtn) cancelBtn.addEventListener("click", cancel);
 
+		// A6 — dimension W/H swap + ratio chips + snap-to-multiple on blur.
+		var swapBtn = $("btn-swap-dims");
+		if (swapBtn) {
+			swapBtn.addEventListener("click", () => {
+				var vals = window.SDGui.flagCore.getFlagValues();
+				var w = vals.width;
+				window.SDGui.flagCore.setMultipleFlagValues({
+					width: vals.height,
+					height: w,
+				});
+				syncAll();
+				updateActiveRatioChip();
+			});
+		}
+		["gen-width", "gen-height"].forEach((id) => {
+			var node = $(id);
+			if (node) {
+				node.addEventListener("blur", () => {
+					var snapped = snapDim(node.value);
+					if (snapped !== parseInt(node.value, 10)) {
+						node.value = String(snapped);
+						window.SDGui.flagCore.setFlagValue(
+							id === "gen-width" ? "width" : "height",
+							snapped,
+						);
+					}
+					updateActiveRatioChip();
+				});
+				node.addEventListener("change", updateActiveRatioChip);
+			}
+		});
+		document
+			.querySelectorAll("#gen-ratio-chips .ratio-chip")
+			.forEach((chip) => {
+				chip.addEventListener("click", () => {
+					var ratio = parseFloat(chip.getAttribute("data-ratio"));
+					// Keep the longer side near 1024 when possible, else the current width.
+					var vals = window.SDGui.flagCore.getFlagValues();
+					var base = vals.width >= vals.height ? vals.width : vals.height;
+					if (!base || base < 64) base = 1024;
+					var w, h;
+					if (ratio >= 1) {
+						w = base;
+						h = Math.round(base / ratio);
+					} else {
+						h = base;
+						w = Math.round(base * ratio);
+					}
+					window.SDGui.flagCore.setMultipleFlagValues({
+						width: snapDim(w),
+						height: snapDim(h),
+					});
+					syncAll();
+					updateActiveRatioChip();
+				});
+			});
+
+		// A5 — randomize seed button.
+		var seedBtn = $("btn-random-seed");
+		if (seedBtn) {
+			seedBtn.addEventListener("click", () => {
+				var seed = Math.floor(Math.random() * 2147483647);
+				window.SDGui.flagCore.setFlagValue("seed", seed);
+				var seedInput = $("gen-seed");
+				if (seedInput) seedInput.value = String(seed);
+			});
+		}
+
+		// A4 — Ctrl/Cmd+Enter to generate from the prompt or the panel.
+		var generatePanel = $("section-generate");
+		if (generatePanel) {
+			generatePanel.addEventListener("keydown", (e) => {
+				if (
+					(e.ctrlKey || e.metaKey) &&
+					(e.key === "Enter" || e.code === "Enter")
+				) {
+					e.preventDefault();
+					generate();
+				}
+			});
+		}
+
 		// Cross-tab / cross-control sync: refresh non-focused controls on change.
 		window.SDGui.flagCore.onChange(() => {
 			syncFromState(false);
@@ -858,8 +1243,7 @@ window.SDGui.generateUi = (() => {
 		renderHistory();
 
 		// If a generation is already running (page reload), resume polling.
-		window.SDGui
-			.fetchJson("/api/generate/status")
+		window.SDGui.fetchJson("/api/generate/status")
 			.then((snap) => {
 				if (snap && snap.state === "running") {
 					setGenerating(true);

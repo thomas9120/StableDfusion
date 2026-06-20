@@ -43,3 +43,4 @@ desktop.ini
 /models/diffusion
 /models/loras
 /models/text-encoders
+docs/polish.md

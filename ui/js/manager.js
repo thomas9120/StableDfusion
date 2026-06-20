@@ -37,6 +37,36 @@ window.SDGui.fetchJson = async (url, options) => {
 	return data;
 };
 
+// Copy text to the clipboard with a toast. Returns true on success.
+window.SDGui.copyText = async (text) => {
+	try {
+		await navigator.clipboard.writeText(String(text == null ? "" : text));
+		window.SDGui.toast("Copied to clipboard.", "success");
+		return true;
+	} catch (e) {
+		window.SDGui.toast("Copy failed: " + e.message, "error");
+		return false;
+	}
+};
+
+// Attach an absolutely-positioned "Copy" button to a <pre> (or any element).
+// `getText` returns the current text to copy; safe to call on every render.
+window.SDGui.attachCopyButton = (pre, getText) => {
+	if (!pre) return;
+	if (pre.querySelector(".copy-btn")) return;
+	var btn = document.createElement("button");
+	btn.type = "button";
+	btn.className = "btn btn-sm copy-btn";
+	btn.textContent = "Copy";
+	btn.setAttribute("aria-label", "Copy to clipboard");
+	btn.addEventListener("click", () => {
+		window.SDGui.copyText(
+			typeof getText === "function" ? getText() : pre.textContent,
+		);
+	});
+	pre.appendChild(btn);
+};
+
 // Shared confirm dialog (uses #confirm-modal). Returns a Promise<boolean>.
 window.SDGui.confirmAction = (title, message, confirmText) => {
 	var modal = document.getElementById("confirm-modal");
@@ -50,7 +80,14 @@ window.SDGui.confirmAction = (title, message, confirmText) => {
 	messageEl.textContent = message || "Are you sure you want to continue?";
 	okBtn.textContent = confirmText || "Confirm";
 	modal.classList.remove("hidden");
+	// F5 — capture focus and restore the previously focused element on close.
+	var previouslyFocused = document.activeElement;
 	okBtn.focus();
+
+	var focusables = () =>
+		modal.querySelectorAll(
+			'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+		);
 
 	return new Promise((resolve) => {
 		var cleanup = () => {
@@ -59,6 +96,14 @@ window.SDGui.confirmAction = (title, message, confirmText) => {
 			okBtn.removeEventListener("click", onConfirm);
 			modal.removeEventListener("click", onBackdrop);
 			document.removeEventListener("keydown", onKeydown);
+			// F5 — return focus to the element that opened the dialog.
+			if (previouslyFocused && typeof previouslyFocused.focus === "function") {
+				try {
+					previouslyFocused.focus();
+				} catch (e) {
+					/* ignore */
+				}
+			}
 		};
 		var finish = (value) => {
 			cleanup();
@@ -70,8 +115,33 @@ window.SDGui.confirmAction = (title, message, confirmText) => {
 			if (e.target === modal) finish(false);
 		};
 		var onKeydown = (e) => {
-			if (e.key === "Escape") finish(false);
-			if (e.key === "Enter") finish(true);
+			if (e.key === "Escape") {
+				e.preventDefault();
+				finish(false);
+				return;
+			}
+			if (e.key === "Enter") {
+				finish(true);
+				return;
+			}
+			// F5 — trap Tab focus within the dialog.
+			if (e.key === "Tab") {
+				var items = focusables();
+				if (!items.length) return;
+				var list = Array.prototype.slice
+					.call(items)
+					.filter((n) => n.offsetParent !== null);
+				if (!list.length) return;
+				var first = list[0];
+				var last = list[list.length - 1];
+				if (e.shiftKey && document.activeElement === first) {
+					e.preventDefault();
+					last.focus();
+				} else if (!e.shiftKey && document.activeElement === last) {
+					e.preventDefault();
+					first.focus();
+				}
+			}
 		};
 		cancelBtn.addEventListener("click", onCancel);
 		okBtn.addEventListener("click", onConfirm);
@@ -647,38 +717,38 @@ window.SDGui.manager = (() => {
 
 	async function stopPythonServer() {
 		var ok = await window.SDGui.confirmAction(
-			"Stop Python Server",
-			"Stop this Stable-D GUI Python server? The page will disconnect until you start server.py again.",
+			"Stop GUI Server",
+			"Stop this Stable-D GUI server? The page will disconnect until you start server.py again.",
 			"Stop Server",
 		);
 		if (!ok) return;
 		var button = document.getElementById("btn-stop-app");
 		if (button) button.disabled = true;
-		showStatus("info", "Stopping Python server...");
+		showStatus("info", "Stopping GUI server...");
 		try {
 			await fetchJson("/api/shutdown", { method: "POST" });
 			showStatus(
 				"success",
-				"Python server is shutting down. This page will stop responding.",
+				"GUI server is shutting down. This page will stop responding.",
 			);
 			setTimeout(() => window.location.reload(), 1500);
 		} catch (e) {
-			showStatus("error", "Failed to stop Python server: " + e.message);
+			showStatus("error", "Failed to stop GUI server: " + e.message);
 			if (button) button.disabled = false;
 		}
 	}
 
 	async function restartPythonServer() {
 		var ok = await window.SDGui.confirmAction(
-			"Restart Python Server",
-			"Restart the Stable-D GUI Python server? The page will briefly disconnect.",
+			"Restart GUI Server",
+			"Restart the Stable-D GUI server? The page will briefly disconnect.",
 			"Restart",
 		);
 		if (!ok) return;
 		await restartPythonServerAndReload({
 			showStatusFn: showStatus,
-			restartingMessage: "Restarting Python server...",
-			successMessage: "Python server restarted successfully.",
+			restartingMessage: "Restarting GUI server...",
+			successMessage: "GUI server restarted successfully.",
 		});
 	}
 

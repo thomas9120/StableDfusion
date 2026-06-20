@@ -82,9 +82,9 @@ window.SDGui.configFlagsUi = (() => {
 	}
 
 	function renderCategory(cat) {
-		var flags = window.SDGui
-			.getFlagsByCategory(cat.id)
-			.filter(flagMatchesSearch);
+		var flags = window.SDGui.getFlagsByCategory(cat.id).filter(
+			flagMatchesSearch,
+		);
 		if (!flags.length) return null;
 
 		var panel = el("div", "cfg-category");
@@ -117,7 +117,11 @@ window.SDGui.configFlagsUi = (() => {
 
 	function renderCustomArgs() {
 		var wrap = el("div", "cfg-custom");
-		var lbl = el("label", "form-label", "Custom launch args (appended verbatim)");
+		var lbl = el(
+			"label",
+			"form-label",
+			"Custom launch args (appended verbatim)",
+		);
 		var ta = el("textarea");
 		ta.id = "configure-custom-args";
 		ta.rows = 2;
@@ -143,6 +147,8 @@ window.SDGui.configFlagsUi = (() => {
 		if (result.error) text += "\n\n⚠ " + result.error;
 		(result.warnings || []).forEach((w) => (text += "\n⚠ " + w));
 		pre.textContent = text;
+		// B1 — Copy button on the command preview.
+		window.SDGui.attachCopyButton(pre, () => text);
 	}
 
 	function render() {

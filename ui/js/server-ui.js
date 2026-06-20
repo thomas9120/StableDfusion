@@ -38,7 +38,10 @@ window.SDGui.serverUi = (() => {
 	}
 
 	function createControl(flag) {
-		var wrap = el("div", "form-group" + (isWide(flag) ? " server-flag-wide" : ""));
+		var wrap = el(
+			"div",
+			"form-group" + (isWide(flag) ? " server-flag-wide" : ""),
+		);
 		var label = el("label", "form-label", flag.label || flag.id);
 		label.setAttribute("for", "server-" + flag.id);
 		wrap.appendChild(label);
@@ -52,7 +55,9 @@ window.SDGui.serverUi = (() => {
 			control.id = "server-" + flag.id;
 			control.checked = cur === true;
 			toggle.appendChild(control);
-			toggle.appendChild(document.createTextNode(flag.desc || flag.label || flag.id));
+			toggle.appendChild(
+				document.createTextNode(flag.desc || flag.label || flag.id),
+			);
 			wrap.appendChild(toggle);
 			control.addEventListener("change", () => {
 				values[flag.id] = control.checked;
@@ -67,7 +72,8 @@ window.SDGui.serverUi = (() => {
 			opts.forEach((opt) => control.appendChild(new Option(opt, opt)));
 		} else {
 			control = el("input");
-			control.type = flag.type === "int" || flag.type === "float" ? "number" : "text";
+			control.type =
+				flag.type === "int" || flag.type === "float" ? "number" : "text";
 			if (flag.type === "int") control.step = "1";
 			if (flag.type === "float") control.step = "any";
 		}
@@ -95,7 +101,10 @@ window.SDGui.serverUi = (() => {
 				if (v === true) args.push([flag.flag]);
 				return;
 			}
-			if ((flag.type === "int" || flag.type === "float") && Number.isNaN(Number(v))) {
+			if (
+				(flag.type === "int" || flag.type === "float") &&
+				Number.isNaN(Number(v))
+			) {
 				return;
 			}
 			args.push([flag.flag, String(v)]);
@@ -119,6 +128,8 @@ window.SDGui.serverUi = (() => {
 		var extra = String(values.extra_args || "").trim();
 		if (extra) flat.push(extra);
 		pre.textContent = flat.join(" ");
+		// B1 — Copy button on the server command preview.
+		window.SDGui.attachCopyButton(pre, () => flat.join(" "));
 	}
 
 	function renderFlags() {
@@ -150,7 +161,8 @@ window.SDGui.serverUi = (() => {
 		var log = document.getElementById("server-log");
 		var startBtn = document.getElementById("btn-sd-server-start");
 		var stopBtn = document.getElementById("btn-sd-server-stop");
-		var running = lastStatus.status === "running" || lastStatus.status === "starting";
+		var running =
+			lastStatus.status === "running" || lastStatus.status === "starting";
 
 		if (box) {
 			box.className = "status-box " + statusKind(lastStatus);
@@ -160,7 +172,9 @@ window.SDGui.serverUi = (() => {
 		if (log) log.textContent = lastStatus.log || "";
 		if (startBtn) startBtn.disabled = running;
 		if (stopBtn) stopBtn.disabled = !running;
-		window.dispatchEvent(new CustomEvent("sdgui:sd-server-status", { detail: lastStatus }));
+		window.dispatchEvent(
+			new CustomEvent("sdgui:sd-server-status", { detail: lastStatus }),
+		);
 	}
 
 	async function refreshStatus() {
@@ -174,6 +188,19 @@ window.SDGui.serverUi = (() => {
 				box.style.display = "";
 			}
 		}
+	}
+
+	function stopPolling() {
+		if (pollTimer) {
+			window.clearInterval(pollTimer);
+			pollTimer = null;
+		}
+	}
+
+	function startPolling() {
+		stopPolling();
+		refreshStatus();
+		pollTimer = window.setInterval(refreshStatus, 1500);
 	}
 
 	async function startServer() {
@@ -215,7 +242,16 @@ window.SDGui.serverUi = (() => {
 		if (startBtn) startBtn.addEventListener("click", startServer);
 		if (stopBtn) stopBtn.addEventListener("click", stopServer);
 		refreshStatus();
-		pollTimer = window.setInterval(refreshStatus, 1500);
+		// D1 — only poll while the Server & API panel is visible.
+		window.SDGui.panelLifecycle.register(
+			"server",
+			() => {
+				startPolling();
+			},
+			() => {
+				stopPolling();
+			},
+		);
 		window.addEventListener("beforeunload", () => {
 			if (pollTimer) window.clearInterval(pollTimer);
 		});

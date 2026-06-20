@@ -16,6 +16,11 @@ window.SDGui.gallery = (() => {
 		return url;
 	}
 
+	// D2 — small thumbnail URL (served server-side) for 72px history cells.
+	function thumbnailUrl(name) {
+		return "/api/image/" + encodeURIComponent(name) + "/thumbnail";
+	}
+
 	// Render the main result image into a container (clears it first).
 	function renderResultImage(container, name, altText, bust) {
 		if (!container) return;
@@ -32,7 +37,9 @@ window.SDGui.gallery = (() => {
 		var item = el("div", "history-item");
 		item.title = entry.prompt || entry.name || "";
 		var img = el("img");
-		img.src = entry.thumb || (entry.name ? imageUrl(entry.name) : "");
+		// D2 — prefer the server thumbnail endpoint for small cells.
+		var src = entry.thumb || (entry.name ? thumbnailUrl(entry.name) : "");
+		img.src = src;
 		img.alt = entry.prompt || "";
 		img.loading = "lazy";
 		item.appendChild(img);
@@ -74,5 +81,6 @@ window.SDGui.gallery = (() => {
 		renderResultGallery: renderResultGallery,
 		createHistoryItem: createHistoryItem,
 		imageUrl: imageUrl,
+		thumbnailUrl: thumbnailUrl,
 	};
 })();

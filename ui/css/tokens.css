@@ -10,7 +10,8 @@
 	--fg: #c0caf5;
 	--fg-muted: #8b91b0;
 	--fg-bright: #eaecf8;
-	--fg-faint: #555a74;
+	/* Lightened from #555a74 to clear WCAG AA against --bg-base (#0f111a). */
+	--fg-faint: #6b7393;
 
 	/* SD accent: a slightly warmer indigo than LLama-GUI's blue. */
 	--accent: #7aa2f7;
@@ -60,6 +61,9 @@
 	--ease-med: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 
 	--sidebar-w: 230px;
+
+	/* Content width cap for ultrawide layouts (polish E2). */
+	--content-max: 1400px;
 }
 
 @media (prefers-reduced-motion: reduce) {

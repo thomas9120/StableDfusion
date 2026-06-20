@@ -7,7 +7,7 @@
     <title>Stable-D GUI — stable-diffusion.cpp Launcher</title>
     <link
       rel="icon"
-      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>🎨</text></svg>"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%230f111a'/><path d='M16 6l3 7 7 3-7 3-3 7-3-7-7-3 7-3z' fill='%237aa2f7'/></svg>"
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -22,42 +22,99 @@
     <div class="toast-container" id="toast-container"></div>
 
     <div class="app-shell">
+      <button
+        id="btn-sidebar-toggle"
+        class="sidebar-toggle icon-btn"
+        type="button"
+        aria-label="Toggle navigation menu"
+        aria-expanded="false"
+        aria-controls="sidebar"
+      >
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
+      <div id="sidebar-overlay" class="sidebar-overlay"></div>
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-brand">
-          <div class="sidebar-logo">🎨</div>
+          <svg class="sidebar-logo-svg" viewBox="0 0 32 32" aria-hidden="true">
+            <circle
+              cx="16"
+              cy="16"
+              r="13"
+              fill="none"
+              stroke="var(--accent)"
+              stroke-width="2"
+            />
+            <path
+              d="M16 6l3 7 7 3-7 3-3 7-3-7-7-3 7-3z"
+              fill="var(--accent)"
+              stroke="none"
+            />
+          </svg>
           <div>
             <div class="sidebar-title">Stable-D GUI</div>
             <div class="sidebar-subtitle">stable-diffusion.cpp</div>
           </div>
         </div>
 
-        <nav class="sidebar-nav">
+        <nav class="sidebar-nav" aria-label="Sections">
           <div class="nav-section-label">Setup</div>
           <button class="nav-item" data-section="install">
-            <span class="icon">⬇️</span> Install
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" />
+            </svg>
+            Install
           </button>
           <button class="nav-item active" data-section="generate">
-            <span class="icon">⚡</span> Generate
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" />
+            </svg>
+            Generate
           </button>
           <button class="nav-item" data-section="configure">
-            <span class="icon">🛠️</span> Configure
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <line x1="4" y1="6" x2="20" y2="6" />
+              <line x1="4" y1="12" x2="20" y2="12" />
+              <line x1="4" y1="18" x2="20" y2="18" />
+              <circle cx="9" cy="6" r="2.2" />
+              <circle cx="15" cy="12" r="2.2" />
+              <circle cx="7" cy="18" r="2.2" />
+            </svg>
+            Configure
           </button>
 
           <div class="nav-section-label">Serve</div>
           <button class="nav-item" data-section="server">
-            <span class="icon">🌐</span> Server &amp; API
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" />
+            </svg>
+            Server &amp; API
           </button>
 
           <div class="nav-section-label">Manage</div>
           <button class="nav-item" data-section="hf-download">
-            <span class="icon">📥</span> HF Download
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 18a4 4 0 010-8 5 5 0 019.6-1.5A3.5 3.5 0 0117 18" />
+              <path d="M12 12v9m0 0l-3-3m3 3l3-3" />
+            </svg>
+            HF Download
           </button>
           <button class="nav-item" data-section="presets">
-            <span class="icon">📑</span> Presets
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 4h12v17l-6-4-6 4z" />
+            </svg>
+            Presets
           </button>
         </nav>
 
         <div class="sidebar-footer">
+          <!-- C2 — running-process badge (driven by manager.updateStatusUI). -->
+          <div id="sidebar-status" class="sidebar-status" style="display: none">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="sidebar-status-text">running</span>
+          </div>
           <span id="version-badge" class="badge badge-neutral"
             >Not Installed</span
           >
@@ -138,10 +195,10 @@
                   Remove Binaries
                 </button>
                 <button id="btn-restart-app" class="btn" type="button">
-                  Restart Python Server
+                  Restart GUI Server
                 </button>
                 <button id="btn-stop-app" class="btn btn-danger" type="button">
-                  Stop Python Server
+                  Stop GUI Server
                 </button>
               </div>
             </div>
@@ -171,7 +228,8 @@
             <div>
               <div class="page-title">Generate</div>
               <div class="page-title-sub">
-                Prompt → run sd-cli → live preview → gallery + history.
+                Turn a text prompt into an image, a video, or an upscale — with
+                live preview and a history of everything you make.
               </div>
             </div>
           </div>
@@ -204,67 +262,150 @@
 
               <!-- Mode-specific inputs: shown/hidden per mode by generate-ui.js -->
               <div id="gen-mode-inputs" class="form-group">
-                <span class="form-label">Mode inputs</span>
+                <span id="gen-mode-label" class="form-label"
+                  >Image references (optional)</span
+                >
+                <p id="gen-mode-help" class="gen-mode-help">
+                  Add a reference image for image-to-image, inpainting, or
+                  ControlNet.
+                </p>
 
                 <!-- img_gen / vid_gen: img2img (init-image / mask / control) -->
                 <div id="gen-img2img-inputs" class="mode-inputs">
-                  <div class="form-group">
-                    <label class="form-label">Init image <span class="help-text">(optional, enables img2img)</span></label>
-                    <div class="field-row">
-                      <input type="text" id="gen-init-img" placeholder="output/cat.png" />
-                      <button id="btn-browse-init-img" class="btn btn-sm" type="button">Browse</button>
-                    </div>
-                  </div>
-                  <div class="form-row">
+                  <details class="mode-details">
+                    <summary>Image references (optional)</summary>
                     <div class="form-group">
-                      <label class="form-label">Strength</label>
-                      <input type="number" id="gen-strength" min="0" max="1" step="0.05" value="0.75" />
+                      <label class="form-label"
+                        >Init image
+                        <span class="help-text"
+                          >(optional, enables img2img)</span
+                        ></label
+                      >
+                      <div class="field-row">
+                        <input
+                          type="text"
+                          id="gen-init-img"
+                          placeholder="output/cat.png"
+                        />
+                        <button
+                          id="btn-browse-init-img"
+                          class="btn btn-sm"
+                          type="button"
+                        >
+                          Browse
+                        </button>
+                      </div>
+                    </div>
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label class="form-label">Strength</label>
+                        <input
+                          type="number"
+                          id="gen-strength"
+                          min="0"
+                          max="1"
+                          step="0.05"
+                          value="0.75"
+                        />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">Control strength</label>
+                        <input
+                          type="number"
+                          id="gen-control-strength"
+                          min="0"
+                          max="2"
+                          step="0.05"
+                          value="0.9"
+                        />
+                      </div>
                     </div>
                     <div class="form-group">
-                      <label class="form-label">Control strength</label>
-                      <input type="number" id="gen-control-strength" min="0" max="2" step="0.05" value="0.9" />
+                      <label class="form-label">Mask (inpaint)</label>
+                      <div class="field-row">
+                        <input type="text" id="gen-mask" />
+                        <button
+                          id="btn-browse-mask"
+                          class="btn btn-sm"
+                          type="button"
+                        >
+                          Browse
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label">Mask (inpaint)</label>
-                    <div class="field-row">
-                      <input type="text" id="gen-mask" />
-                      <button id="btn-browse-mask" class="btn btn-sm" type="button">Browse</button>
+                    <div class="form-group">
+                      <label class="form-label"
+                        >Control image (ControlNet)</label
+                      >
+                      <div class="field-row">
+                        <input type="text" id="gen-control-image" />
+                        <button
+                          id="btn-browse-control-image"
+                          class="btn btn-sm"
+                          type="button"
+                        >
+                          Browse
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label">Control image (ControlNet)</label>
-                    <div class="field-row">
-                      <input type="text" id="gen-control-image" />
-                      <button id="btn-browse-control-image" class="btn btn-sm" type="button">Browse</button>
-                    </div>
-                  </div>
+                  </details>
                 </div>
 
                 <!-- upscale: required init image + ESRGAN model -->
                 <div id="gen-upscale-inputs" class="mode-inputs hidden">
                   <div class="form-group">
-                    <label class="form-label">Init image <span class="req">required</span></label>
+                    <label class="form-label"
+                      >Init image <span class="req">required</span></label
+                    >
                     <div class="field-row">
                       <input type="text" id="gen-upscale-init-img" />
-                      <button id="btn-browse-upscale-init-img" class="btn btn-sm" type="button">Browse</button>
+                      <button
+                        id="btn-browse-upscale-init-img"
+                        class="btn btn-sm"
+                        type="button"
+                      >
+                        Browse
+                      </button>
                     </div>
                   </div>
                   <div class="form-group">
-                    <label class="form-label">ESRGAN upscale model <span class="req">required</span></label>
+                    <label class="form-label"
+                      >ESRGAN upscale model
+                      <span class="req">required</span></label
+                    >
                     <div class="field-row">
-                      <input type="text" id="gen-upscale-model" placeholder="models/diffusion/RealESRGAN_x4plus.pth" />
-                      <button id="btn-browse-upscale-model" class="btn btn-sm" type="button">Browse</button>
+                      <input
+                        type="text"
+                        id="gen-upscale-model"
+                        placeholder="models/diffusion/RealESRGAN_x4plus.pth"
+                      />
+                      <button
+                        id="btn-browse-upscale-model"
+                        class="btn btn-sm"
+                        type="button"
+                      >
+                        Browse
+                      </button>
                     </div>
                   </div>
                   <div class="form-row">
                     <div class="form-group">
                       <label class="form-label">Repeats</label>
-                      <input type="number" id="gen-upscale-repeats" min="1" value="1" />
+                      <input
+                        type="number"
+                        id="gen-upscale-repeats"
+                        min="1"
+                        value="1"
+                      />
                     </div>
                     <div class="form-group">
                       <label class="form-label">Tile size</label>
-                      <input type="number" id="gen-upscale-tile-size" min="32" value="128" />
+                      <input
+                        type="number"
+                        id="gen-upscale-tile-size"
+                        min="32"
+                        value="128"
+                      />
                     </div>
                   </div>
                 </div>
@@ -276,18 +417,32 @@
                     converted tensor file to <code>-o / --output</code>.
                   </p>
                   <div class="form-group">
-                    <label class="form-label">Convert single tensor name (optional)</label>
-                    <input type="text" id="gen-convert-name" placeholder="model.diffusion_model." />
+                    <label class="form-label"
+                      >Convert single tensor name (optional)</label
+                    >
+                    <input
+                      type="text"
+                      id="gen-convert-name"
+                      placeholder="model.diffusion_model."
+                    />
                   </div>
                 </div>
 
                 <!-- metadata: image + format -->
                 <div id="gen-metadata-inputs" class="mode-inputs hidden">
                   <div class="form-group">
-                    <label class="form-label">Image <span class="req">required</span></label>
+                    <label class="form-label"
+                      >Image <span class="req">required</span></label
+                    >
                     <div class="field-row">
                       <input type="text" id="gen-metadata-image" />
-                      <button id="btn-browse-metadata-image" class="btn btn-sm" type="button">Browse</button>
+                      <button
+                        id="btn-browse-metadata-image"
+                        class="btn btn-sm"
+                        type="button"
+                      >
+                        Browse
+                      </button>
                     </div>
                   </div>
                   <div class="form-group">
@@ -314,35 +469,100 @@
                 </div>
               </div>
               <div id="gen-sampling-section">
-                <div class="form-row">
+                <div
+                  class="ratio-chips"
+                  id="gen-ratio-chips"
+                  role="group"
+                  aria-label="Aspect ratio presets"
+                >
+                  <button type="button" class="ratio-chip" data-ratio="1">
+                    1:1
+                  </button>
+                  <button type="button" class="ratio-chip" data-ratio="1.5">
+                    3:2
+                  </button>
+                  <button type="button" class="ratio-chip" data-ratio="0.6667">
+                    2:3
+                  </button>
+                  <button type="button" class="ratio-chip" data-ratio="1.7778">
+                    16:9
+                  </button>
+                  <button type="button" class="ratio-chip" data-ratio="0.5625">
+                    9:16
+                  </button>
+                </div>
+                <div class="dim-row">
                   <div class="form-group">
-                    <label class="form-label">Width</label>
-                    <input type="number" id="gen-width" value="512" />
+                    <label class="form-label" for="gen-width">Width</label>
+                    <input
+                      type="number"
+                      id="gen-width"
+                      min="64"
+                      step="8"
+                      value="512"
+                    />
                   </div>
+                  <button
+                    type="button"
+                    id="btn-swap-dims"
+                    class="icon-btn"
+                    title="Swap width and height"
+                    aria-label="Swap width and height"
+                  >
+                    <svg
+                      class="nav-icon"
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M7 4v12m0 0l-3-3m3 3l3-3M17 20V8m0 0l-3 3m3-3l3 3"
+                      />
+                    </svg>
+                  </button>
                   <div class="form-group">
-                    <label class="form-label">Height</label>
-                    <input type="number" id="gen-height" value="512" />
+                    <label class="form-label" for="gen-height">Height</label>
+                    <input
+                      type="number"
+                      id="gen-height"
+                      min="64"
+                      step="8"
+                      value="512"
+                    />
                   </div>
                 </div>
                 <div class="form-row">
                   <div class="form-group">
-                    <label class="form-label">Steps</label>
-                    <input type="number" id="gen-steps" value="20" />
+                    <label class="form-label" for="gen-steps">Steps</label>
+                    <input
+                      type="number"
+                      id="gen-steps"
+                      min="1"
+                      step="1"
+                      value="20"
+                    />
                   </div>
                   <div class="form-group">
-                    <label class="form-label">CFG scale</label>
-                    <input type="number" id="gen-cfg" step="0.1" value="7.0" />
+                    <label class="form-label" for="gen-cfg">CFG scale</label>
+                    <input
+                      type="number"
+                      id="gen-cfg"
+                      min="0"
+                      step="0.1"
+                      value="7.0"
+                    />
                   </div>
                 </div>
                 <div class="form-row">
                   <div class="form-group">
-                    <label class="form-label">Sampler</label>
+                    <label class="form-label" for="gen-sampler">Sampler</label>
                     <select id="gen-sampler">
                       <option>euler_a</option>
                     </select>
                   </div>
                   <div class="form-group">
-                    <label class="form-label">Scheduler</label>
+                    <label class="form-label" for="gen-scheduler"
+                      >Scheduler</label
+                    >
                     <select id="gen-scheduler">
                       <option>default</option>
                     </select>
@@ -350,11 +570,32 @@
                 </div>
                 <div class="form-row">
                   <div class="form-group">
-                    <label class="form-label">Seed</label>
-                    <input type="number" id="gen-seed" value="42" />
+                    <label class="form-label" for="gen-seed">Seed</label>
+                    <div class="field-row">
+                      <input type="number" id="gen-seed" value="42" />
+                      <button
+                        type="button"
+                        id="btn-random-seed"
+                        class="icon-btn"
+                        title="Randomize seed"
+                        aria-label="Randomize seed"
+                      >
+                        <svg
+                          class="nav-icon"
+                          viewBox="0 0 24 24"
+                          aria-hidden="true"
+                        >
+                          <path
+                            d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"
+                          />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                   <div class="form-group">
-                    <label class="form-label">Batch count</label>
+                    <label class="form-label" for="gen-batch"
+                      >Batch count</label
+                    >
                     <input type="number" id="gen-batch" min="1" value="1" />
                   </div>
                 </div>
@@ -379,54 +620,104 @@
                   </div>
                   <div class="form-group">
                     <label class="form-label">Preview interval</label>
-                    <input type="number" id="gen-preview-interval" min="1" value="1" />
+                    <input
+                      type="number"
+                      id="gen-preview-interval"
+                      min="1"
+                      value="1"
+                    />
                   </div>
                 </div>
                 <div class="form-row gen-toggles">
                   <label class="toggle"
-                    ><input type="checkbox" id="gen-offload" /> Offload to CPU</label
+                    ><input type="checkbox" id="gen-offload" /> Offload to
+                    CPU</label
                   >
                   <label class="toggle"
-                    ><input type="checkbox" id="gen-clip-cpu" /> CLIP on CPU</label
+                    ><input type="checkbox" id="gen-clip-cpu" /> CLIP on
+                    CPU</label
                   >
                   <label class="toggle"
-                    ><input type="checkbox" id="gen-flash" /> Flash attention</label
+                    ><input type="checkbox" id="gen-flash" /> Flash
+                    attention</label
                   >
                   <label class="toggle"
-                    ><input type="checkbox" id="gen-vae-tiling" /> VAE tiling</label
+                    ><input type="checkbox" id="gen-vae-tiling" /> VAE
+                    tiling</label
                   >
                 </div>
               </details>
 
-              <button id="btn-generate" class="btn btn-primary">
-                Generate
-              </button>
-              <button id="btn-generate-cancel" class="btn btn-danger hidden">
-                Cancel
-              </button>
+              <div class="gen-actions">
+                <button
+                  id="btn-generate"
+                  class="btn btn-primary"
+                  title="Generate (Ctrl/Cmd+Enter)"
+                >
+                  Generate
+                </button>
+                <button id="btn-generate-cancel" class="btn btn-danger hidden">
+                  Cancel
+                </button>
+                <span class="gen-kbd-hint"
+                  ><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span
+                >
+              </div>
             </div>
             <div class="card">
-              <div class="form-group">
-                <span class="form-label">Live preview</span>
-                <div class="preview-frame">
+              <div class="form-group" role="group" aria-label="Live preview">
+                <span class="form-label" aria-hidden="true">Live preview</span>
+                <div class="preview-frame" id="gen-preview-frame">
                   <img id="gen-preview" alt="preview" hidden />
-                  <div id="gen-progress-text" class="help-text">Idle.</div>
+                  <div id="gen-preview-empty" class="frame-empty">
+                    Live preview appears here while generating.
+                  </div>
+                </div>
+                <div
+                  id="gen-progress"
+                  class="progress-container gen-progress hidden"
+                >
+                  <div class="progress-bar">
+                    <div id="gen-progress-fill" class="progress-fill"></div>
+                  </div>
+                  <div class="gen-progress-meta">
+                    <span id="gen-progress-text">Idle.</span>
+                    <span id="gen-progress-pct"></span>
+                  </div>
                 </div>
               </div>
-              <div class="form-group">
-                <span class="form-label">Result</span>
-                <div id="gen-result" class="result-frame"></div>
+              <div class="form-group" role="group" aria-label="Result">
+                <span class="form-label" aria-hidden="true">Result</span>
+                <div id="gen-result" class="result-frame">
+                  <div id="gen-result-empty" class="frame-empty">
+                    Your generated image will appear here.
+                  </div>
+                </div>
                 <div id="gen-result-actions" class="form-row hidden">
                   <button id="btn-open-result" class="btn btn-sm" type="button">
-                    Open file
+                    Show in folder
                   </button>
-                  <button id="btn-send-img2img" class="btn btn-sm" type="button">
+                  <button id="btn-copy-result" class="btn btn-sm" type="button">
+                    Copy image
+                  </button>
+                  <button
+                    id="btn-download-result"
+                    class="btn btn-sm"
+                    type="button"
+                  >
+                    Download
+                  </button>
+                  <button
+                    id="btn-send-img2img"
+                    class="btn btn-sm"
+                    type="button"
+                  >
                     Send to img2img
                   </button>
                 </div>
               </div>
-              <div class="form-group">
-                <span class="form-label">History</span>
+              <div class="form-group" role="group" aria-label="History">
+                <span class="form-label" aria-hidden="true">History</span>
                 <div id="gen-history" class="history-grid"></div>
               </div>
             </div>
@@ -465,7 +756,9 @@
               <div id="server-status" class="status-box"></div>
               <div id="server-flags" class="server-flags"></div>
               <div class="form-group">
-                <label class="form-label" for="server-extra-args">Extra server args</label>
+                <label class="form-label" for="server-extra-args"
+                  >Extra server args</label
+                >
                 <textarea
                   id="server-extra-args"
                   rows="2"
@@ -474,10 +767,18 @@
               </div>
               <pre id="server-command-preview" class="command-preview"></pre>
               <div class="form-row">
-                <button id="btn-sd-server-start" class="btn btn-primary" type="button">
+                <button
+                  id="btn-sd-server-start"
+                  class="btn btn-primary"
+                  type="button"
+                >
                   Start sd-server
                 </button>
-                <button id="btn-sd-server-stop" class="btn btn-danger" type="button">
+                <button
+                  id="btn-sd-server-stop"
+                  class="btn btn-danger"
+                  type="button"
+                >
                   Stop
                 </button>
               </div>
@@ -492,10 +793,18 @@
                 <h3>Cloudflare tunnel</h3>
                 <div id="tunnel-status" class="status-box"></div>
                 <div class="form-row">
-                  <button id="btn-tunnel-start" class="btn btn-primary" type="button">
+                  <button
+                    id="btn-tunnel-start"
+                    class="btn btn-primary"
+                    type="button"
+                  >
                     Start tunnel
                   </button>
-                  <button id="btn-tunnel-stop" class="btn btn-danger" type="button">
+                  <button
+                    id="btn-tunnel-stop"
+                    class="btn btn-danger"
+                    type="button"
+                  >
                     Stop tunnel
                   </button>
                   <button id="btn-tunnel-copy" class="btn btn-sm" type="button">
@@ -510,7 +819,11 @@
         </div>
 
         <!-- ═══ HF DOWNLOAD ═══ -->
-        <div class="section-panel" id="section-hf-download" style="display: none">
+        <div
+          class="section-panel"
+          id="section-hf-download"
+          style="display: none"
+        >
           <div class="page-header">
             <div>
               <div class="page-title">Hugging Face Download</div>
@@ -543,12 +856,21 @@
 
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label" for="hf-revision">Revision (optional)</label>
+                <label class="form-label" for="hf-revision"
+                  >Revision (optional)</label
+                >
                 <input type="text" id="hf-revision" placeholder="main" />
               </div>
               <div class="form-group">
-                <label class="form-label" for="hf-token">Token (optional, private repos)</label>
-                <input type="password" id="hf-token" placeholder="hf_…" autocomplete="off" />
+                <label class="form-label" for="hf-token"
+                  >Token (optional, private repos)</label
+                >
+                <input
+                  type="password"
+                  id="hf-token"
+                  placeholder="hf_…"
+                  autocomplete="off"
+                />
               </div>
             </div>
 
@@ -558,21 +880,38 @@
                 <button id="btn-hf-select-all" class="btn btn-sm" type="button">
                   Select all
                 </button>
-                <button id="btn-hf-select-none" class="btn btn-sm" type="button">
+                <button
+                  id="btn-hf-select-none"
+                  class="btn btn-sm"
+                  type="button"
+                >
                   Clear
                 </button>
-                <span id="hf-selection-summary" class="help-text">0 files selected</span>
+                <span id="hf-selection-summary" class="help-text"
+                  >0 files selected</span
+                >
               </div>
               <div id="hf-file-list" class="hf-file-list">
-                <p class="help-text">No files loaded. Enter a repo and click Find Files.</p>
+                <p class="help-text">
+                  No files loaded. Enter a repo and click Find Files.
+                </p>
               </div>
             </div>
 
             <div class="form-row">
-              <button id="btn-hf-download" class="btn btn-primary" type="button" disabled>
+              <button
+                id="btn-hf-download"
+                class="btn btn-primary"
+                type="button"
+                disabled
+              >
                 Download to model folders
               </button>
-              <button id="btn-hf-cancel" class="btn btn-danger hidden" type="button">
+              <button
+                id="btn-hf-cancel"
+                class="btn btn-danger hidden"
+                type="button"
+              >
                 Cancel
               </button>
             </div>
@@ -588,9 +927,9 @@
               <h3>What's downloaded</h3>
               <p class="help-text">
                 Downloaded files land under <code>models/diffusion/</code>,
-                <code>models/vae/</code>, <code>models/text-encoders/</code>,
-                or <code>models/loras/</code>. After completion,
-                use <em>Refresh</em> in the Generate tab to populate the model
+                <code>models/vae/</code>, <code>models/text-encoders/</code>, or
+                <code>models/loras/</code>. After completion, use
+                <em>Refresh</em> in the Generate tab to populate the model
                 pickers — or just open the Generate tab and the new files will
                 appear automatically on next open.
               </p>
@@ -617,9 +956,17 @@
               </div>
               <div class="form-group preset-desc-field">
                 <label class="form-label" for="preset-description">Notes</label>
-                <input type="text" id="preset-description" placeholder="1024 square, DPM++" />
+                <input
+                  type="text"
+                  id="preset-description"
+                  placeholder="1024 square, DPM++"
+                />
               </div>
-              <button id="btn-save-preset" class="btn btn-primary" type="button">
+              <button
+                id="btn-save-preset"
+                class="btn btn-primary"
+                type="button"
+              >
                 Save Current
               </button>
             </div>
@@ -628,8 +975,12 @@
                 <label class="form-label" for="preset-filter">Model type</label>
                 <select id="preset-filter"></select>
               </div>
-              <button id="btn-import-presets" class="btn" type="button">Import</button>
-              <button id="btn-export-presets" class="btn" type="button">Export All</button>
+              <button id="btn-import-presets" class="btn" type="button">
+                Import
+              </button>
+              <button id="btn-export-presets" class="btn" type="button">
+                Export All
+              </button>
               <input
                 type="file"
                 id="preset-import-file"

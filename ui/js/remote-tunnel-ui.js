@@ -21,7 +21,12 @@ window.SDGui.remoteTunnelUi = (() => {
 		var running = latest.status === "running" || latest.status === "starting";
 
 		if (box) {
-			var kind = latest.status === "running" ? "success" : latest.status === "error" ? "error" : "info";
+			var kind =
+				latest.status === "running"
+					? "success"
+					: latest.status === "error"
+						? "error"
+						: "info";
 			box.className = "status-box " + kind;
 			box.textContent = latest.message || "Remote tunnel is not running.";
 			box.style.display = "";
@@ -77,12 +82,20 @@ window.SDGui.remoteTunnelUi = (() => {
 
 	async function copyUrl() {
 		if (!latest || !latest.url) return;
-		try {
-			await navigator.clipboard.writeText(latest.url);
-			window.SDGui.toast("Tunnel URL copied.", "success");
-		} catch (e) {
-			window.SDGui.toast("Copy failed: " + e.message, "error");
+		await window.SDGui.copyText(latest.url);
+	}
+
+	function stopPolling() {
+		if (pollTimer) {
+			window.clearInterval(pollTimer);
+			pollTimer = null;
 		}
+	}
+
+	function startPolling() {
+		stopPolling();
+		refresh();
+		pollTimer = window.setInterval(refresh, 3000);
 	}
 
 	function init() {
@@ -97,7 +110,12 @@ window.SDGui.remoteTunnelUi = (() => {
 			render(latest || {});
 		});
 		refresh();
-		pollTimer = window.setInterval(refresh, 3000);
+		// D1 — only poll while the Server & API panel is visible.
+		window.SDGui.panelLifecycle.register(
+			"server",
+			() => startPolling(),
+			() => stopPolling(),
+		);
 		window.addEventListener("beforeunload", () => {
 			if (pollTimer) window.clearInterval(pollTimer);
 		});

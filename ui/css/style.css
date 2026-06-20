@@ -198,6 +198,12 @@ body {
 	padding-bottom: 56px;
 	min-height: 100vh;
 }
+/* E2 — cap content width on ultrawide screens; center within the pane. */
+.section-panel {
+	max-width: var(--content-max);
+	margin-left: auto;
+	margin-right: auto;
+}
 
 .page-header {
 	display: flex;
@@ -338,6 +344,25 @@ select:focus,
 textarea:focus {
 	border-color: var(--accent);
 	box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+
+/* F3 — explicit keyboard focus ring on every interactive element. */
+:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+	border-radius: var(--radius-xs);
+}
+.btn:focus-visible,
+.nav-item:focus-visible,
+.cfg-cat-header:focus-visible,
+.btn-sm:focus-visible,
+.toggle:focus-within {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+/* Mouse clicks shouldn't leave the focus ring; keyboard only. */
+:focus:not(:focus-visible) {
+	outline: none;
 }
 
 input::placeholder,
@@ -562,11 +587,45 @@ textarea {
 	min-height: 220px;
 	border: 1px dashed var(--border-strong);
 	border-radius: var(--radius-md);
-	background: var(--bg-raised);
+	/* G2 — subtle transparency checkerboard so empty frames read as "image goes here". */
+	background-color: var(--bg-raised);
+	background-image:
+		linear-gradient(45deg, var(--bg-base) 25%, transparent 25%),
+		linear-gradient(-45deg, var(--bg-base) 25%, transparent 25%),
+		linear-gradient(45deg, transparent 75%, var(--bg-base) 75%),
+		linear-gradient(-45deg, transparent 75%, var(--bg-base) 75%);
+	background-size: 16px 16px;
+	background-position:
+		0 0,
+		0 8px,
+		8px -8px,
+		-8px 0;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	padding: var(--space-3);
+	position: relative;
+}
+/* A9 — friendly empty-state captions inside the result/preview frames. */
+.preview-frame .frame-empty,
+.result-frame .frame-empty {
+	color: var(--fg-faint);
+	font-size: 12px;
+	text-align: center;
+	padding: var(--space-4);
+	line-height: 1.5;
+}
+.result-frame.is-error {
+	border-color: var(--red-border);
+	background-image: none;
+	background-color: var(--red-subtle);
+	align-items: flex-start;
+	justify-content: flex-start;
+}
+.result-frame:has(img),
+.preview-frame:has(img) {
+	border-style: solid;
+	background-image: none;
 }
 #gen-preview {
 	max-width: 100%;
@@ -692,7 +751,9 @@ textarea {
 	font-size: 12.5px;
 	color: var(--fg);
 	box-shadow: var(--shadow-lg);
-	transition: opacity 0.3s ease, transform 0.3s ease;
+	transition:
+		opacity 0.3s ease,
+		transform 0.3s ease;
 }
 .toast-error {
 	border-left-color: var(--red);
@@ -771,6 +832,7 @@ textarea {
 .result-frame:has(img),
 .preview-frame:has(img) {
 	border-style: solid;
+	background-image: none;
 }
 
 .history-grid:empty::before {
@@ -925,7 +987,6 @@ textarea {
 	border-radius: var(--radius-sm);
 	border-left: 3px solid var(--accent);
 }
-
 .req {
 	color: var(--red);
 	font-size: 10px;
@@ -1140,4 +1201,349 @@ textarea {
 	.server-flags {
 		grid-template-columns: 1fr;
 	}
+}
+
+/* ════════════════════════════════════════════
+   POLISH — Generate progress (A1), result warnings/stderr (C1),
+   slider+number compounds (A7), seed dice (A5), dim swap+ratios (A6),
+   sticky action (A8), copy buttons (B1), mobile sidebar (E1),
+   SVG nav icons (G1), result gallery (A2).
+   ════════════════════════════════════════════ */
+
+/* A1 — generation progress bar reused inside the preview card. */
+.gen-progress {
+	width: 100%;
+	margin-top: var(--space-2);
+}
+.gen-progress .progress-bar {
+	height: 8px;
+}
+.gen-progress .progress-fill {
+	transition: width 0.3s ease;
+}
+/* Indeterminate bar for modes without step-based progress. */
+.gen-progress.indeterminate .progress-fill {
+	width: 35% !important;
+	animation: gen-progress-slide 1.1s ease-in-out infinite;
+}
+@keyframes gen-progress-slide {
+	0% {
+		margin-left: -35%;
+	}
+	100% {
+		margin-left: 100%;
+	}
+}
+.gen-progress-meta {
+	display: flex;
+	justify-content: space-between;
+	gap: var(--space-2);
+	font-size: 11px;
+	color: var(--fg-muted);
+	font-family: var(--mono);
+	margin-top: var(--space-1);
+}
+
+/* C1 — generation warning + stderr blocks in the result frame. */
+.gen-warnings {
+	width: 100%;
+	background: var(--yellow-subtle);
+	border: 1px solid var(--yellow-border);
+	border-radius: var(--radius-sm);
+	padding: var(--space-2) var(--space-3);
+	margin-bottom: var(--space-2);
+}
+.gen-warning-msg {
+	color: var(--yellow);
+	font-size: 12px;
+	line-height: 1.5;
+	word-break: break-word;
+}
+.gen-warning-msg + .gen-warning-msg {
+	margin-top: var(--space-1);
+}
+.gen-stderr {
+	width: 100%;
+	margin-top: var(--space-2);
+	background: var(--bg-base);
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-sm);
+	padding: var(--space-2) var(--space-3);
+}
+.gen-stderr > summary {
+	cursor: pointer;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--fg-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.4px;
+}
+.gen-stderr-text {
+	margin-top: var(--space-2);
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--fg-muted);
+	white-space: pre-wrap;
+	word-break: break-word;
+	max-height: 220px;
+	overflow: auto;
+}
+/* Metadata-mode stdout text block. */
+.result-frame .result-text {
+	font-family: var(--mono);
+	font-size: 11.5px;
+	color: var(--fg);
+	white-space: pre-wrap;
+	word-break: break-word;
+	width: 100%;
+}
+.result-frame .gen-error {
+	color: var(--red);
+	font-size: 13px;
+	line-height: 1.5;
+	text-align: left;
+	width: 100%;
+}
+
+/* A2 — batch result gallery grid. */
+.result-gallery {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+	gap: var(--space-2);
+	width: 100%;
+}
+.result-gallery .history-item {
+	cursor: default;
+}
+
+/* A7 — slider + number compound control. */
+.slider-number {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	width: 100%;
+}
+.slider-number input[type="range"] {
+	flex: 1;
+	min-width: 0;
+	accent-color: var(--accent);
+	cursor: pointer;
+}
+.slider-number input[type="number"] {
+	width: 76px;
+	flex-shrink: 0;
+}
+.slider-number .slider-val {
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--fg-muted);
+	min-width: 34px;
+	text-align: right;
+}
+
+/* A3 — collapsible optional mode-inputs (img2img/inpaint/ControlNet). */
+.mode-details {
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	background: var(--bg-elevated);
+	padding: var(--space-2) var(--space-3);
+}
+.mode-details > summary {
+	cursor: pointer;
+	font-size: 11.5px;
+	font-weight: 600;
+	color: var(--fg-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.4px;
+	margin-bottom: 0;
+	list-style: none;
+}
+.mode-details > summary::-webkit-details-marker {
+	display: none;
+}
+.mode-details > summary::before {
+	content: "▸ ";
+	color: var(--fg-faint);
+}
+.mode-details[open] > summary::before {
+	content: "▾ ";
+}
+.mode-details[open] > summary {
+	margin-bottom: var(--space-3);
+}
+.mode-details > .form-group:last-child,
+.mode-details > .form-row:last-child {
+	margin-bottom: 0;
+}
+
+/* A5 — small icon button (dice / swap / copy / random). */
+.icon-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-sm);
+	background: var(--bg-elevated);
+	color: var(--fg-muted);
+	font-size: 15px;
+	cursor: pointer;
+	transition: all var(--ease-fast);
+	flex-shrink: 0;
+}
+.icon-btn:hover {
+	background: var(--bg-hover);
+	color: var(--fg);
+	border-color: rgba(255, 255, 255, 0.14);
+}
+.icon-btn:active {
+	transform: scale(0.94);
+}
+
+/* A6 — dimensions row: swap + ratio chips. */
+.dim-row {
+	display: flex;
+	align-items: flex-end;
+	gap: var(--space-2);
+}
+.dim-row .form-group {
+	flex: 1;
+	margin-bottom: 0;
+}
+.ratio-chips {
+	display: flex;
+	gap: var(--space-1);
+	flex-wrap: wrap;
+	margin-bottom: var(--space-3);
+}
+.ratio-chip {
+	padding: 3px var(--space-2);
+	border: 1px solid var(--border-strong);
+	border-radius: 100px;
+	background: var(--bg-elevated);
+	color: var(--fg-muted);
+	font-size: 11px;
+	cursor: pointer;
+	transition: all var(--ease-fast);
+	font-family: var(--font);
+}
+.ratio-chip:hover {
+	color: var(--fg);
+	background: var(--bg-hover);
+}
+.ratio-chip.active {
+	background: var(--accent-subtle);
+	color: var(--accent);
+	border-color: var(--accent-border);
+}
+
+/* A8 — sticky generate action row so the primary button stays reachable. */
+.gen-actions {
+	position: sticky;
+	bottom: 0;
+	background: linear-gradient(to top, var(--bg-surface) 70%, transparent);
+	padding: var(--space-3) 0 var(--space-2);
+	margin-top: var(--space-3);
+	display: flex;
+	gap: var(--space-2);
+	z-index: 5;
+}
+.gen-kbd-hint {
+	font-size: 11px;
+	color: var(--fg-faint);
+	font-family: var(--mono);
+	align-self: center;
+}
+.gen-kbd-hint kbd {
+	background: var(--bg-elevated);
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-xs);
+	padding: 1px 5px;
+	font-size: 10px;
+	color: var(--fg-muted);
+}
+
+/* B1 — copy button on command previews / API snippets. */
+.copy-wrap {
+	position: relative;
+}
+.copy-btn {
+	position: absolute;
+	top: var(--space-2);
+	right: var(--space-2);
+	z-index: 2;
+}
+.command-preview {
+	position: relative;
+}
+
+/* C2 — sidebar running-process badge (markup added in index.html). */
+.sidebar-status .status-dot {
+	flex-shrink: 0;
+}
+
+/* G1 — inline SVG nav icons (replace emoji). */
+.nav-icon {
+	width: 18px;
+	height: 18px;
+	stroke: currentColor;
+	fill: none;
+	stroke-width: 1.8;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	flex-shrink: 0;
+}
+.sidebar-logo-svg {
+	width: 30px;
+	height: 30px;
+	flex-shrink: 0;
+}
+
+/* E1 — mobile sidebar (collapsible drawer < 900px). */
+.sidebar-toggle {
+	display: none;
+	position: fixed;
+	top: var(--space-3);
+	left: var(--space-3);
+	z-index: 200;
+}
+.sidebar-overlay {
+	display: none;
+}
+@media (max-width: 900px) {
+	.sidebar {
+		transform: translateX(-100%);
+		transition: transform var(--ease-med);
+		box-shadow: var(--shadow-lg);
+	}
+	.sidebar.open {
+		transform: translateX(0);
+	}
+	.sidebar-toggle {
+		display: inline-flex;
+	}
+	.sidebar.open ~ .sidebar-overlay,
+	body.sidebar-open .sidebar-overlay {
+		display: block;
+		position: fixed;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.5);
+		z-index: 99;
+	}
+	.main-content {
+		margin-left: 0;
+		padding-top: 56px;
+	}
+}
+
+/* D3 — reserve image dimensions to reduce layout shift. */
+.preview-frame img,
+.result-frame img {
+	aspect-ratio: auto;
+}
+.result-gallery img,
+.history-item img {
+	aspect-ratio: 1;
 }
