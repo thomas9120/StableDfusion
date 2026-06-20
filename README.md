@@ -1,4 +1,4 @@
-# Stable-D GUI
+# StableDfusion
 
 A desktop-friendly web GUI for [`leejet/stable-diffusion.cpp`](https://github.com/leejet/stable-diffusion.cpp),
 modeled on the architecture of **LLama-GUI** (its sibling project for `llama.cpp`).
