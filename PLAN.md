@@ -425,7 +425,7 @@ Directory structure, bootable `server.py` + `backend/app.py` serving a placehold
 - **Verify:** ✅ generated "a lovely cat" with SD1.5 Q4_0 GGUF via the backend pipeline; preview `preview_mtime` ticked each step (1→3→4→6), result image served via `/api/image/<name>`, and `output/.gallery/*.json` sidecar written.
 - **Notable:** flags audited against the installed `sd-cli -h` (commit 92a3b73) — flash attention is `--fa` (not `--flash-attn`), no `--ngl`/`--n-gpu-layers` (uses `--offload-to-cpu`/`--backend`/`--max-vram`), no `--format` (extension-based), metadata opt-out is `--disable-image-metadata`. sd-cli reports per-step progress ONLY via the preview callback writing `--preview-path` (its CLI `step_callback` discards the step number to stdout — confirmed in upstream `main.cpp`); the backend polls preview mtime as the primary signal and parses the carriage-return sampling bar (`N/M - X.XXs/it`) as a secondary signal. Thumbnails are served full-size and scaled client-side (PLAN §16.1 option (b); Pillow intentionally not a dependency).
 
-### Phase 3 — img2img + model bundles + HF downloader
+### Phase 3 — img2img + model bundles + HF downloader ✅
 
 - img2img controls (init-image, strength, mask, control-image), `upscale`/`convert`/`metadata` modes.
 - `model-bundles.js` driving file-picker visibility (SDXL, SD3, FLUX, Qwen, Z-Image…).
