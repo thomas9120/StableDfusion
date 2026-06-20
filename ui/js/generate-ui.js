@@ -286,45 +286,10 @@ window.SDGui.generateUi = (() => {
 
 	async function populateModelSelect(select, purpose) {
 		try {
-			var listPurpose = purpose === "lora_model_dir" ? "lora" : purpose;
 			var data = await window.SDGui.fetchJson(
-				"/api/models?type=" + encodeURIComponent(listPurpose),
+				"/api/models?type=" + encodeURIComponent(purpose),
 			);
 			select.replaceChildren();
-			if (purpose === "lora_model_dir") {
-				select.appendChild(new Option("-- no LoRA folder --", ""));
-				var byFolder = {};
-				(data.models || []).forEach((m) => {
-					var folder = m.folder || "loras";
-					if (!byFolder[folder]) byFolder[folder] = { count: 0, size: 0 };
-					byFolder[folder].count += 1;
-					byFolder[folder].size += m.size || 0;
-				});
-				if (!Object.keys(byFolder).length) {
-					select.appendChild(
-						new Option("models/loras (empty)", "models/loras"),
-					);
-					return;
-				}
-				Object.keys(byFolder)
-					.sort()
-					.forEach((folder) => {
-						var info = byFolder[folder];
-						select.appendChild(
-							new Option(
-								"models/" +
-									folder +
-									" (" +
-									info.count +
-									" LoRA" +
-									(info.count === 1 ? "" : "s") +
-									")",
-								"models/" + folder,
-							),
-						);
-					});
-				return;
-			}
 			select.appendChild(new Option("-- select from component folder --", ""));
 			// sd-cli runs with cwd = project root, so prefix model-relative paths so
 			// they resolve (Browse returns absolute paths which also resolve).
@@ -509,7 +474,6 @@ window.SDGui.generateUi = (() => {
 				"control_net",
 				"embeddings_connectors",
 				"embd_dir",
-				"lora_model_dir",
 				"photo_maker",
 				"pulid_weights",
 			].map((key) => ({
@@ -518,14 +482,6 @@ window.SDGui.generateUi = (() => {
 				required: false,
 			}));
 		}
-		if (!fieldList.some((field) => field.key === "lora_model_dir")) {
-			fieldList.push({
-				key: "lora_model_dir",
-				purpose: "lora_model_dir",
-				required: false,
-			});
-		}
-
 		fieldList.forEach((field) => {
 			var wrap = el("div", "gen-model-field");
 			var head = el("div", "field-head");
@@ -873,13 +829,23 @@ window.SDGui.generateUi = (() => {
 	}
 
 	function sendToImg2img(name) {
-		window.SDGui.flagCore.setFlagValue("init_img", name);
-		// Switch to img_gen if not already (img2img is an img_gen-only feature).
+		if (!name) return;
+		// Result files live under output/ (sd-cli runs with cwd = project root),
+		// so prefix the bare filename so --init-img resolves at generate time.
+		var initPath = "output/" + String(name).replace(/^\/+/, "");
+		window.SDGui.flagCore.setFlagValue("init_img", initPath);
+		// img2img is an img_gen-only feature; switch modes if needed.
 		if (window.SDGui.flagCore.getMode() !== "img_gen") {
 			window.SDGui.flagCore.setMode("img_gen");
 		}
 		updateModeSections();
 		syncAll();
+		// The init-image field sits inside a collapsed <details> disclosure;
+		// expand it (and focus the field) so the action is visibly applied.
+		var initInput = $("gen-init-img");
+		var details = initInput ? initInput.closest("details") : null;
+		if (details) details.open = true;
+		if (initInput) initInput.focus();
 		window.SDGui.toast(
 			"Set as init image. Adjust strength then Generate.",
 			"info",
