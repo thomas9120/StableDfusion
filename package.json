@@ -4,7 +4,9 @@
   "scripts": {
     "test:syntax": "node tests/frontend/js_syntax_check.cjs",
     "test:flag-core": "node tests/frontend/flag_core_unit.cjs",
-    "test:frontend": "node tests/frontend/flag_core_unit.cjs && node tests/frontend/flag_sync_smoke.cjs"
+    "test:frontend": "node tests/frontend/flag_core_unit.cjs && node tests/frontend/flag_sync_smoke.cjs",
+    "snap": "node scripts/snap.js generate",
+    "snap:all": "node scripts/snap.js generate && node scripts/snap.js configure && node scripts/snap.js server && node scripts/snap.js presets && node scripts/snap.js install"
   },
   "devDependencies": {
     "playwright": "^1.60.0"
