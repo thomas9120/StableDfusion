@@ -9,6 +9,10 @@ window.SDGui.generateUi = (() => {
 	var lastPreviewMtime = 0;
 	var generating = false;
 	var controls = {}; // flagId -> { id, kind }
+	// Secondary controls that share one flag with `controls` (e.g. init_img
+	// appears in both the img2img and upscale panels). The primary entry in
+	// `controls` is synced first, then each mirror id here.
+	var controlMirrors = {}; // flagId -> [ids]
 
 	var HISTORY_KEY = "sdgui.generate.history";
 
@@ -93,7 +97,17 @@ window.SDGui.generateUi = (() => {
 
 	// ── Control binding ────────────────────────────────────────────────────
 	function bindText(id, flagId) {
-		controls[flagId] = { id: id, kind: "text" };
+		var existing = controls[flagId];
+		if (existing && existing.kind === "text" && existing.id !== id) {
+			// A setting may appear in more than one place (init_img lives in
+			// both the img2img and upscale panels). Keep the first binding as
+			// the primary control and register later ones as mirrors that read
+			// the same flagCore state (UI State Sync Rule).
+			if (!controlMirrors[flagId]) controlMirrors[flagId] = [];
+			if (!controlMirrors[flagId].includes(id)) controlMirrors[flagId].push(id);
+		} else {
+			controls[flagId] = { id: id, kind: "text" };
+		}
 		var node = $(id);
 		if (node)
 			node.addEventListener("input", () => {
@@ -209,12 +223,18 @@ window.SDGui.generateUi = (() => {
 				entry.number.value = String(v);
 			return;
 		}
-		var node = $(entry.id);
-		if (!node) return;
-		// Don't clobber the control the user is currently editing.
-		if (document.activeElement === node) return;
-		if (entry.kind === "bool") node.checked = v === true;
-		else node.value = String(v);
+		var applyToNode = (node) => {
+			if (!node) return;
+			// Don't clobber the control the user is currently editing.
+			if (document.activeElement === node) return;
+			if (entry.kind === "bool") node.checked = v === true;
+			else node.value = String(v);
+		};
+		applyToNode($(entry.id));
+		// Mirror controls share one flag (e.g. init_img in img2img + upscale).
+		(controlMirrors[flagId] || []).forEach((mid) => {
+			applyToNode($(mid));
+		});
 	}
 
 	function syncControlsFromState() {
