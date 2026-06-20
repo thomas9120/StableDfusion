@@ -39,13 +39,19 @@ function startStaticServer() {
 		let urlPath = decodeURIComponent(req.url.split("?")[0]);
 		if (urlPath === "/") urlPath = "/index.html";
 		const filePath = path.join(UI_DIR, urlPath);
-		if (!filePath.startsWith(UI_DIR) || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+		if (
+			!filePath.startsWith(UI_DIR) ||
+			!fs.existsSync(filePath) ||
+			fs.statSync(filePath).isDirectory()
+		) {
 			res.writeHead(404);
 			res.end("not found");
 			return;
 		}
 		const ext = path.extname(filePath).toLowerCase();
-		res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream" });
+		res.writeHead(200, {
+			"Content-Type": MIME[ext] || "application/octet-stream",
+		});
 		fs.createReadStream(filePath).pipe(res);
 	});
 	return new Promise((resolve) => {
@@ -56,19 +62,27 @@ function startStaticServer() {
 // Playwright's bundled browser version may not match what's installed; detect
 // any available Chromium build under the standard ms-playwright cache.
 const PLAYWRIGHT_DIR = path.join(
-	process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || "", "AppData", "Local"),
+	process.env.LOCALAPPDATA ||
+		path.join(process.env.USERPROFILE || "", "AppData", "Local"),
 	"ms-playwright",
 );
 function findChromiumExecutable() {
 	let dirs = [];
 	try {
-		dirs = fs.readdirSync(PLAYWRIGHT_DIR).filter((d) => d.startsWith("chromium-"));
+		dirs = fs
+			.readdirSync(PLAYWRIGHT_DIR)
+			.filter((d) => d.startsWith("chromium-"));
 	} catch (_e) {
 		/* ignore */
 	}
 	dirs.sort().reverse(); // newest first
 	for (const d of dirs) {
-		const candidate = path.join(PLAYWRIGHT_DIR, d, "chrome-win64", "chrome.exe");
+		const candidate = path.join(
+			PLAYWRIGHT_DIR,
+			d,
+			"chrome-win64",
+			"chrome.exe",
+		);
 		if (fs.existsSync(candidate)) return candidate;
 	}
 	return undefined;
@@ -89,7 +103,11 @@ function findChromiumExecutable() {
 		console.log(`  ${cond ? "ok" : "FAIL"}  ${name}`);
 	}
 
-	const browser = await chromium.launch(findChromiumExecutable() ? { executablePath: findChromiumExecutable() } : {});
+	const browser = await chromium.launch(
+		findChromiumExecutable()
+			? { executablePath: findChromiumExecutable() }
+			: {},
+	);
 	try {
 		const page = await browser.newPage();
 
@@ -166,7 +184,14 @@ function findChromiumExecutable() {
 					status: 200,
 					contentType: "application/json",
 					body: JSON.stringify({
-						models: [{ name: "test.gguf", relative: "test.gguf", size: 123456, mtime: 1 }],
+						models: [
+							{
+								name: "test.gguf",
+								relative: "test.gguf",
+								size: 123456,
+								mtime: 1,
+							},
+						],
 					}),
 				});
 			}
@@ -174,7 +199,11 @@ function findChromiumExecutable() {
 				return route.fulfill({
 					status: 200,
 					contentType: "application/json",
-					body: JSON.stringify({ installed: true, version: "smoke", backend: "cpu-avx2" }),
+					body: JSON.stringify({
+						installed: true,
+						version: "smoke",
+						backend: "cpu-avx2",
+					}),
 				});
 			}
 			if (url.includes("/api/generate/status")) {
@@ -251,10 +280,15 @@ function findChromiumExecutable() {
 		page.on("pageerror", (e) => errors.push(String(e)));
 
 		await page.goto(base, { waitUntil: "domcontentloaded" });
-		await page.waitForFunction(() => !!(window.SDGui && window.SDGui.generateUi && window.SDGui.flagCore));
+		await page.waitForFunction(
+			() =>
+				!!(window.SDGui && window.SDGui.generateUi && window.SDGui.flagCore),
+		);
 
 		// 1. Flag definitions validate.
-		const validation = await page.evaluate(() => window.SDGui.validateFlagDefinitions());
+		const validation = await page.evaluate(() =>
+			window.SDGui.validateFlagDefinitions(),
+		);
 		check("flag definitions validate cleanly", validation.ok);
 		if (!validation.ok) console.log("    warnings:", validation.warnings);
 
@@ -265,8 +299,14 @@ function findChromiumExecutable() {
 			return window.SDGui.flagCore.getLaunchArgs();
 		});
 		const flatArgs = (setModel.args || []).map((p) => p.join("=")).join(" ");
-		check("getLaunchArgs emits the model flag", flatArgs.includes("--model=test.gguf"));
-		check("getLaunchArgs emits the prompt", flatArgs.includes("--prompt=a cat"));
+		check(
+			"getLaunchArgs emits the model flag",
+			flatArgs.includes("--model=test.gguf"),
+		);
+		check(
+			"getLaunchArgs emits the prompt",
+			flatArgs.includes("--prompt=a cat"),
+		);
 		check("getLaunchArgs has no error", !setModel.error);
 
 		// 3. Generate <-> Configure sync: edit width in Generate, verify command preview.
@@ -291,11 +331,18 @@ function findChromiumExecutable() {
 		});
 		await page.fill("#gen-prompt", "a cat");
 		const loraUi = await page.evaluate(() => {
-			window.SDGui.flagCore.setFlagValue("lora_file", "models/loras/style-test.safetensors");
+			window.SDGui.flagCore.setFlagValue(
+				"lora_file",
+				"models/loras/style-test.safetensors",
+			);
 			window.SDGui.flagCore.setFlagValue("lora_strength", 0.75);
 			window.SDGui.flagCore.setFlagValue("lora_model_dir", "models/loras");
-			const ranges = Array.from(document.querySelectorAll("#gen-model-components input[type='range']"));
-			const slider = ranges.find((input) => input.min === "-1" && input.max === "2");
+			const ranges = Array.from(
+				document.querySelectorAll("#gen-model-components input[type='range']"),
+			);
+			const slider = ranges.find(
+				(input) => input.min === "-1" && input.max === "2",
+			);
 			return !!slider;
 		});
 		check("LoRA strength slider is rendered with expected range", loraUi);
@@ -306,7 +353,9 @@ function findChromiumExecutable() {
 			await page.waitForFunction(
 				() => {
 					const img = document.getElementById("gen-preview");
-					return img && !img.hidden && img.src.includes("/api/generate/preview");
+					return (
+						img && !img.hidden && img.src.includes("/api/generate/preview")
+					);
 				},
 				{ timeout: 6000 },
 			);
@@ -338,13 +387,21 @@ function findChromiumExecutable() {
 		check("history entry written on done", historyCount >= 1);
 
 		// 7. POST body included mode + args + total_steps.
-		check("Generate POST included mode img_gen", generatePosted && generatePosted.mode === "img_gen");
-		check("Generate POST included args array", !!(generatePosted && Array.isArray(generatePosted.args)));
+		check(
+			"Generate POST included mode img_gen",
+			generatePosted && generatePosted.mode === "img_gen",
+		);
+		check(
+			"Generate POST included args array",
+			!!(generatePosted && Array.isArray(generatePosted.args)),
+		);
 		check(
 			"Generate POST included total_steps",
 			generatePosted && Number.isInteger(generatePosted.total_steps),
 		);
-		const postedArgs = (generatePosted.args || []).map((p) => p.join("=")).join(" ");
+		const postedArgs = (generatePosted.args || [])
+			.map((p) => p.join("="))
+			.join(" ");
 		check(
 			"Generate POST injected LoRA prompt tag",
 			postedArgs.includes("--prompt=a cat <lora:style-test:0.75>"),
@@ -359,8 +416,13 @@ function findChromiumExecutable() {
 		if (errors.length) console.log("    page errors:", errors);
 
 		// 9. History persisted to localStorage.
-		const stored = await page.evaluate(() => localStorage.getItem("sdgui.generate.history"));
-		check("history persisted to localStorage", !!stored && stored.includes("a cat"));
+		const stored = await page.evaluate(() =>
+			localStorage.getItem("sdgui.generate.history"),
+		);
+		check(
+			"history persisted to localStorage",
+			!!stored && stored.includes("a cat"),
+		);
 
 		// ── Phase 4: preset save/load preserves flagCore state + custom args.
 		await page.evaluate(() => {
@@ -391,8 +453,14 @@ function findChromiumExecutable() {
 			custom_args: window.SDGui.flagCore.getFlagValues().custom_args,
 			bundle: window.SDGui.flagCore.getBundle(),
 		}));
-		check("preset load restored prompt", restoredPreset.prompt === "preset cat");
-		check("preset load restored custom args", restoredPreset.custom_args === "--eta 0.25");
+		check(
+			"preset load restored prompt",
+			restoredPreset.prompt === "preset cat",
+		);
+		check(
+			"preset load restored custom args",
+			restoredPreset.custom_args === "--eta 0.25",
+		);
 		check("preset load restored bundle", restoredPreset.bundle === "sdxl");
 		await page.click('.nav-item[data-section="generate"]');
 
@@ -434,7 +502,10 @@ function findChromiumExecutable() {
 
 		const imgGen = await sectionVisibility("img_gen");
 		check("img_gen shows img2img inputs", !imgGen.img2img);
-		check("img_gen hides upscale/convert/metadata", imgGen.upscale && imgGen.convert && imgGen.metadata);
+		check(
+			"img_gen hides upscale/convert/metadata",
+			imgGen.upscale && imgGen.convert && imgGen.metadata,
+		);
 		check("img_gen shows prompt section", !imgGen.prompt);
 
 		const upscaleVis = await sectionVisibility("upscale");
@@ -468,6 +539,45 @@ function findChromiumExecutable() {
 
 		// Reset to img_gen so the rest of the page is in a sane state.
 		await page.evaluate(() => window.SDGui.flagCore.setMode("img_gen"));
+
+		// ── init_img mirror sync: init_img is bound to TWO inputs
+		// (gen-init-img in the img2img panel + gen-upscale-init-img in the
+		// upscale panel). Setting the flag via the shared setter (the path used
+		// by both "Send to img2img" and the Browse button) must populate BOTH
+		// fields, not just one.
+		await page.evaluate(() =>
+			window.SDGui.flagCore.setFlagValue("init_img", "output/sample.png"),
+		);
+		await page.waitForTimeout(60);
+		const initImgImgGen = await page.inputValue("#gen-init-img");
+		check(
+			"init_img setFlagValue populates visible img2img field",
+			initImgImgGen === "output/sample.png",
+		);
+		// Switch to upscale: the mirrored upscale field must reflect the same state.
+		await page.selectOption("#gen-mode", "upscale");
+		await page.waitForTimeout(60);
+		const initImgUpscale = await page.inputValue("#gen-upscale-init-img");
+		check(
+			"init_img mirror keeps upscale field in sync",
+			initImgUpscale === "output/sample.png",
+		);
+		// Edit through the upscale field; the img2img field must follow (both
+		// write to the same flag, so the mirror is bidirectional).
+		await page.fill("#gen-upscale-init-img", "output/other.png");
+		await page.waitForTimeout(60);
+		await page.selectOption("#gen-mode", "img_gen");
+		await page.waitForTimeout(60);
+		const initImgRoundTrip = await page.inputValue("#gen-init-img");
+		check(
+			"init_img edit from upscale reflects in img2img field",
+			initImgRoundTrip === "output/other.png",
+		);
+		// Reset for the rest of the suite.
+		await page.evaluate(() =>
+			window.SDGui.flagCore.setFlagValue("init_img", ""),
+		);
+		await page.selectOption("#gen-mode", "img_gen");
 
 		// HF download tab initializes without errors + lists files from stub.
 		const repoFilesBody = JSON.stringify({
@@ -524,7 +634,9 @@ function findChromiumExecutable() {
 			() => document.querySelectorAll("#hf-file-list .hf-file-row").length,
 		);
 		check("HF file list rendered after Find Files", hfRowCount === 4);
-		const hfStatus = await page.evaluate(() => document.getElementById("hf-status").textContent);
+		const hfStatus = await page.evaluate(
+			() => document.getElementById("hf-status").textContent,
+		);
 		check("HF status reports file count", /Found 4 file/.test(hfStatus));
 		const hfDownloadEnabled = await page.evaluate(
 			() => !document.getElementById("btn-hf-download").disabled,
@@ -535,7 +647,9 @@ function findChromiumExecutable() {
 		server.close();
 	}
 
-	console.log(`\n${failures.length === 0 ? "ALL SMOKE CHECKS PASSED" : failures.length + " CHECK(S) FAILED"}`);
+	console.log(
+		`\n${failures.length === 0 ? "ALL SMOKE CHECKS PASSED" : failures.length + " CHECK(S) FAILED"}`,
+	);
 	if (failures.length) {
 		failures.forEach((f) => console.log("  - " + f));
 		process.exit(1);
