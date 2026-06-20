@@ -214,7 +214,57 @@ This module should depend on:
 
 Pitfall: LoRA generation behavior is split today: the controls live near model fields, but prompt injection happens in `generate()`. Keep the transformation testable and avoid duplicating LoRA parsing in two modules.
 
-### Stage 5: Extract History
+### Stage 5: Extract History — ✅ DONE (2026-06-20)
+
+Created `ui/js/generate/history.js` (`window.SDGui.generateHistory`),
+loaded after `model-fields.js` and before `generate-ui.js` in
+`ui/index.html`. The new module **owns** the localStorage schema
+(`HISTORY_KEY`, `HISTORY_STORE_CAP`, `HISTORY_VISIBLE_DEFAULT`,
+`historyExpanded`), every history entry helper (`loadHistory`,
+`saveHistory`, `historyFileName`, `addHistoryEntry`, `renderHistory`,
+`restoreFromHistory`, `openHistoryImage`, `removeHistoryEntry`,
+`clearHistory`), and the toolbar wiring (`attachToolbar` for the clear
+confirm + show-more toggle).
+
+Cross-module actions (`sendToImg2img`, `downloadResult`, `openResultFile`,
+`syncFromState`, `switchToModeSection`) are injected through `init()` so
+the module never reaches back into the coordinator's closure. They
+remain owned by the coordinator until Stage 6 (preview/results) and
+Stage 8 (run controller) extract them.
+
+`generate-ui.js` now aliases the module at the top of its IIFE
+(`var hist = window.SDGui.generateHistory`) and:
+- calls `hist.init({...callbacks})` after `mf.init` / `ctrl.init` in
+  `init()` (the callbacks are hoisted function declarations, so the
+  order is safe);
+- replaces the inline `renderHistory()` call with `hist.render()` and
+  delegates the toolbar wiring to `hist.attachToolbar()`;
+- forwards every new result file from the live result frame via
+  `hist.addHistoryEntry(snap, file)` (will move fully into the run
+  controller in Stage 7);
+- exposes the existing public method
+  `window.SDGui.generateUi.renderHistory` as a thin alias to
+  `hist.render` so the existing tests' DOM contract and any future
+  external caller keep working.
+
+Pitfall preserved: the schema (`id`, `name`, `file`, `prompt`, `thumb`,
+`timestamp`, `bundle`, `mode`, `params`) is unchanged, and
+`historyFileName()` falls back to `entry.name || entry.file` so older
+localStorage entries that only have `name` still open / restore /
+delete cleanly. The shared `controls` registry, `flagCore` source of
+truth, and `init_img` mirror sync are all untouched.
+
+Result: `generate-ui.js` dropped from 1034 to 909 lines (~125 lines
+moved out, no behavior change). Verified: `node --check` (24 files, all
+ok), `npm run test:syntax`, `npm run test:frontend` (incl. the history
+entry written on done, the localStorage persistence check, the
+4-action toolbar, the `delete-one` and `Clear-all empties history
+list` flows, the `history count badge reflects entry count` check, the
+`history entries store the real on-disk filename (file field)` check,
+and the no-uncaught-page-errors check), `ruff check .`, and
+`python server.py` + `/api/status` all pass.
+
+#### Original plan (kept for reference)
 
 Move:
 
