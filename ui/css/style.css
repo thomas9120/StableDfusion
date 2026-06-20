@@ -214,6 +214,11 @@ body {
 	flex-wrap: wrap;
 }
 
+.cfg-collapse-bar {
+	display: flex;
+	gap: var(--space-2);
+}
+
 .page-title {
 	font-size: 18px;
 	font-weight: 700;
