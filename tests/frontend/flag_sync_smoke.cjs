@@ -17,6 +17,7 @@
 const { chromium } = require("playwright");
 const http = require("node:http");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 
 const UI_DIR = path.resolve(__dirname, "..", "..", "ui");
@@ -95,6 +96,7 @@ function findChromiumExecutable() {
 	let statusCalls = 0;
 	let generateStarted = false;
 	let generatePosted = null;
+	let serverPosted = null;
 	let presetStore = [];
 	const failures = [];
 
@@ -203,6 +205,32 @@ function findChromiumExecutable() {
 						installed: true,
 						version: "smoke",
 						backend: "cpu-avx2",
+					}),
+				});
+			}
+			if (url.includes("/api/sd-server/status")) {
+				return route.fulfill({
+					status: 200,
+					contentType: "application/json",
+					body: JSON.stringify({
+						status: "idle",
+						message: "sd-server is not running.",
+					}),
+				});
+			}
+			if (url.includes("/api/sd-server/start") && method === "POST") {
+				try {
+					serverPosted = JSON.parse(route.request().postData() || "{}");
+				} catch (_e) {
+					serverPosted = {};
+				}
+				return route.fulfill({
+					status: 200,
+					contentType: "application/json",
+					body: JSON.stringify({
+						status: "running",
+						message: "sd-server running at http://127.0.0.1:8123",
+						target_url: "http://127.0.0.1:8123",
 					}),
 				});
 			}
@@ -462,6 +490,92 @@ function findChromiumExecutable() {
 			restoredPreset.custom_args === "--eta 0.25",
 		);
 		check("preset load restored bundle", restoredPreset.bundle === "sdxl");
+
+		// Preset import accepts both exported-bundle and single-preset shapes.
+		const importDir = fs.mkdtempSync(path.join(os.tmpdir(), "sdgui-presets-"));
+		const importBundlePath = path.join(importDir, "bundle.json");
+		const importSinglePath = path.join(importDir, "single.json");
+		fs.writeFileSync(
+			importBundlePath,
+			JSON.stringify({
+				schema: 1,
+				kind: "stable-d-gui.preset-bundle",
+				presets: [
+					{
+						name: "Imported Bundle Preset",
+						bundle: "sd1",
+						mode: "img_gen",
+						values: { prompt: "bundle import" },
+					},
+				],
+			}),
+		);
+		fs.writeFileSync(
+			importSinglePath,
+			JSON.stringify({
+				preset: {
+					name: "Imported Single Preset",
+					bundle: "flux1",
+					mode: "img_gen",
+					values: { prompt: "single import" },
+				},
+			}),
+		);
+		await page.setInputFiles("#preset-import-file", importBundlePath);
+		await page.waitForFunction(
+			() =>
+				Array.from(document.querySelectorAll("#presets-list .preset-title")).some(
+					(n) => n.textContent === "Imported Bundle Preset",
+				),
+			{ timeout: 3000 },
+		);
+		check(
+			"preset import accepted bundle export shape",
+			presetStore.some((p) => p.name === "Imported Bundle Preset"),
+		);
+		await page.setInputFiles("#preset-import-file", importSinglePath);
+		await page.waitForFunction(
+			() =>
+				Array.from(document.querySelectorAll("#presets-list .preset-title")).some(
+					(n) => n.textContent === "Imported Single Preset",
+				),
+			{ timeout: 3000 },
+		);
+		check(
+			"preset import accepted single preset shape",
+			presetStore.some((p) => p.name === "Imported Single Preset"),
+		);
+
+		// Server UI posts the same curated contract that server_mode_service expects.
+		await page.click('.nav-item[data-section="server"]');
+		await page.fill("#server-listen_port", "8123");
+		await page.fill("#server-diffusion_model", "models/diffusion/server.gguf");
+		await page.check("#server-diffusion_fa");
+		await page.fill("#server-extra-args", "--cache-mode easycache");
+		await page.click("#btn-sd-server-start");
+		await page.waitForTimeout(100);
+		check(
+			"Server UI POST included listener",
+			serverPosted &&
+				serverPosted.host === "127.0.0.1" &&
+				serverPosted.port === 8123,
+		);
+		const serverPostedArgs = (
+			serverPosted && serverPosted.args ? serverPosted.args : []
+		)
+			.map((p) => p.join("="))
+			.join(" ");
+		check(
+			"Server UI POST included diffusion model",
+			serverPostedArgs.includes("--diffusion-model=models/diffusion/server.gguf"),
+		);
+		check(
+			"Server UI POST included bool and extra args",
+			serverPostedArgs.includes("--diffusion-fa") &&
+				serverPosted &&
+				serverPosted.extra_args === "--cache-mode easycache",
+		);
+
 		await page.click('.nav-item[data-section="generate"]');
 
 		// ── Phase 3 ─────────────────────────────────────────────────────────
