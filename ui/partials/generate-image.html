@@ -537,6 +537,10 @@
                   min="1"
                   value="1"
                 />
+                <p class="help-text">
+                  Applies the ESRGAN upscaler multiple times. Each pass compounds
+                  the model scale and takes longer.
+                </p>
               </div>
               <div class="form-group">
                 <label class="form-label">Tile size</label>
@@ -546,6 +550,10 @@
                   min="32"
                   value="128"
                 />
+                <p class="help-text">
+                  Pixels per ESRGAN tile. Lower values use less memory; higher
+                  values can be faster if your GPU/CPU has room.
+                </p>
               </div>
             </div>
           </div>
