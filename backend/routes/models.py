@@ -1,25 +1,63 @@
-"""GET /api/models — list model component files in models/. Semi-functional.
+"""GET /api/models — list model component files in models/.
 
-TODO(Phase 2/3): filter by ``?type=<diffusion|vae|clip_l|...>`` using
-file_picker.PURPOSE_FILTERS heuristics; recurse into subfolders.
+Query ``?type=<purpose>`` filters by that purpose's file extensions using the
+shared file_picker.PURPOSE_FILTERS heuristics (best-effort: SD weights share
+extensions, so the filter is a hint, not a guarantee). Recurses into subfolders.
+Each entry carries name, relative path, size, and mtime (PLAN.md §13).
 """
+
+import urllib.parse
 
 from backend.context import AppContext
 from backend.http import Request, Response
+from backend.services import file_picker_service
 
 MODEL_EXTS = (".safetensors", ".ckpt", ".pth", ".pt", ".gguf", ".sft", ".bin")
 
 
+def _norm_ext(value: str) -> str:
+    """Normalize an extension to a dotless lowercase form for comparison."""
+    return (value or "").lower().lstrip(".")
+
+
+def _extensions_for_type(purpose: str) -> tuple[str, ...]:
+    """Return the extensions advertised for a picker purpose, else all model exts."""
+    entry = file_picker_service.PURPOSE_FILTERS.get(purpose)
+    if not entry:
+        return MODEL_EXTS
+    filetypes = entry[0]
+    extensions: list[str] = []
+    for _label, pattern_group in filetypes:
+        for pattern in str(pattern_group or "").split():
+            if pattern.startswith("*."):
+                ext = pattern[2:].strip().lower()
+                if ext and ext not in extensions:
+                    extensions.append(ext)
+    return tuple(extensions) or MODEL_EXTS
+
+
 def list_models(request: Request, response: Response, ctx: AppContext) -> None:
+    query = urllib.parse.parse_qs(request.query or "")
+    purpose = (query.get("type", [""])[0] or "").strip().lower()
+    exts = _extensions_for_type(purpose) if purpose else MODEL_EXTS
+    allowed = {_norm_ext(e) for e in exts}
+
     files = []
     if ctx.paths.models.exists():
         for path in sorted(ctx.paths.models.rglob("*")):
-            if path.is_file() and path.suffix.lower() in MODEL_EXTS:
-                files.append(
-                    {
-                        "name": path.name,
-                        "relative": path.relative_to(ctx.paths.models).as_posix(),
-                        "size": path.stat().st_size,
-                    }
-                )
+            if not path.is_file():
+                continue
+            if path.name == ".gitkeep":
+                continue
+            if _norm_ext(path.suffix) not in allowed:
+                continue
+            stat = path.stat()
+            files.append(
+                {
+                    "name": path.name,
+                    "relative": path.relative_to(ctx.paths.models).as_posix(),
+                    "size": stat.st_size,
+                    "mtime": int(stat.st_mtime),
+                }
+            )
     response.json({"models": files})

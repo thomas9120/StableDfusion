@@ -1,23 +1,32 @@
 // Shared enum option lists for sd-cli flags.
-// Authoritative source: run `<sdcpp>/bin/sd-cli -h` and read
-// examples/common/common.cpp (SDContextParams/SDGenerationParams::get_options).
-// Verify every value against the current upstream before exposing it (PLAN.md §9).
-
+// Authoritative source: `<sdcpp>/bin/sd-cli -h` (commit 92a3b73) cross-checked
+// against examples/common/common.cpp (SDContextParams/SDGenerationParams::get_options)
+// and examples/cli/main.cpp. Verify every value against the current upstream before
+// exposing it (PLAN.md §9 / AGENTS.md flag system).
 window.SDGui = window.SDGui || {};
 
+// sampling-method enum from `sd-cli -h` (--sampling-method).
 window.SDGui.SAMPLING_METHODS = [
 	"euler",
 	"euler_a",
 	"heun",
 	"dpm2",
+	"dpm++2s_a",
 	"dpm++2m",
 	"dpm++2mv2",
-	"dpm++2s_a",
 	"ipndm",
 	"ipndm_v",
 	"lcm",
+	"ddim_trailing",
+	"tcd",
+	"res_multistep",
+	"res_2s",
+	"er_sde",
+	"euler_cfg_pp",
+	"euler_a_cfg_pp",
 ];
 
+// scheduler enum from `sd-cli -h` (--scheduler).
 window.SDGui.SCHEDULERS = [
 	"default",
 	"discrete",
@@ -25,9 +34,18 @@ window.SDGui.SCHEDULERS = [
 	"exponential",
 	"ays",
 	"gits",
+	"smoothstep",
+	"sgm_uniform",
+	"simple",
+	"kl_optimal",
+	"lcm",
+	"bong_tangent",
+	"ltx2",
 ];
 
+// weight type enum from `sd-cli -h` (--type examples).
 window.SDGui.WEIGHT_TYPES = [
+	"default",
 	"f32",
 	"f16",
 	"q8_0",
@@ -35,16 +53,20 @@ window.SDGui.WEIGHT_TYPES = [
 	"q5_1",
 	"q4_0",
 	"q4_1",
+	"q4_K",
+	"q3_K",
+	"q2_K",
 ];
 
+// preview method enum from `sd-cli -h` (--preview).
 window.SDGui.PREVIEW_METHODS = ["none", "proj", "tae", "vae"];
 
-window.SDGui.RNG_TYPES = ["cuda", "std_default"];
+// RNG enum from `sd-cli -h` (--rng).
+window.SDGui.RNG_TYPES = ["cuda", "std_default", "cpu"];
 
-window.SDGui.SD_MODES = [
-	"img_gen",
-	"vid_gen",
-	"convert",
-	"upscale",
-	"metadata",
-];
+// sd-cli run modes (modes_str[] in examples/common/common.cpp).
+window.SDGui.SD_MODES = ["img_gen", "vid_gen", "convert", "upscale", "metadata"];
+
+// Default preview method the Generate tab uses so the live preview image ticks.
+// sd-cli defaults to "none" (no preview), so Generate explicitly sets "vae".
+window.SDGui.DEFAULT_PREVIEW_METHOD = "vae";

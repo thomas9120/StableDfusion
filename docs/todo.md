@@ -30,12 +30,28 @@ Mirrors the roadmap in `../PLAN.md` §15. Check items off as they land.
 
 ## Phase 2 — Generate (txt2img)
 
-- [ ] `definitions.js` v1 (img_gen flags), `categories`, `options`, `helpers`, `flag-core`, `config-flags-ui`
-- [ ] `generate_service`: run sd-cli, stream, parse step progress, preview polling, collect output, sidecars
-- [ ] `generate` route + `generate-ui.js` + `gallery-rendering.js`: prompt UI, generate, live preview, gallery, history
-- [ ] `/api/models`, `/api/images`, `/api/image/<name>`, thumbnails
-- [ ] Confirm sd-cli step-line format for the progress regex
-- [ ] Verify: generate a cat with SD1.5, watch preview tick, see result in gallery
+- [x] `definitions.js` v1 (img_gen flags), `categories`, `options`, `helpers`, `flag-core`, `config-flags-ui`
+      - Audited against `sdcpp/bin/sd-cli -h` (commit 92a3b73) + upstream `common.cpp`/`main.cpp`.
+      - Corrections: flash attention is `--fa` (not `--flash-attn`); no `--ngl`/`--n-gpu-layers`
+        (uses `--offload-to-cpu`/`--backend`/`--max-vram`); no `--format` (extension-based);
+        metadata opt-out is `--disable-image-metadata`.
+- [x] `generate_service`: run sd-cli, stream, parse step progress, preview polling, collect output, sidecars
+      - Progress mechanism: sd-cli reports per-step progress ONLY via the preview callback writing
+        `--preview-path` (its CLI `step_callback` discards the step number to stdout — verified in
+        upstream `main.cpp`); the backend polls the preview file mtime + keeps a defensive stdout
+        `step N/M` regex as a secondary signal.
+- [x] `generate` route + `generate-ui.js` + `gallery-rendering.js`: prompt UI, generate, live preview, gallery, history
+- [x] `/api/models` (type-filtered, size+mtime), `/api/images`, `/api/image/<name>`, `/api/image/<name>/thumbnail`
+- [x] Confirm sd-cli step-line format for the progress regex (verified: no per-step stdout; mtime is primary)
+- [x] Backend unit tests: arg assembly/override-strip, step parsing, sidecar round-trip, result globbing
+- [x] Frontend Playwright smoke: Generate→poll→preview→gallery→history + Generate↔Configure sync
+- [x] Verify: generate a cat with SD1.5, watch preview tick, see result in gallery
+      - Live run via the backend pipeline: SD1.5 Q4_0 GGUF, 512×512, 6 steps, seed 42,
+        `--preview vae`. Preview `preview_mtime` ticked each step (1→3→4→6), result
+        `20260620T013759_42.png` served via `/api/image/<name>`, and the
+        `output/.gallery/20260620T013759_42.json` sidecar was written. sd-cli's
+        per-step progress is delivered via the preview callback (no per-step stdout);
+        sampling bar (`N/M - X.XXs/it`) is parsed as a secondary signal.
 
 ## Phase 3 — img2img + bundles + HF downloader
 

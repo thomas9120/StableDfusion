@@ -669,3 +669,222 @@ textarea {
 		grid-template-columns: 1fr;
 	}
 }
+
+/* ════════════════════════════════════════════
+   TOASTS
+   ════════════════════════════════════════════ */
+.toast-container {
+	position: fixed;
+	bottom: var(--space-4);
+	right: var(--space-4);
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	z-index: 2000;
+	max-width: min(360px, calc(100vw - 32px));
+}
+.toast {
+	background: var(--bg-surface);
+	border: 1px solid var(--border-strong);
+	border-left: 3px solid var(--accent);
+	border-radius: var(--radius-sm);
+	padding: var(--space-2) var(--space-3);
+	font-size: 12.5px;
+	color: var(--fg);
+	box-shadow: var(--shadow-lg);
+	transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.toast-error {
+	border-left-color: var(--red);
+}
+.toast-success {
+	border-left-color: var(--green);
+}
+.toast-warning {
+	border-left-color: var(--yellow);
+}
+.toast-out {
+	opacity: 0;
+	transform: translateX(8px);
+}
+
+/* ════════════════════════════════════════════
+   GENERATE — advanced + pickers + toggles + gallery
+   ════════════════════════════════════════════ */
+.gen-advanced {
+	margin: var(--space-3) 0;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	padding: var(--space-2) var(--space-3);
+}
+.gen-advanced > summary {
+	cursor: pointer;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--fg-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.4px;
+}
+.gen-toggles {
+	gap: var(--space-4);
+}
+.toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	font-size: 12.5px;
+	color: var(--fg);
+	cursor: pointer;
+}
+.toggle input {
+	width: auto;
+}
+
+.gen-model-field {
+	margin-bottom: var(--space-3);
+}
+.gen-model-field .field-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+	margin-bottom: var(--space-1);
+}
+.gen-model-field .field-head .req {
+	color: var(--red);
+	font-size: 10px;
+}
+.gen-model-field .field-row {
+	display: flex;
+	gap: var(--space-2);
+}
+.gen-model-field select {
+	flex: 1;
+}
+
+.result-frame img,
+.preview-frame img {
+	max-width: 100%;
+	max-height: 420px;
+	border-radius: var(--radius-sm);
+}
+.result-frame:has(img),
+.preview-frame:has(img) {
+	border-style: solid;
+}
+
+.history-grid:empty::before {
+	content: "No history yet.";
+	color: var(--fg-faint);
+	font-size: 12px;
+}
+.history-item {
+	position: relative;
+	cursor: pointer;
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	overflow: hidden;
+	aspect-ratio: 1;
+	background: var(--bg-raised);
+}
+.history-item img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+.history-item:hover {
+	border-color: var(--accent);
+}
+.history-item .history-prompt {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	font-size: 10px;
+	color: var(--fg-bright);
+	background: rgba(0, 0, 0, 0.65);
+	padding: 2px 4px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	opacity: 0;
+	transition: opacity var(--ease-fast);
+}
+.history-item:hover .history-prompt {
+	opacity: 1;
+}
+
+/* ════════════════════════════════════════════
+   CONFIGURE TAB
+   ════════════════════════════════════════════ */
+.cfg-category {
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	margin-bottom: var(--space-2);
+	overflow: hidden;
+}
+.cfg-cat-header {
+	width: 100%;
+	text-align: left;
+	background: var(--bg-raised);
+	border: none;
+	color: var(--fg);
+	font-family: var(--font);
+	font-size: 12.5px;
+	font-weight: 600;
+	padding: var(--space-2) var(--space-3);
+	cursor: pointer;
+}
+.cfg-cat-header:hover {
+	background: var(--bg-hover);
+}
+.cfg-cat-body {
+	padding: var(--space-2) var(--space-3);
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+.cfg-flag-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-3);
+}
+.cfg-flag-meta {
+	min-width: 0;
+	flex: 1;
+}
+.cfg-flag-name {
+	font-size: 12.5px;
+	color: var(--fg);
+	font-weight: 500;
+}
+.cfg-flag-desc {
+	font-size: 11px;
+	color: var(--fg-faint);
+}
+.flag-control,
+.flag-control select,
+.flag-control input {
+	width: 220px;
+	max-width: 40%;
+	flex-shrink: 0;
+}
+.flag-control input[type="checkbox"] {
+	width: auto;
+	transform: scale(1.2);
+}
+.flag-control-label {
+	font-size: 12.5px !important;
+	text-transform: none !important;
+	letter-spacing: 0 !important;
+	margin-bottom: 0 !important;
+	color: var(--fg) !important;
+}
+.cfg-custom {
+	margin-top: var(--space-4);
+	border-top: 1px solid var(--border);
+	padding-top: var(--space-3);
+}
+

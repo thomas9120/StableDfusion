@@ -1,7 +1,21 @@
 // GitHub releases, install/update/repair/remove, and the shared fetchJson() +
-// confirmAction() utilities. Mirrors LLama-GUI's manager.js, adapted to
-// stable-diffusion.cpp (pattern-matched assets, sdcpp/ paths).
+// confirmAction() + toast() utilities. Mirrors LLama-GUI's manager.js, adapted
+// to stable-diffusion.cpp (pattern-matched assets, sdcpp/ paths).
 window.SDGui = window.SDGui || {};
+
+// Lightweight non-blocking toast. Safe DOM (no innerHTML).
+window.SDGui.toast = (message, kind) => {
+	var container = document.getElementById("toast-container");
+	if (!container) return;
+	var note = document.createElement("div");
+	note.className = "toast toast-" + (kind || "info");
+	note.textContent = String(message || "");
+	container.appendChild(note);
+	setTimeout(() => {
+		note.classList.add("toast-out");
+		setTimeout(() => note.remove(), 300);
+	}, 3500);
+};
 
 // Shared API helper. Throws an Error (with the server's message) on non-OK
 // responses, so callers can surface `e.message` directly.

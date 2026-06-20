@@ -253,6 +253,7 @@ API_ROUTER = (
     .add("GET", "/api/models", models_routes.list_models)
     .add("GET", "/api/images", images_routes.list_images)
     .add("GET", "/api/generate/status", generate_routes.get_status)
+    .add("GET", "/api/generate/preview", generate_routes.get_preview)
     .add("GET", "/api/hf/download-status", hf_download_routes.get_download_status)
     .add("GET", "/api/sd-server/status", server_mode_routes.get_status)
     .add("GET", "/api/remote-tunnel/status", tunnel_routes.get_status)

@@ -195,7 +195,7 @@
               <div id="gen-model-components" class="form-group">
                 <!-- bundle-driven file pickers rendered by generate-ui.js -->
                 <p class="help-text">
-                  TODO(Phase 2/3): model component pickers.
+                  Select a model type bundle to show its file pickers.
                 </p>
               </div>
               <div class="form-group">
@@ -234,14 +234,65 @@
                 <div class="form-group">
                   <label class="form-label">Sampler</label>
                   <select id="gen-sampler">
-                    <option>euler</option>
+                    <option>euler_a</option>
                   </select>
                 </div>
+                <div class="form-group">
+                  <label class="form-label">Scheduler</label>
+                  <select id="gen-scheduler">
+                    <option>default</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-row">
                 <div class="form-group">
                   <label class="form-label">Seed</label>
                   <input type="number" id="gen-seed" value="42" />
                 </div>
+                <div class="form-group">
+                  <label class="form-label">Batch count</label>
+                  <input type="number" id="gen-batch" min="1" value="1" />
+                </div>
               </div>
+
+              <details class="gen-advanced">
+                <summary>Advanced</summary>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">Threads</label>
+                    <input type="number" id="gen-threads" value="-1" />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Weight type</label>
+                    <select id="gen-type"></select>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">Preview method</label>
+                    <select id="gen-preview"></select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Preview interval</label>
+                    <input type="number" id="gen-preview-interval" min="1" value="1" />
+                  </div>
+                </div>
+                <div class="form-row gen-toggles">
+                  <label class="toggle"
+                    ><input type="checkbox" id="gen-offload" /> Offload to CPU</label
+                  >
+                  <label class="toggle"
+                    ><input type="checkbox" id="gen-clip-cpu" /> CLIP on CPU</label
+                  >
+                  <label class="toggle"
+                    ><input type="checkbox" id="gen-flash" /> Flash attention</label
+                  >
+                  <label class="toggle"
+                    ><input type="checkbox" id="gen-vae-tiling" /> VAE tiling</label
+                  >
+                </div>
+              </details>
+
               <button id="btn-generate" class="btn btn-primary">
                 Generate
               </button>
@@ -260,6 +311,14 @@
               <div class="form-group">
                 <span class="form-label">Result</span>
                 <div id="gen-result" class="result-frame"></div>
+                <div id="gen-result-actions" class="form-row hidden">
+                  <button id="btn-open-result" class="btn btn-sm" type="button">
+                    Open file
+                  </button>
+                  <button id="btn-send-img2img" class="btn btn-sm" type="button">
+                    Send to img2img
+                  </button>
+                </div>
               </div>
               <div class="form-group">
                 <span class="form-label">History</span>

@@ -415,13 +415,15 @@ Directory structure, bootable `server.py` + `backend/app.py` serving a placehold
 - **Resolved §16 #3:** upstream ships **no** SHA256 → verification conditionally skipped with a stderr warning (no sumfile, no per-asset `.sha256`, GitHub `assets[]` carries none).
 - **Notable:** `save_config`/`BackendServices` type contract fixed (param widened to `Mapping[str, Any]`); `tunnel_service.stop_remote_tunnel` added as a Phase 1 no-op so lifecycle is Phase-5-safe; `.gitkeep` preserved across install/cleanup.
 
-### Phase 2 — Generate (txt2img)
+### Phase 2 — Generate (txt2img) ✅
 
-- `definitions.js` v1 (img_gen flags only), `categories.js`, `options.js`, `helpers.js`, `flag-core.js`, `config-flags-ui.js`.
-- `generate.py`: run `sd-cli`, stream output, parse steps, preview polling, collect output, sidecars.
+- `definitions.js` v1 (img_gen flags), `categories.js`, `options.js`, `helpers.js`, `flag-core.js`, `config-flags-ui.js`.
+- `generate_service.py`: run `sd-cli`, stream output, parse steps, preview polling, collect output, sidecars.
 - `generate.py` route + `generate-ui.js` + `gallery-rendering.js`: prompt UI, generate, live preview, gallery, history.
-- `/api/models`, `/api/images`, `/api/image/<name>`, thumbnail.
-- **Verify:** generate a cat with SD1.5, watch preview tick, see result in gallery.
+- `/api/models` (type-filtered, size+mtime), `/api/images`, `/api/image/<name>`, thumbnail.
+- Backend unit tests + frontend Playwright smoke (Generate→poll→preview→gallery→history + Generate↔Configure sync).
+- **Verify:** ✅ generated "a lovely cat" with SD1.5 Q4_0 GGUF via the backend pipeline; preview `preview_mtime` ticked each step (1→3→4→6), result image served via `/api/image/<name>`, and `output/.gallery/*.json` sidecar written.
+- **Notable:** flags audited against the installed `sd-cli -h` (commit 92a3b73) — flash attention is `--fa` (not `--flash-attn`), no `--ngl`/`--n-gpu-layers` (uses `--offload-to-cpu`/`--backend`/`--max-vram`), no `--format` (extension-based), metadata opt-out is `--disable-image-metadata`. sd-cli reports per-step progress ONLY via the preview callback writing `--preview-path` (its CLI `step_callback` discards the step number to stdout — confirmed in upstream `main.cpp`); the backend polls preview mtime as the primary signal and parses the carriage-return sampling bar (`N/M - X.XXs/it`) as a secondary signal. Thumbnails are served full-size and scaled client-side (PLAN §16.1 option (b); Pillow intentionally not a dependency).
 
 ### Phase 3 — img2img + model bundles + HF downloader
 
