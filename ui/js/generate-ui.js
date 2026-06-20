@@ -97,6 +97,27 @@ window.SDGui.generateUi = (() => {
 	// A6 - dimension alignment multiple. SD needs mult of 8; many models 64.
 	var DIM_MULTIPLE = 8;
 
+	// ── Stage 1: internal dependency context ───────────────────────────
+	// Centralizes the pieces future extracted helper modules (Stage 2+) will
+	// receive explicitly, so they never reach back into these closure
+	// variables. Mutable section state is exposed via *accessors* (never a
+	// captured value) so a helper can never hold a stale activeGenerateSection
+	// when the user switches between image/video/upscale/convert/metadata.
+	// `controls` and `controlMirrors` are shared by reference: they are mutated
+	// in place and never reassigned, so reference sharing stays correct.
+	var ctx = {
+		controls: controls,
+		controlMirrors: controlMirrors,
+		getActiveSection: () => activeGenerateSection,
+		setActiveSection: (section) => {
+			activeGenerateSection = section;
+		},
+		activeConfig: activeConfig,
+		switchToModeSection: switchToModeSection,
+		syncFromState: syncFromState,
+		sendToImg2img: sendToImg2img,
+	};
+
 	function formatElapsed(ms) {
 		var s = Math.max(0, Math.floor(ms / 1000));
 		if (s < 60) return s + "s";
@@ -247,7 +268,7 @@ window.SDGui.generateUi = (() => {
 
 	function activeConfig() {
 		return (
-			SECTION_CONFIG[activeGenerateSection] || SECTION_CONFIG["generate-image"]
+			SECTION_CONFIG[ctx.getActiveSection()] || SECTION_CONFIG["generate-image"]
 		);
 	}
 
@@ -263,7 +284,7 @@ window.SDGui.generateUi = (() => {
 
 	function switchToModeSection(mode) {
 		var section = sectionForMode(mode);
-		if (activeGenerateSection === section) return;
+		if (ctx.getActiveSection() === section) return;
 		if (window.SDGui.switchSection) {
 			routingSection = true;
 			window.SDGui.switchSection(section);
@@ -449,7 +470,7 @@ window.SDGui.generateUi = (() => {
 		var mode = window.SDGui.flagCore.getMode();
 		var activePanelId = MODE_INPUT_PANELS[mode];
 		var sectionMode = activeConfig().mode;
-		var imageTab = activeGenerateSection === "generate-image";
+		var imageTab = ctx.getActiveSection() === "generate-image";
 
 		// A3 - relabel the mode-inputs header + help per active mode.
 		var label = $("gen-mode-label");
@@ -1409,7 +1430,7 @@ window.SDGui.generateUi = (() => {
 
 	function handleSectionChange(section) {
 		if (!SECTION_CONFIG[section]) return;
-		activeGenerateSection = section;
+		ctx.setActiveSection(section);
 		moveWorkbenchTo(section);
 		var desiredMode = SECTION_CONFIG[section].mode;
 		if (!routingSection && window.SDGui.flagCore.getMode() !== desiredMode) {
@@ -1421,7 +1442,7 @@ window.SDGui.generateUi = (() => {
 	}
 
 	function init() {
-		moveWorkbenchTo(activeGenerateSection);
+		moveWorkbenchTo(ctx.getActiveSection());
 		// Generate defaults: enable live preview (sd-cli defaults to none).
 		var vals = window.SDGui.flagCore.getFlagValues();
 		if (!vals.preview || vals.preview === "none") {
