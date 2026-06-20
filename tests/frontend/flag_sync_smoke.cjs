@@ -507,6 +507,79 @@ function findChromiumExecutable() {
 			!!stored && stored.includes("a cat"),
 		);
 
+		// 9b. History UI: count badge updates, each item has the 5-action
+		// toolbar, the new entries carry the real `file` field, deleting one
+		// entry removes only it, and Clear wipes the list without touching
+		// other localStorage keys.
+		const histUI = await page.evaluate(async () => {
+			const itemsBefore = document.querySelectorAll(
+				"#gen-history .history-item",
+			).length;
+			const countBadge =
+				document.getElementById("gen-history-count")?.textContent;
+			const hasFile = JSON.parse(
+				localStorage.getItem("sdgui.generate.history") || "[]",
+			).some((e) => e.file);
+			const toolbarActions = document.querySelectorAll(
+				"#gen-history .history-item .history-action",
+			).length;
+			// Remove the first entry via its delete button.
+			const before = JSON.parse(
+				localStorage.getItem("sdgui.generate.history") || "[]",
+			).length;
+			document.querySelector("#gen-history .history-action.danger")?.click();
+			const afterDelete = JSON.parse(
+				localStorage.getItem("sdgui.generate.history") || "[]",
+			).length;
+			// Clear-all via the header button (auto-confirms in this stub-free
+			// context by clicking OK).
+			document.getElementById("btn-clear-history")?.click();
+			const okBtn = document.getElementById("confirm-modal-ok");
+			if (okBtn) okBtn.click();
+			await new Promise((r) => setTimeout(r, 30));
+			const afterClear = localStorage.getItem("sdgui.generate.history");
+			const itemsAfterClear = document.querySelectorAll(
+				"#gen-history .history-item",
+			).length;
+			const emptyShown = !!document.querySelector(
+				"#gen-history .history-empty",
+			);
+			return {
+				itemsBefore,
+				countBadge,
+				hasFile,
+				toolbarActions,
+				before,
+				afterDelete,
+				afterClear,
+				itemsAfterClear,
+				emptyShown,
+			};
+		});
+		check(
+			"history count badge reflects entry count",
+			Number(histUI.countBadge) === histUI.itemsBefore &&
+				histUI.itemsBefore >= 1,
+		);
+		check(
+			"history entries store the real on-disk filename (file field)",
+			histUI.hasFile,
+		);
+		check(
+			"history items expose the 4-action toolbar",
+			histUI.toolbarActions >= 4,
+		);
+		check(
+			"delete-one removes exactly one entry",
+			histUI.afterDelete === histUI.before - 1,
+		);
+		check(
+			"Clear-all empties history list",
+			histUI.afterClear === null &&
+				histUI.itemsAfterClear === 0 &&
+				histUI.emptyShown,
+		);
+
 		// ── Phase 4: preset save/load preserves flagCore state + custom args.
 		await page.evaluate(() => {
 			window.SDGui.flagCore.setMode("img_gen");

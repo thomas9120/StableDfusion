@@ -768,9 +768,6 @@
                   <button id="btn-open-result" class="btn btn-sm" type="button">
                     Show in folder
                   </button>
-                  <button id="btn-copy-result" class="btn btn-sm" type="button">
-                    Copy image
-                  </button>
                   <button
                     id="btn-download-result"
                     class="btn btn-sm"
@@ -787,9 +784,38 @@
                   </button>
                 </div>
               </div>
-              <div class="form-group" role="group" aria-label="History">
-                <span class="form-label" aria-hidden="true">History</span>
-                <div id="gen-history" class="history-grid"></div>
+              <div
+                class="form-group history-section"
+                role="group"
+                aria-label="History"
+              >
+                <div class="history-header">
+                  <span class="form-label history-label" aria-hidden="true">
+                    History
+                    <span class="history-count" id="gen-history-count">0</span>
+                  </span>
+                  <button
+                    type="button"
+                    id="btn-clear-history"
+                    class="history-clear-btn hidden"
+                    title="Clear the history list (output images are not deleted)"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M6 7h12M9 7V5h6v2m-7 0v12h8V7" />
+                    </svg>
+                    Clear
+                  </button>
+                </div>
+                <div class="history-scroll">
+                  <div id="gen-history" class="history-grid"></div>
+                </div>
+                <button
+                  type="button"
+                  id="btn-history-more"
+                  class="history-more-btn hidden"
+                >
+                  Show all
+                </button>
               </div>
             </div>
           </div>

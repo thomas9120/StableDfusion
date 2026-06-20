@@ -15,6 +15,9 @@ window.SDGui.generateUi = (() => {
 	var controlMirrors = {}; // flagId -> [ids]
 
 	var HISTORY_KEY = "sdgui.generate.history";
+	var HISTORY_STORE_CAP = 60; // max entries persisted to localStorage
+	var HISTORY_VISIBLE_DEFAULT = 20; // max rendered before "show more"
+	var historyExpanded = false; // whether the grid shows all entries
 
 	// Mode → mode-inputs container id (which sub-section is visible). Each
 	// mode-inputs container holds the file pickers + numeric controls specific
@@ -716,17 +719,80 @@ window.SDGui.generateUi = (() => {
 
 	function saveHistory(entries) {
 		try {
-			localStorage.setItem(HISTORY_KEY, JSON.stringify(entries.slice(0, 60)));
+			localStorage.setItem(
+				HISTORY_KEY,
+				JSON.stringify(entries.slice(0, HISTORY_STORE_CAP)),
+			);
 		} catch (e) {
 			/* quota - ignore */
 		}
 	}
 
+	// Relative "2h ago" label for a timestamp (ms). Returns '' when unknown.
+	function relativeTime(ts) {
+		if (!ts) return "";
+		var s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+		if (s < 45) return "just now";
+		if (s < 90) return "1m ago";
+		var m = Math.round(s / 60);
+		if (m < 60) return m + "m ago";
+		var h = Math.round(m / 60);
+		if (h < 24) return h + "h ago";
+		var d = Math.round(h / 24);
+		if (d < 7) return d + "d ago";
+		return new Date(ts).toLocaleDateString();
+	}
+
+	// Resolve the on-disk filename for a history entry. Newer entries store
+	// `file` (always the real filename with extension); older ones only have
+	// `name`, which may be a base_name without extension.
+	function historyFileName(entry) {
+		if (!entry) return "";
+		return entry.file || entry.name || "";
+	}
+
 	function renderHistory() {
+		var all = loadHistory();
+		var total = all.length;
+		var shown = historyExpanded
+			? total
+			: Math.min(total, HISTORY_VISIBLE_DEFAULT);
+		var entries = all.slice(0, shown);
+
+		// Header count badge.
+		var countEl = $("gen-history-count");
+		if (countEl) countEl.textContent = String(total);
+
+		// Clear button is only meaningful when there's something to clear.
+		var clearBtn = $("btn-clear-history");
+		if (clearBtn) clearBtn.classList.toggle("hidden", total === 0);
+
+		// "Show all" toggle: visible only when more exist than the default page.
+		var moreBtn = $("btn-history-more");
+		if (moreBtn) {
+			var hidden = total <= HISTORY_VISIBLE_DEFAULT;
+			moreBtn.classList.toggle("hidden", hidden);
+			moreBtn.textContent = historyExpanded
+				? "Show fewer"
+				: "Show all " +
+					total +
+					" (" +
+					(total - HISTORY_VISIBLE_DEFAULT) +
+					" more)";
+		}
+
 		window.SDGui.gallery.renderHistoryGrid(
 			$("gen-history"),
-			loadHistory(),
-			restoreFromHistory,
+			entries,
+			{
+				onRestore: restoreFromHistory,
+				onSend: (entry) => {
+					sendToImg2img(historyFileName(entry));
+				},
+				onOpen: openHistoryImage,
+				onDelete: removeHistoryEntry,
+			},
+			{ timeLabel: relativeTime },
 		);
 	}
 
@@ -737,6 +803,58 @@ window.SDGui.generateUi = (() => {
 		if (entry.mode) window.SDGui.flagCore.setMode(entry.mode);
 		syncFromState(true);
 		window.SDGui.toast("Restored settings from history.", "info");
+	}
+
+	// View a history image at full size in the result frame.
+	function openHistoryImage(entry) {
+		var name = historyFileName(entry);
+		if (!name) return;
+		window.SDGui.gallery.renderResultImage(
+			$("gen-result"),
+			name,
+			entry.prompt || "result",
+			Date.now(),
+		);
+		var actions = $("gen-result-actions");
+		if (actions) {
+			actions.classList.remove("hidden");
+			var openBtn = $("btn-open-result");
+			var sendBtn = $("btn-send-img2img");
+			var dlBtn = $("btn-download-result");
+			if (openBtn) openBtn.onclick = () => openResultFile();
+			if (sendBtn) sendBtn.onclick = () => sendToImg2img(name);
+			if (dlBtn) dlBtn.onclick = () => downloadResult(name);
+		}
+		if (entry.prompt) {
+			window.SDGui.toast("Viewing history image.", "info");
+		}
+	}
+
+	// Remove a single entry by id (output file on disk is untouched).
+	function removeHistoryEntry(entry) {
+		if (!entry) return;
+		var id = entry.id;
+		var entries = loadHistory().filter((e) => e.id !== id);
+		saveHistory(entries);
+		renderHistory();
+	}
+
+	// Clear the whole list (output files on disk are untouched).
+	async function clearHistory() {
+		var ok = await window.SDGui.confirmAction(
+			"Clear history?",
+			"This removes all entries from the history list. The output image files on disk are not deleted.",
+			"Clear history",
+		);
+		if (!ok) return;
+		try {
+			localStorage.removeItem(HISTORY_KEY);
+		} catch (e) {
+			/* ignore */
+		}
+		historyExpanded = false;
+		renderHistory();
+		window.SDGui.toast("History cleared.", "success");
 	}
 
 	// ── Generation flow ───────────────────────────────────────────────────
@@ -818,22 +936,11 @@ window.SDGui.generateUi = (() => {
 		box.appendChild(cap);
 	}
 
-	// A10 - copy the current result image to clipboard.
-	async function copyResultImage(name) {
-		if (!name) return;
-		try {
-			var resp = await fetch("/api/image/" + encodeURIComponent(name));
-			if (!resp.ok)
-				throw new Error("Could not load image (" + resp.status + ")");
-			var blob = await resp.blob();
-			await navigator.clipboard.write([
-				new ClipboardItem({ [blob.type]: blob }),
-			]);
-			window.SDGui.toast("Image copied to clipboard.", "success");
-		} catch (e) {
-			window.SDGui.toast("Copy image failed: " + e.message, "error");
-		}
-	}
+	// A10 - copy-to-clipboard was REMOVED: the Web Clipboard API only
+	// carries image *pixel data*, never a file reference, so pasting into a
+	// folder (the obvious intent) is impossible by browser design — and
+	// Download + Show-in-folder cover every file-management case. Do not
+	// re-add without a different mechanism.
 
 	function renderResult(snap) {
 		var box = $("gen-result");
@@ -915,11 +1022,9 @@ window.SDGui.generateUi = (() => {
 			actions.classList.remove("hidden");
 			var openBtn = $("btn-open-result");
 			var sendBtn = $("btn-send-img2img");
-			var copyBtn = $("btn-copy-result");
 			var dlBtn = $("btn-download-result");
 			if (openBtn) openBtn.onclick = () => openResultFile();
 			if (sendBtn) sendBtn.onclick = () => sendToImg2img(first);
-			if (copyBtn) copyBtn.onclick = () => copyResultImage(first);
 			if (dlBtn) dlBtn.onclick = () => downloadResult(first);
 		}
 		// Add to history (one entry per result file for batch).
@@ -997,11 +1102,14 @@ window.SDGui.generateUi = (() => {
 
 	function addHistoryEntry(snap, file) {
 		var vals = window.SDGui.flagCore.getFlagValues();
+		var ts = Date.now();
 		var entry = {
+			id: ts + "-" + Math.random().toString(36).slice(2, 8),
 			name: snap.job_id || file,
+			file: file, // real on-disk filename (with extension) — used by toolbar actions
 			prompt: vals.prompt || "",
 			thumb: "/api/image/" + encodeURIComponent(file) + "/thumbnail",
-			timestamp: Date.now(),
+			timestamp: ts,
 			bundle: window.SDGui.flagCore.getBundle(),
 			mode: window.SDGui.flagCore.getMode(),
 			params: vals,
@@ -1384,6 +1492,16 @@ window.SDGui.generateUi = (() => {
 
 		renderBundleFields();
 		renderHistory();
+
+		// History toolbar: clear-all (confirmed) + show-more toggle.
+		var clearBtn = $("btn-clear-history");
+		if (clearBtn) clearBtn.addEventListener("click", () => clearHistory());
+		var moreBtn = $("btn-history-more");
+		if (moreBtn)
+			moreBtn.addEventListener("click", () => {
+				historyExpanded = !historyExpanded;
+				renderHistory();
+			});
 
 		// If a generation is already running (page reload), resume polling.
 		window.SDGui.fetchJson("/api/generate/status")
