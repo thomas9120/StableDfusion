@@ -632,12 +632,6 @@ textarea {
 	max-height: 420px;
 	border-radius: var(--radius-sm);
 }
-.history-grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
-	gap: var(--space-2);
-	min-height: 80px;
-}
 
 /* ════════════════════════════════════════════
    COMMAND PREVIEW (Configure placeholder)
@@ -835,10 +829,84 @@ textarea {
 	background-image: none;
 }
 
+/* ═══════════════════════════════════════════════════════════
+   HISTORY (Generate tab): header + count + clear, fixed-height
+   scroll grid, per-item hover toolbar, missing/empty states.
+   ═══════════════════════════════════════════════════════════ */
+.history-section {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+.history-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2);
+}
+.history-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+.history-count {
+	min-width: 18px;
+	height: 18px;
+	padding: 0 5px;
+	border-radius: 100px;
+	background: var(--bg-raised);
+	border: 1px solid var(--border-strong);
+	color: var(--fg-muted);
+	font-size: 10px;
+	font-weight: 600;
+	font-family: var(--mono);
+	line-height: 16px;
+	text-align: center;
+	letter-spacing: 0;
+}
+.history-clear-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 3px 8px;
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-sm);
+	background: transparent;
+	color: var(--fg-muted);
+	font-size: 11px;
+	font-family: var(--font);
+	cursor: pointer;
+	transition: all var(--ease-fast);
+}
+.history-clear-btn:hover {
+	color: var(--red);
+	border-color: var(--red);
+	background: var(--red-subtle);
+}
+.history-clear-btn svg {
+	width: 13px;
+	height: 13px;
+	stroke: currentColor;
+	stroke-width: 1.8;
+	fill: none;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+/* Fixed-height scroll region so a long history never pushes the result /
+   Generate controls off-screen. */
+.history-scroll {
+	max-height: 280px;
+	overflow-y: auto;
+	padding-right: 2px;
+}
+.history-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+	gap: var(--space-2);
+	min-height: 80px;
+}
 .history-grid:empty::before {
-	content: "No history yet.";
-	color: var(--fg-faint);
-	font-size: 12px;
+	content: "";
 }
 .history-item {
 	position: relative;
@@ -858,6 +926,7 @@ textarea {
 .history-item:hover {
 	border-color: var(--accent);
 }
+/* Prompt overlay (hover). */
 .history-item .history-prompt {
 	position: absolute;
 	left: 0;
@@ -875,6 +944,149 @@ textarea {
 }
 .history-item:hover .history-prompt {
 	opacity: 1;
+}
+/* Relative timestamp badge (bottom-right, subtle). */
+.history-time {
+	position: absolute;
+	top: 3px;
+	left: 3px;
+	font-size: 9px;
+	font-weight: 600;
+	color: var(--fg-bright);
+	background: rgba(0, 0, 0, 0.6);
+	padding: 1px 4px;
+	border-radius: 4px;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity var(--ease-fast);
+}
+.history-item:hover .history-time {
+	opacity: 1;
+}
+/* Hover toolbar: restore / send / copy / open / delete. */
+.history-toolbar {
+	position: absolute;
+	top: 3px;
+	right: 3px;
+	display: flex;
+	gap: 2px;
+	opacity: 0;
+	transition: opacity var(--ease-fast);
+}
+.history-item:hover .history-toolbar {
+	opacity: 1;
+}
+.history-action {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	border: none;
+	border-radius: 5px;
+	background: rgba(0, 0, 0, 0.55);
+	color: var(--fg-bright);
+	cursor: pointer;
+	transition: all var(--ease-fast);
+}
+.history-action:hover {
+	background: var(--accent);
+	color: #fff;
+}
+.history-action.danger:hover {
+	background: var(--red);
+}
+.history-action svg {
+	width: 13px;
+	height: 13px;
+	stroke: currentColor;
+	stroke-width: 1.8;
+	fill: none;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+/* Broken-image placeholder (output file deleted on disk). */
+.history-item.is-missing {
+	display: flex;
+}
+.history-missing {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	color: var(--fg-faint);
+	background: var(--bg-base);
+}
+.history-missing .history-action {
+	position: static;
+	width: 26px;
+	height: 26px;
+	background: transparent;
+	color: var(--red);
+	opacity: 0.7;
+}
+.history-missing .history-action svg {
+	width: 20px;
+	height: 20px;
+}
+.history-missing-label {
+	font-size: 9px;
+	text-align: center;
+	padding: 0 4px;
+	line-height: 1.2;
+}
+/* Empty state (rendered into the grid by JS). */
+.history-empty {
+	grid-column: 1 / -1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	padding: var(--space-5) var(--space-3);
+	min-height: 80px;
+	color: var(--fg-faint);
+	text-align: center;
+}
+.history-empty-icon svg {
+	width: 28px;
+	height: 28px;
+	stroke: currentColor;
+	stroke-width: 1.4;
+	fill: none;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	opacity: 0.7;
+}
+.history-empty p {
+	margin: 0;
+	font-size: 13px;
+	color: var(--fg-muted);
+}
+.history-empty-hint {
+	font-size: 11px;
+}
+/* "Show all" toggle below the scroll region. */
+.history-more-btn {
+	width: 100%;
+	padding: 6px;
+	border: 1px dashed var(--border-strong);
+	border-radius: var(--radius-sm);
+	background: transparent;
+	color: var(--fg-muted);
+	font-size: 11px;
+	font-family: var(--font);
+	cursor: pointer;
+	transition: all var(--ease-fast);
+}
+.history-more-btn:hover {
+	color: var(--accent);
+	border-color: var(--accent-border);
+	background: var(--accent-subtle);
 }
 
 /* ════════════════════════════════════════════
