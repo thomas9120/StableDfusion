@@ -66,11 +66,29 @@
             </svg>
             Install
           </button>
-          <button class="nav-item active" data-section="generate">
+          <button class="nav-item active" data-section="generate-image">
             <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" />
             </svg>
-            Generate
+            Generate Image
+          </button>
+          <button class="nav-item" data-section="generate-video">
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 5h10v14H5zM15 9l5-3v12l-5-3" />
+            </svg>
+            Generate Video
+          </button>
+          <button class="nav-item" data-section="upscale">
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 14v6h6M20 10V4h-6M14 4h6v6M10 20H4v-6" />
+            </svg>
+            Upscale
+          </button>
+          <button class="nav-item" data-section="convert">
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 7h10M7 7l3-3M7 7l3 3M17 17H7M17 17l-3-3M17 17l-3 3" />
+            </svg>
+            Convert
           </button>
           <button class="nav-item" data-section="configure">
             <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -123,7 +141,10 @@
 
       <div class="main-content">
         <!-- @partial install -->
-        <!-- @partial generate -->
+        <!-- @partial generate-image -->
+        <!-- @partial generate-video -->
+        <!-- @partial upscale -->
+        <!-- @partial convert -->
         <!-- @partial configure -->
         <!-- @partial server -->
         <!-- @partial hf-download -->

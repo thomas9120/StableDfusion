@@ -48,10 +48,13 @@ window.SDGui.panelLifecycle = (() => {
 })();
 
 (() => {
-	var DEFAULT_SECTION = "generate";
+	var DEFAULT_SECTION = "generate-image";
 	var VALID_SECTIONS = [
 		"install",
-		"generate",
+		"generate-image",
+		"generate-video",
+		"upscale",
+		"convert",
 		"configure",
 		"server",
 		"hf-download",
@@ -61,6 +64,7 @@ window.SDGui.panelLifecycle = (() => {
 	function getSavedSection() {
 		try {
 			var saved = localStorage.getItem(window.SDGui.ACTIVE_SECTION_KEY);
+			if (saved === "generate") return "generate-image";
 			if (VALID_SECTIONS.indexOf(saved) !== -1) return saved;
 		} catch (e) {
 			/* ignore */
@@ -95,6 +99,12 @@ window.SDGui.panelLifecycle = (() => {
 
 		// D1 — let per-section pollers start/stop on visibility.
 		window.SDGui.panelLifecycle.setActive(section);
+		if (
+			window.SDGui.generateUi &&
+			typeof window.SDGui.generateUi.handleSectionChange === "function"
+		) {
+			window.SDGui.generateUi.handleSectionChange(section);
+		}
 
 		// E1 — close the mobile sidebar drawer after picking a section.
 		var sidebar = document.getElementById("sidebar");
@@ -105,6 +115,8 @@ window.SDGui.panelLifecycle = (() => {
 			if (toggle) toggle.setAttribute("aria-expanded", "false");
 		}
 	}
+
+	window.SDGui.switchSection = switchSection;
 
 	// Lightweight sidebar-badge refresh. The Install tab's full status render
 	// (executables, repair, etc.) is owned by manager.checkStatus(); we reuse

@@ -96,13 +96,16 @@ placeholder intact. The `ui/partials/` directory is never served directly —
 ### Shell and partials
 
 `ui/index.html` is a ~160-line shell containing the `<head>`, sidebar nav, modal,
-script tags, and `<!-- @partial NAME -->` placeholders. The six tab panels live
+script tags, and `<!-- @partial NAME -->` placeholders. The tab panels live
 in `ui/partials/`:
 
 | Partial | Tab |
 |---|---|
 | `install.html` | Install / update sd-cli |
-| `generate.html` | Image generation (prompt, dimensions, bundles, history) |
+| `generate-image.html` | Image generation, image references, metadata inspection, shared generation workbench |
+| `generate-video.html` | Video generation tab host |
+| `upscale.html` | Upscale tab host |
+| `convert.html` | Convert tab host |
 | `configure.html` | Full flag editor with search, collapse/expand, command preview |
 | `server.html` | sd-server mode and API docs |
 | `hf-download.html` | HuggingFace model downloader |
@@ -120,7 +123,7 @@ tab switching + status polling; other modules attach to `window.SDGui.*`.
 | `flag-core.js` | Shared flag state (`window.SDGui.flagCore`), `setFlagValue`, `getLaunchArgs` |
 | `flag-validation.js` | Flag value validation and coercion |
 | `config-flags-ui.js` | Configure tab: search/filter, category collapse, command preview, expand/collapse-all buttons |
-| `generate-ui.js` | Generate tab: prompt, dimensions, bundles, history grid |
+| `generate-ui.js` | Shared Generate workbench: mode tabs, prompt, dimensions, bundles, history grid |
 | `gallery-rendering.js` | Image gallery rendering helpers |
 | `hf-download-ui.js` | HF Download tab UI |
 | `server-ui.js` | Server tab UI |

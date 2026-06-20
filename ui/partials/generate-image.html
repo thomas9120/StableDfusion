@@ -1,14 +1,15 @@
-<div class="section-panel" id="section-generate">
+<div class="section-panel" id="section-generate-image">
   <div class="page-header">
     <div>
-      <div class="page-title">Generate</div>
+      <div class="page-title">Generate Image</div>
       <div class="page-title-sub">
-        Turn a text prompt into an image, a video, or an upscale — with
-        live preview and a history of everything you make.
+        Turn a prompt into an image, use an image reference, or inspect
+        metadata from an existing output.
       </div>
     </div>
   </div>
-  <div class="generate-grid">
+  <div class="generate-tab-host" data-generate-host="generate-image">
+  <div class="generate-grid" id="generate-workbench">
     <div class="card">
       <!-- @section prompt -->
       <div id="gen-prompt-section">
@@ -299,20 +300,7 @@
         >
       </div>
       <div class="gen-section-break" aria-hidden="true">
-        <span>Model &amp; mode setup</span>
-      </div>
-      <!-- @section mode -->
-      <div class="form-group">
-        <label class="form-label">Mode</label>
-        <select id="gen-mode">
-          <option value="img_gen">
-            Text-to-Image / Image-to-Image
-          </option>
-          <option value="vid_gen">Video</option>
-          <option value="upscale">Upscale (RealESRGAN)</option>
-          <option value="convert">Convert (→ GGUF)</option>
-          <option value="metadata">Inspect Metadata</option>
-        </select>
+        <span>Model setup</span>
       </div>
       <!-- @section mode-inputs -->
       <!-- Mode-specific inputs: shown/hidden per mode by generate-ui.js -->
@@ -406,6 +394,51 @@
           </details>
         </div>
 
+        <div id="gen-video-inputs" class="mode-inputs hidden">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="gen-video-frames"
+                >Frames</label
+              >
+              <input
+                type="number"
+                id="gen-video-frames"
+                min="1"
+                step="1"
+                value="25"
+              />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="gen-fps">FPS</label>
+              <input
+                type="number"
+                id="gen-fps"
+                min="1"
+                step="1"
+                value="16"
+              />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="gen-vace-strength"
+                >VACE strength</label
+              >
+              <input
+                type="number"
+                id="gen-vace-strength"
+                min="0"
+                max="2"
+                step="0.05"
+              />
+            </div>
+            <label class="toggle"
+              ><input type="checkbox" id="gen-temporal-tiling" />
+              Temporal tiling</label
+            >
+          </div>
+        </div>
+
         <!-- upscale: required init image + ESRGAN model -->
         <div id="gen-upscale-inputs" class="mode-inputs hidden">
           <div class="form-group">
@@ -480,7 +513,10 @@
         </div>
 
         <!-- metadata: image + format -->
-        <div id="gen-metadata-inputs" class="mode-inputs hidden">
+        <div id="gen-metadata-inputs" class="mode-inputs">
+          <div class="gen-section-break" aria-hidden="true">
+            <span>Inspect metadata</span>
+          </div>
           <div class="form-group">
             <label class="form-label"
               >Image <span class="req">required</span></label
@@ -503,6 +539,13 @@
               <option value="json">json</option>
             </select>
           </div>
+          <button
+            id="btn-inspect-metadata"
+            class="btn btn-sm"
+            type="button"
+          >
+            Inspect metadata
+          </button>
         </div>
       </div>
       <!-- @section bundle -->
@@ -603,5 +646,6 @@
         </button>
       </div>
     </div>
+  </div>
   </div>
 </div>

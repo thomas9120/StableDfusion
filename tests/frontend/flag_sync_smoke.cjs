@@ -35,10 +35,23 @@ const TINY_PNG = Buffer.from(
 	"base64",
 );
 
+function assembleIndex() {
+	const shell = fs.readFileSync(path.join(UI_DIR, "index.html"), "utf8");
+	return shell.replace(/<!--\s*@partial\s+([\w-]+)\s*-->/g, (_m, name) => {
+		const partial = path.join(UI_DIR, "partials", `${name}.html`);
+		return fs.existsSync(partial) ? fs.readFileSync(partial, "utf8") : _m;
+	});
+}
+
 function startStaticServer() {
 	const server = http.createServer((req, res) => {
 		let urlPath = decodeURIComponent(req.url.split("?")[0]);
 		if (urlPath === "/") urlPath = "/index.html";
+		if (urlPath === "/index.html") {
+			res.writeHead(200, { "Content-Type": MIME[".html"] });
+			res.end(assembleIndex());
+			return;
+		}
 		const filePath = path.join(UI_DIR, urlPath);
 		if (
 			!filePath.startsWith(UI_DIR) ||
@@ -273,11 +286,13 @@ function findChromiumExecutable() {
 				}
 				statusCalls += 1;
 				const running = statusCalls <= 2;
+				const postedMode =
+					generatePosted && generatePosted.mode ? generatePosted.mode : "img_gen";
 				const body = running
 					? {
 							state: "running",
 							job_id: "smoke_job",
-							mode: "img_gen",
+							mode: postedMode,
 							step: 5,
 							total_steps: 20,
 							percent: 25,
@@ -287,12 +302,13 @@ function findChromiumExecutable() {
 					: {
 							state: "done",
 							job_id: "smoke_job",
-							mode: "img_gen",
+							mode: postedMode,
 							step: 20,
 							total_steps: 20,
 							percent: 100,
-							result_files: ["smoke.png"],
+							result_files: postedMode === "metadata" ? [] : ["smoke.png"],
 							prompt: "a cat",
+							stdout_excerpt: "prompt: a cat",
 							message: "Done — 1 image(s) saved.",
 						};
 				return route.fulfill({
@@ -364,7 +380,28 @@ function findChromiumExecutable() {
 			"active tab persists across app reloads",
 			persistedTab.active && persistedTab.stored === "install",
 		);
-		await page.click('.nav-item[data-section="generate"]');
+		await page.evaluate(() =>
+			localStorage.setItem(window.SDGui.ACTIVE_SECTION_KEY, "generate"),
+		);
+		await page.reload({ waitUntil: "domcontentloaded" });
+		await page.waitForFunction(
+			() =>
+				document.getElementById("section-generate-image").style.display ===
+				"block",
+			{ timeout: 3000 },
+		);
+		const migratedGenerateTab = await page.evaluate(() => ({
+			active: document
+				.querySelector('.nav-item[data-section="generate-image"]')
+				.classList.contains("active"),
+			stored: localStorage.getItem(window.SDGui.ACTIVE_SECTION_KEY),
+		}));
+		check(
+			"legacy generate tab migrates to Generate Image",
+			migratedGenerateTab.active &&
+				migratedGenerateTab.stored === "generate-image",
+		);
+		await page.click('.nav-item[data-section="generate-image"]');
 
 		// 1. Flag definitions validate.
 		const validation = await page.evaluate(() =>
@@ -742,7 +779,7 @@ function findChromiumExecutable() {
 				serverPosted.extra_args === "--cache-mode easycache",
 		);
 
-		await page.click('.nav-item[data-section="generate"]');
+		await page.click('.nav-item[data-section="generate-image"]');
 
 		// ── Phase 3 ─────────────────────────────────────────────────────────
 		// Bundle change applies defaults + switches mode (wan → vid_gen).
@@ -752,17 +789,22 @@ function findChromiumExecutable() {
 			mode: window.SDGui.flagCore.getMode(),
 			video_frames: window.SDGui.flagCore.getFlagValues().video_frames,
 			fps: window.SDGui.flagCore.getFlagValues().fps,
+			activeSection: localStorage.getItem(window.SDGui.ACTIVE_SECTION_KEY),
 		}));
 		check("wan bundle switches mode to vid_gen", afterWan.mode === "vid_gen");
+		check(
+			"wan bundle routes to Generate Video tab",
+			afterWan.activeSection === "generate-video",
+		);
 		check(
 			"wan bundle defaults include video_frames=25",
 			afterWan.video_frames === 25,
 		);
 		check("wan bundle defaults include fps=16", afterWan.fps === 16);
 
-		// Mode-specific sections hide/show correctly per active mode.
-		const sectionVisibility = async (mode) => {
-			await page.selectOption("#gen-mode", mode);
+		// Mode-specific top-level tabs route to the matching sd-cli mode.
+		const sectionVisibility = async (section) => {
+			await page.click(`.nav-item[data-section="${section}"]`);
 			await page.waitForTimeout(80);
 			return await page.evaluate(() => {
 				const isHidden = (id) => {
@@ -770,25 +812,36 @@ function findChromiumExecutable() {
 					return !n || n.classList.contains("hidden");
 				};
 				return {
+					mode: window.SDGui.flagCore.getMode(),
 					img2img: isHidden("gen-img2img-inputs"),
+					video: isHidden("gen-video-inputs"),
 					upscale: isHidden("gen-upscale-inputs"),
 					convert: isHidden("gen-convert-inputs"),
 					metadata: isHidden("gen-metadata-inputs"),
 					prompt: isHidden("gen-prompt-section"),
 					sampling: isHidden("gen-sampling-section"),
+					activeSection: localStorage.getItem(window.SDGui.ACTIVE_SECTION_KEY),
 				};
 			});
 		};
 
-		const imgGen = await sectionVisibility("img_gen");
+		const imgGen = await sectionVisibility("generate-image");
+		check("Generate Image tab sets img_gen mode", imgGen.mode === "img_gen");
 		check("img_gen shows img2img inputs", !imgGen.img2img);
 		check(
-			"img_gen hides upscale/convert/metadata",
-			imgGen.upscale && imgGen.convert && imgGen.metadata,
+			"img_gen hides video/upscale/convert",
+			imgGen.video && imgGen.upscale && imgGen.convert,
 		);
+		check("metadata inspector stays with Generate Image", !imgGen.metadata);
 		check("img_gen shows prompt section", !imgGen.prompt);
 
+		const videoVis = await sectionVisibility("generate-video");
+		check("Generate Video tab sets vid_gen mode", videoVis.mode === "vid_gen");
+		check("video tab shows video inputs", !videoVis.video);
+		check("video tab hides image metadata inspector", videoVis.metadata);
+
 		const upscaleVis = await sectionVisibility("upscale");
+		check("Upscale tab sets upscale mode", upscaleVis.mode === "upscale");
 		check("upscale shows upscale inputs", !upscaleVis.upscale);
 		check("upscale hides img2img inputs", upscaleVis.img2img);
 		check("upscale hides prompt section", upscaleVis.prompt);
@@ -803,13 +856,9 @@ function findChromiumExecutable() {
 		);
 
 		const convertVis = await sectionVisibility("convert");
+		check("Convert tab sets convert mode", convertVis.mode === "convert");
 		check("convert shows convert inputs", !convertVis.convert);
 		check("convert hides prompt section", convertVis.prompt);
-
-		const metadataVis = await sectionVisibility("metadata");
-		check("metadata shows metadata inputs", !metadataVis.metadata);
-		check("metadata hides sampling section", metadataVis.sampling);
-		check("metadata hides prompt section", metadataVis.prompt);
 
 		// Mode-specific required-input errors surface correctly.
 		const upscaleErr = await page.evaluate(() => {
@@ -826,8 +875,34 @@ function findChromiumExecutable() {
 		});
 		check("metadata error mentions image", metadataErr.includes("image"));
 
+		await page.click('.nav-item[data-section="generate-image"]');
+		await page.evaluate(() => {
+			window.SDGui.flagCore.setFlagValue("image", "output/smoke.png");
+		});
+		await page.click("#btn-inspect-metadata");
+		await page.waitForFunction(
+			() => {
+				const box = document.getElementById("gen-result");
+				return box && box.querySelector(".result-text");
+			},
+			{ timeout: 8000 },
+		);
+		const metadataPosted = await page.evaluate(() => ({
+			mode: window.SDGui.flagCore.getMode(),
+			resultText: document.querySelector("#gen-result .result-text")?.textContent || "",
+		}));
+		check(
+			"metadata inspect posts metadata mode",
+			generatePosted && generatePosted.mode === "metadata",
+		);
+		check("metadata inspect restores image mode", metadataPosted.mode === "img_gen");
+		check(
+			"metadata inspect renders stdout text",
+			metadataPosted.resultText.includes("prompt: a cat"),
+		);
+
 		// Reset to img_gen so the rest of the page is in a sane state.
-		await page.evaluate(() => window.SDGui.flagCore.setMode("img_gen"));
+		await page.click('.nav-item[data-section="generate-image"]');
 
 		// ── init_img mirror sync: init_img is bound to TWO inputs
 		// (gen-init-img in the img2img panel + gen-upscale-init-img in the
@@ -844,7 +919,7 @@ function findChromiumExecutable() {
 			initImgImgGen === "output/sample.png",
 		);
 		// Switch to upscale: the mirrored upscale field must reflect the same state.
-		await page.selectOption("#gen-mode", "upscale");
+		await page.click('.nav-item[data-section="upscale"]');
 		await page.waitForTimeout(60);
 		const initImgUpscale = await page.inputValue("#gen-upscale-init-img");
 		check(
@@ -855,7 +930,7 @@ function findChromiumExecutable() {
 		// write to the same flag, so the mirror is bidirectional).
 		await page.fill("#gen-upscale-init-img", "output/other.png");
 		await page.waitForTimeout(60);
-		await page.selectOption("#gen-mode", "img_gen");
+		await page.click('.nav-item[data-section="generate-image"]');
 		await page.waitForTimeout(60);
 		const initImgRoundTrip = await page.inputValue("#gen-init-img");
 		check(
@@ -866,7 +941,7 @@ function findChromiumExecutable() {
 		await page.evaluate(() =>
 			window.SDGui.flagCore.setFlagValue("init_img", ""),
 		);
-		await page.selectOption("#gen-mode", "img_gen");
+		await page.click('.nav-item[data-section="generate-image"]');
 
 		// Install-tab lifecycle: Stop GUI Server should request shutdown and
 		// leave the current page alone. A forced reload here would fall back to
