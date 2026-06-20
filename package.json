@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "test:syntax": "node tests/frontend/js_syntax_check.cjs",
-    "test:frontend": "node tests/frontend/flag_sync_smoke.cjs"
+    "test:flag-core": "node tests/frontend/flag_core_unit.cjs",
+    "test:frontend": "node tests/frontend/flag_core_unit.cjs && node tests/frontend/flag_sync_smoke.cjs"
   },
   "devDependencies": {
     "playwright": "^1.60.0"

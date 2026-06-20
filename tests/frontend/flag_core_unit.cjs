@@ -1,0 +1,120 @@
+// Focused unit checks for ui/js/flag-core.js.
+"use strict";
+
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const vm = require("node:vm");
+
+const ROOT = path.resolve(__dirname, "..", "..");
+
+function loadFlagCore() {
+	const context = vm.createContext({
+		console,
+		window: { SDGui: {} },
+	});
+	context.window.window = context.window;
+
+	for (const rel of [
+		"ui/js/flags/options.js",
+		"ui/js/flags/model-bundles.js",
+		"ui/js/flags/definitions.js",
+		"ui/js/flags/helpers.js",
+		"ui/js/flag-core.js",
+	]) {
+		const file = path.join(ROOT, rel);
+		vm.runInContext(fs.readFileSync(file, "utf8"), context, {
+			filename: file,
+		});
+	}
+	return context.window.SDGui.flagCore;
+}
+
+function flatPairs(args) {
+	return (args || []).map((pair) => pair.join("="));
+}
+
+const flagCore = loadFlagCore();
+const failures = [];
+
+function check(name, fn) {
+	try {
+		fn();
+		console.log("  ok  " + name);
+	} catch (err) {
+		failures.push(name);
+		console.error("  FAIL  " + name);
+		console.error("        " + (err && err.message ? err.message : err));
+	}
+}
+
+check("custom args tokenizer preserves quoted whitespace", () => {
+	assert.equal(
+		JSON.stringify(flagCore.tokenizeCustomArgs('--eta "0.25 value" --dry-run')),
+		JSON.stringify(["--eta", "0.25 value", "--dry-run"]),
+	);
+});
+
+check("getLaunchArgs emits model and custom args after canonical args", () => {
+	flagCore.resetToDefaults();
+	flagCore.setMode("img_gen");
+	flagCore.setMultipleFlagValues({
+		model: "models/diffusion/sd15.gguf",
+		prompt: "a cat",
+		custom_args: '--eta "0.25 value"',
+	});
+	const result = flagCore.getLaunchArgs();
+	const flat = flatPairs(result.args);
+	assert.equal(result.error, null);
+	assert(flat.includes("--model=models/diffusion/sd15.gguf"));
+	assert(flat.includes("--prompt=a cat"));
+	assert.equal(JSON.stringify(result.args.slice(-2)), JSON.stringify([["--eta"], ["0.25 value"]]));
+});
+
+check("backend-owned output and run mode flags are never emitted", () => {
+	flagCore.resetToDefaults();
+	flagCore.setMode("img_gen");
+	flagCore.setMultipleFlagValues({
+		model: "m.gguf",
+		run_mode: "metadata",
+		output: "evil.png",
+		preview_path: "evil-preview.png",
+	});
+	const flags = flagCore.getLaunchArgs().args.map((pair) => pair[0]);
+	const flat = flatPairs(flagCore.getLaunchArgs().args).join(" ");
+	assert(!flags.includes("--mode"));
+	assert(!flags.includes("--output"));
+	assert(!flags.includes("--preview-path"));
+	assert(!flat.includes("evil.png"));
+});
+
+check("invalid numeric values warn without entering argv", () => {
+	flagCore.resetToDefaults();
+	flagCore.setMode("img_gen");
+	flagCore.setMultipleFlagValues({
+		model: "m.gguf",
+		width: "wide",
+	});
+	const result = flagCore.getLaunchArgs();
+	const flat = flatPairs(result.args).join(" ");
+	assert(result.warnings.some((w) => w.includes("Invalid number for width")));
+	assert(!flat.includes("--width"));
+	assert(!flat.includes("wide"));
+});
+
+check("Z-Image style llm equal to diffusion model blocks launch", () => {
+	flagCore.resetToDefaults();
+	flagCore.setMode("img_gen");
+	flagCore.setMultipleFlagValues({
+		diffusion_model: "models/diffusion/z-image.gguf",
+		llm: "models/diffusion/z-image.gguf",
+	});
+	const result = flagCore.getLaunchArgs();
+	assert(result.error.includes("LLM text encoder must be a separate file"));
+	assert(!flatPairs(result.args).join(" ").includes("--llm"));
+});
+
+console.log(
+	`\n${failures.length === 0 ? "ALL FLAG CORE UNIT CHECKS PASSED" : failures.length + " CHECK(S) FAILED"}`,
+);
+if (failures.length) process.exit(1);
