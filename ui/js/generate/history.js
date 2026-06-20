@@ -13,8 +13,8 @@
 // Cross-module actions (`sendToImg2img`, `downloadResult`, `openResultFile`,
 // `syncFromState`, `switchToModeSection`) are injected through `init()` so
 // this module never reaches back into the coordinator's closure. They
-// remain owned by the coordinator until Stage 6 (preview/results) and
-// Stage 8 (run controller) extract them.
+// preview/results now own the live result actions, and the run controller
+// owns the generation lifecycle.
 //
 // All state reads/writes go through the injected `flagCore` (PLAN.md §8
 // sync rule). Safe DOM only (no innerHTML) per AGENTS.md frontend pitfall.
@@ -253,10 +253,7 @@ window.SDGui.generateHistory = (() => {
 		// `historyExpanded` toggle. Kept on the module so the toolbar
 		// stays a single DOM contract owned by history concerns.
 		attachToolbar: attachToolbar,
-		// Called from the run-controller path (today: the live result frame
-		// inside generate-ui.js) once per result file. Will move fully into
-		// the run controller in Stage 7; for now the coordinator forwards
-		// the snap+file pair.
+		// Called from the run-controller/result path once per result file.
 		addHistoryEntry: addHistoryEntry,
 	};
 })();
