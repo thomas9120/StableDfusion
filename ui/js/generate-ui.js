@@ -9,10 +9,6 @@ window.SDGui.generateUi = (() => {
 	var lastPreviewMtime = 0;
 	var generating = false;
 
-	var HISTORY_KEY = "sdgui.generate.history";
-	var HISTORY_STORE_CAP = 60; // max entries persisted to localStorage
-	var HISTORY_VISIBLE_DEFAULT = 20; // max rendered before "show more"
-	var historyExpanded = false; // whether the grid shows all entries
 	var activeGenerateSection = "generate-image";
 	var routingSection = false;
 
@@ -50,12 +46,20 @@ window.SDGui.generateUi = (() => {
 	// shared `controls` table on every renderBundleFields call.
 	var mf = window.SDGui.generateModelFields;
 	var renderBundleFields = mf.renderBundleFields;
+	// Stage 5: history storage (localStorage), rendering, restore/open/
+	// delete/clear actions live in window.SDGui.generateHistory. The
+	// coordinator still owns the cross-module actions (sendToImg2img,
+	// downloadResult, openResultFile) and the mode/flag state restore
+	// (syncFromState, switchToModeSection) — they are injected via
+	// hist.init() in init() below. addHistoryEntry is forwarded from the
+	// live result frame to hist.addHistoryEntry until Stage 7 moves the
+	// run controller out.
+	var hist = window.SDGui.generateHistory;
 	var $ = dom.$;
 	var el = dom.el;
 	var setHidden = dom.setHidden;
 	var populateEnum = dom.populateEnum;
 	var formatElapsed = fmt.formatElapsed;
-	var relativeTime = fmt.relativeTime;
 	var loraNameFromPath = fmt.loraNameFromPath;
 	var loraFolderFromPath = fmt.loraFolderFromPath;
 	var formatLoraStrength = fmt.formatLoraStrength;
@@ -282,145 +286,11 @@ window.SDGui.generateUi = (() => {
 	}
 
 	// ── History (localStorage) ────────────────────────────────────────────
-	function loadHistory() {
-		try {
-			var raw = localStorage.getItem(HISTORY_KEY);
-			var arr = raw ? JSON.parse(raw) : [];
-			return Array.isArray(arr) ? arr : [];
-		} catch (e) {
-			return [];
-		}
-	}
-
-	function saveHistory(entries) {
-		try {
-			localStorage.setItem(
-				HISTORY_KEY,
-				JSON.stringify(entries.slice(0, HISTORY_STORE_CAP)),
-			);
-		} catch (e) {
-			/* quota - ignore */
-		}
-	}
-
-	// Resolve the on-disk filename for a history entry. Newer entries store
-	// `file` (always the real filename with extension); older ones only have
-	// `name`, which may be a base_name without extension.
-	function historyFileName(entry) {
-		if (!entry) return "";
-		return entry.file || entry.name || "";
-	}
-
-	function renderHistory() {
-		var all = loadHistory();
-		var total = all.length;
-		var shown = historyExpanded
-			? total
-			: Math.min(total, HISTORY_VISIBLE_DEFAULT);
-		var entries = all.slice(0, shown);
-
-		// Header count badge.
-		var countEl = $("gen-history-count");
-		if (countEl) countEl.textContent = String(total);
-
-		// Clear button is only meaningful when there's something to clear.
-		var clearBtn = $("btn-clear-history");
-		if (clearBtn) clearBtn.classList.toggle("hidden", total === 0);
-
-		// "Show all" toggle: visible only when more exist than the default page.
-		var moreBtn = $("btn-history-more");
-		if (moreBtn) {
-			var hidden = total <= HISTORY_VISIBLE_DEFAULT;
-			moreBtn.classList.toggle("hidden", hidden);
-			moreBtn.textContent = historyExpanded
-				? "Show fewer"
-				: "Show all " +
-					total +
-					" (" +
-					(total - HISTORY_VISIBLE_DEFAULT) +
-					" more)";
-		}
-
-		window.SDGui.gallery.renderHistoryGrid(
-			$("gen-history"),
-			entries,
-			{
-				onRestore: restoreFromHistory,
-				onSend: (entry) => {
-					sendToImg2img(historyFileName(entry));
-				},
-				onOpen: openHistoryImage,
-				onDelete: removeHistoryEntry,
-			},
-			{ timeLabel: relativeTime },
-		);
-	}
-
-	function restoreFromHistory(entry) {
-		if (!entry || !entry.params) return;
-		window.SDGui.flagCore.setMultipleFlagValues(entry.params);
-		if (entry.bundle) window.SDGui.flagCore.setBundle(entry.bundle);
-		if (entry.mode) window.SDGui.flagCore.setMode(entry.mode);
-		if (entry.mode) switchToModeSection(entry.mode);
-		syncFromState(true);
-		window.SDGui.toast("Restored settings from history.", "info");
-	}
-
-	// View a history image at full size in the result frame.
-	function openHistoryImage(entry) {
-		var name = historyFileName(entry);
-		if (!name) return;
-		window.SDGui.gallery.renderResultImage(
-			$("gen-result"),
-			name,
-			entry.prompt || "result",
-			Date.now(),
-		);
-		var actions = $("gen-result-actions");
-		var entryIsVideo = window.SDGui.gallery.isVideoFile(historyFileName(entry));
-		if (actions) {
-			actions.classList.remove("hidden");
-			var openBtn = $("btn-open-result");
-			var sendBtn = $("btn-send-img2img");
-			var dlBtn = $("btn-download-result");
-			if (openBtn) openBtn.onclick = () => openResultFile();
-			if (sendBtn) {
-				sendBtn.classList.toggle("hidden", entryIsVideo);
-				if (!entryIsVideo) sendBtn.onclick = () => sendToImg2img(name);
-			}
-			if (dlBtn) dlBtn.onclick = () => downloadResult(name);
-		}
-		if (entry.prompt) {
-			window.SDGui.toast("Viewing history image.", "info");
-		}
-	}
-
-	// Remove a single entry by id (output file on disk is untouched).
-	function removeHistoryEntry(entry) {
-		if (!entry) return;
-		var id = entry.id;
-		var entries = loadHistory().filter((e) => e.id !== id);
-		saveHistory(entries);
-		renderHistory();
-	}
-
-	// Clear the whole list (output files on disk are untouched).
-	async function clearHistory() {
-		var ok = await window.SDGui.confirmAction(
-			"Clear history?",
-			"This removes all entries from the history list. The output image files on disk are not deleted.",
-			"Clear history",
-		);
-		if (!ok) return;
-		try {
-			localStorage.removeItem(HISTORY_KEY);
-		} catch (e) {
-			/* ignore */
-		}
-		historyExpanded = false;
-		renderHistory();
-		window.SDGui.toast("History cleared.", "success");
-	}
+	// Stage 5: load/save/render/restore/open/delete/clear all live in
+	// window.SDGui.generateHistory (init() injects the cross-module
+	// actions). The coordinator exposes a `renderHistory` alias for any
+	// external caller and forwards new entries from the live result frame
+	// via `hist.addHistoryEntry`.
 
 	// ── Generation flow ───────────────────────────────────────────────────
 	function setGenerating(on) {
@@ -609,7 +479,7 @@ window.SDGui.generateUi = (() => {
 				box.appendChild(pre);
 			}
 			if (actions) actions.classList.add("hidden");
-			addHistoryEntry(snap, files[0] || "metadata");
+			hist.addHistoryEntry(snap, files[0] || "metadata");
 			return;
 		}
 
@@ -650,7 +520,7 @@ window.SDGui.generateUi = (() => {
 			if (dlBtn) dlBtn.onclick = () => downloadResult(first);
 		}
 		// Add to history (one entry per result file for batch).
-		files.forEach((f) => addHistoryEntry(snap, f));
+		files.forEach((f) => hist.addHistoryEntry(snap, f));
 	}
 
 	// A9 - render an inline error in the result frame (instead of toast-only).
@@ -721,26 +591,6 @@ window.SDGui.generateUi = (() => {
 			"Set as init image. Adjust strength then Generate.",
 			"info",
 		);
-	}
-
-	function addHistoryEntry(snap, file) {
-		var vals = window.SDGui.flagCore.getFlagValues();
-		var ts = Date.now();
-		var entry = {
-			id: ts + "-" + Math.random().toString(36).slice(2, 8),
-			name: snap.job_id || file,
-			file: file, // real on-disk filename (with extension) — used by toolbar actions
-			prompt: vals.prompt || "",
-			thumb: "/api/image/" + encodeURIComponent(file) + "/thumbnail",
-			timestamp: ts,
-			bundle: window.SDGui.flagCore.getBundle(),
-			mode: snap.mode || window.SDGui.flagCore.getMode(),
-			params: vals,
-		};
-		var entries = loadHistory();
-		entries.unshift(entry);
-		saveHistory(entries);
-		renderHistory();
 	}
 
 	async function poll() {
@@ -920,6 +770,20 @@ window.SDGui.generateUi = (() => {
 			flagCore: window.SDGui.flagCore,
 			populateModelSelect: mf.populateModelSelect,
 		});
+		// Stage 5: hand the history module its flagCore + the cross-module
+		// actions it needs (sendToImg2img / downloadResult / openResultFile
+		// for opening a history image in the result frame, and
+		// syncFromState / switchToModeSection for restoring a history
+		// entry's mode + flagCore + bundle). Must run before any
+		// hist.addHistoryEntry / hist.render() call below.
+		hist.init({
+			flagCore: window.SDGui.flagCore,
+			sendToImg2img: sendToImg2img,
+			downloadResult: downloadResult,
+			openResultFile: openResultFile,
+			syncFromState: syncFromState,
+			switchToModeSection: switchToModeSection,
+		});
 		moveWorkbenchTo(ctx.getActiveSection());
 		// Generate defaults: enable live preview (sd-cli defaults to none).
 		var vals = window.SDGui.flagCore.getFlagValues();
@@ -1084,18 +948,13 @@ window.SDGui.generateUi = (() => {
 		});
 
 		renderBundleFields();
-		renderHistory();
+		// Stage 5: history is owned by window.SDGui.generateHistory. The
+		// module renders + wires the clear/show-more toolbar via
+		// hist.attachToolbar() (single DOM contract for the
+		// clear-confirmation + show-more toggle).
+		hist.render();
 		updateActionCopy();
-
-		// History toolbar: clear-all (confirmed) + show-more toggle.
-		var clearBtn = $("btn-clear-history");
-		if (clearBtn) clearBtn.addEventListener("click", () => clearHistory());
-		var moreBtn = $("btn-history-more");
-		if (moreBtn)
-			moreBtn.addEventListener("click", () => {
-				historyExpanded = !historyExpanded;
-				renderHistory();
-			});
+		hist.attachToolbar();
 
 		// If a generation is already running (page reload), resume polling.
 		window.SDGui.fetchJson("/api/generate/status")
@@ -1113,7 +972,10 @@ window.SDGui.generateUi = (() => {
 		renderBundleFields: renderBundleFields,
 		generate: generate,
 		cancel: cancel,
-		renderHistory: renderHistory,
+		// Stage 5: history is owned by window.SDGui.generateHistory; the
+		// public method is now a thin alias onto hist.render so any
+		// external caller (and the existing tests' contract) keeps working.
+		renderHistory: hist.render,
 		updateModeSections: updateModeSections,
 		syncFromState: syncFromState,
 		handleSectionChange: handleSectionChange,
