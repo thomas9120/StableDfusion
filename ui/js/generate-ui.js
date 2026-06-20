@@ -8,11 +8,6 @@ window.SDGui.generateUi = (() => {
 	var pollTimer = null;
 	var lastPreviewMtime = 0;
 	var generating = false;
-	var controls = {}; // flagId -> { id, kind }
-	// Secondary controls that share one flag with `controls` (e.g. init_img
-	// appears in both the img2img and upscale panels). The primary entry in
-	// `controls` is synced first, then each mirror id here.
-	var controlMirrors = {}; // flagId -> [ids]
 
 	var HISTORY_KEY = "sdgui.generate.history";
 	var HISTORY_STORE_CAP = 60; // max entries persisted to localStorage
@@ -20,6 +15,40 @@ window.SDGui.generateUi = (() => {
 	var historyExpanded = false; // whether the grid shows all entries
 	var activeGenerateSection = "generate-image";
 	var routingSection = false;
+
+	// Stage 2: low-risk pure UI utilities live in dedicated modules under
+	// ui/js/generate/. Alias the helpers we use heavily so the call sites
+	// stay short. The dimension module is invoked by namespace since its
+	// init/setup is wired up explicitly in init() below.
+	var dom = window.SDGui.generateDom;
+	var fmt = window.SDGui.generateFormatters;
+	var dims = window.SDGui.generateDimensions;
+	// Stage 3: control binding + the controls/controlMirrors registries live
+	// in window.SDGui.generateControls. Alias the bind/sync helpers so call
+	// sites stay short; alias the registries (shared by reference — never
+	// reassigned, only mutated in place) so model-field pickers, mode inputs,
+	// and LoRA controls keep registering into the single shared table.
+	var ctrl = window.SDGui.generateControls;
+	var bindText = ctrl.bindText;
+	var bindNumber = ctrl.bindNumber;
+	var bindEnum = ctrl.bindEnum;
+	var bindPathSelect = ctrl.bindPathSelect;
+	var bindBool = ctrl.bindBool;
+	var bindSliderNumber = ctrl.bindSliderNumber;
+	var syncControl = ctrl.syncControl;
+	var syncControlsFromState = ctrl.syncControlsFromState;
+	var syncAll = ctrl.syncAll;
+	var controls = ctrl.controls;
+	var controlMirrors = ctrl.controlMirrors;
+	var $ = dom.$;
+	var el = dom.el;
+	var setHidden = dom.setHidden;
+	var populateEnum = dom.populateEnum;
+	var formatElapsed = fmt.formatElapsed;
+	var relativeTime = fmt.relativeTime;
+	var loraNameFromPath = fmt.loraNameFromPath;
+	var loraFolderFromPath = fmt.loraFolderFromPath;
+	var formatLoraStrength = fmt.formatLoraStrength;
 
 	var SECTION_CONFIG = {
 		"generate-image": {
@@ -94,159 +123,36 @@ window.SDGui.generateUi = (() => {
 	// A11 - run start time (epoch ms) for elapsed/ETA display.
 	var runStartTime = 0;
 
-	// A6 - dimension alignment multiple. SD needs mult of 8; many models 64.
-	var DIM_MULTIPLE = 8;
-
-	function formatElapsed(ms) {
-		var s = Math.max(0, Math.floor(ms / 1000));
-		if (s < 60) return s + "s";
-		return Math.floor(s / 60) + "m " + (s % 60) + "s";
-	}
-
-	// A6 - snap a value to the dimension multiple.
-	function snapDim(v) {
-		var n = parseInt(v, 10);
-		if (Number.isNaN(n)) n = DIM_MULTIPLE;
-		if (n < DIM_MULTIPLE) n = DIM_MULTIPLE;
-		return Math.round(n / DIM_MULTIPLE) * DIM_MULTIPLE;
-	}
-
-	// ── Dimensions widget (Generate): "Aspect → Size" redesign ─────────
-	// Last shape the user engaged with, so the size row stays stable when the
-	// current ratio is custom (no bucket highlight).
-	var lastShape = "1:1";
-
-	// Returns the canonical bucket {long,width,height} for the exact pixels,
-	// or null when the size is custom (no preset matches).
-	function findDimensionBucket(w, h) {
-		var shape = window.SDGui.shapeFromRatio(w / h);
-		var buckets = (window.SDGui.DIMENSION_BUCKETS || {})[shape] || [];
-		return buckets.find((b) => b.width === w && b.height === h) || null;
-	}
-
-	function sizeTagForLong(long) {
-		if (long <= 640) return "SD 1.x";
-		if (long <= 800) return "SD 1.5";
-		return "SDXL";
-	}
-
-	function budgetFor(mp) {
-		if (mp <= 1.05) return { cls: "ok", text: "on budget" };
-		if (mp <= 1.3) return { cls: "warn", text: "large" };
-		return { cls: "over", text: "slow / OOM risk" };
-	}
-
-	// (Re)build the size buttons for the given shape, ascending longer edge,
-	// plus a Custom escape hatch. Recommended = the SDXL-class bucket.
-	function renderDimensionSizes(activeShape) {
-		var wrap = $("gen-dim-sizes");
-		if (!wrap) return;
-		wrap.replaceChildren();
-		var buckets = (window.SDGui.DIMENSION_BUCKETS || {})[activeShape] || [];
-		var recommended =
-			buckets
-				.filter((b) => b.long >= 1024)
-				.sort((a, b) => a.long - b.long)[0] || buckets[buckets.length - 1];
-		buckets.forEach((b) => {
-			var btn = el("button", "dim-size");
-			btn.type = "button";
-			btn.setAttribute("data-long", String(b.long));
-			btn.setAttribute("data-w", String(b.width));
-			btn.setAttribute("data-h", String(b.height));
-			var num = el("span", "num");
-			num.textContent = String(b.long);
-			btn.appendChild(num);
-			var tag = el("span", "tag");
-			tag.textContent = sizeTagForLong(b.long);
-			btn.appendChild(tag);
-			if (recommended && b.long === recommended.long)
-				btn.classList.add("recommended");
-			wrap.appendChild(btn);
-		});
-		var custom = el("button", "dim-size");
-		custom.type = "button";
-		custom.setAttribute("data-long", "custom");
-		var cNum = el("span", "num");
-		cNum.textContent = "Custom";
-		custom.appendChild(cNum);
-		var cTag = el("span", "tag");
-		cTag.textContent = "manual";
-		custom.appendChild(cTag);
-		wrap.appendChild(custom);
-	}
-
-	// Refresh shape/size highlights + the live readout from shared flag state.
-	function updateDimensionAffordances() {
-		var vals = window.SDGui.flagCore.getFlagValues();
-		var w = Number(vals.width) || 0;
-		var h = Number(vals.height) || 0;
-		var shape = window.SDGui.shapeFromRatio(h > 0 ? w / h : 0);
-		if (shape) lastShape = shape;
-		var bucket = findDimensionBucket(w, h);
-
-		// Shape highlight (cleared if the ratio is custom).
-		document.querySelectorAll("#gen-dim-shapes .dim-shape").forEach((chip) => {
-			chip.classList.toggle(
-				"active",
-				!!shape && chip.getAttribute("data-shape") === shape,
-			);
-		});
-
-		// Size buttons for the active shape, then highlight the matching bucket
-		// — or Custom when the size is off-bucket.
-		renderDimensionSizes(lastShape);
-		document.querySelectorAll("#gen-dim-sizes .dim-size").forEach((btn) => {
-			var on = bucket
-				? Number(btn.getAttribute("data-w")) === w &&
-					Number(btn.getAttribute("data-h")) === h
-				: btn.getAttribute("data-long") === "custom";
-			btn.classList.toggle("active", on);
-		});
-
-		// Live readout.
-		if (w && h) {
-			var xy = $("gen-dim-xy");
-			if (xy) xy.textContent = w + " × " + h;
-			var mp = $("gen-dim-mp");
-			if (mp) mp.textContent = ((w * h) / 1e6).toFixed(2) + " MP";
-			var rLbl = $("gen-dim-ratio");
-			if (rLbl) rLbl.textContent = shape || "custom";
-			var bLbl = $("gen-dim-base");
-			if (bLbl)
-				bLbl.textContent = bucket ? bucket.long + " long edge" : "custom";
-			var bud = $("gen-dim-budget");
-			if (bud) {
-				var b = budgetFor((w * h) / 1e6);
-				bud.className = "dim-budget " + b.cls;
-				bud.textContent = b.text;
-			}
-			// Proportional preview swatch (long side capped at 80px).
-			var box = $("gen-dim-preview-box");
-			if (box) {
-				var scale = 80 / Math.max(w, h);
-				box.style.width = Math.round(w * scale) + "px";
-				box.style.height = Math.round(h * scale) + "px";
-			}
-		}
-	}
-
-	function $(id) {
-		return document.getElementById(id);
-	}
-
-	function el(tag, cls, text) {
-		var n = document.createElement(tag);
-		if (cls) n.className = cls;
-		if (text !== undefined) n.textContent = text;
-		return n;
-	}
+	// ── Stage 1: internal dependency context ───────────────────────────
+	// Centralizes the pieces future extracted helper modules (Stage 2+) will
+	// receive explicitly, so they never reach back into these closure
+	// variables. Mutable section state is exposed via *accessors* (never a
+	// captured value) so a helper can never hold a stale activeGenerateSection
+	// when the user switches between image/video/upscale/convert/metadata.
+	// `controls` and `controlMirrors` are owned by window.SDGui.generateControls
+	// (Stage 3) and shared here by reference: they are mutated in place and
+	// never reassigned, so reference sharing stays correct.
+	var ctx = {
+		controls: controls,
+		controlMirrors: controlMirrors,
+		getActiveSection: () => activeGenerateSection,
+		setActiveSection: (section) => {
+			activeGenerateSection = section;
+		},
+		activeConfig: activeConfig,
+		switchToModeSection: switchToModeSection,
+		syncFromState: syncFromState,
+		sendToImg2img: sendToImg2img,
+	};
 
 	function sectionForMode(mode) {
 		return MODE_SECTION[mode] || "generate-image";
 	}
 
 	function activeConfig() {
-		return SECTION_CONFIG[activeGenerateSection] || SECTION_CONFIG["generate-image"];
+		return (
+			SECTION_CONFIG[ctx.getActiveSection()] || SECTION_CONFIG["generate-image"]
+		);
 	}
 
 	function moveWorkbenchTo(section) {
@@ -261,7 +167,7 @@ window.SDGui.generateUi = (() => {
 
 	function switchToModeSection(mode) {
 		var section = sectionForMode(mode);
-		if (activeGenerateSection === section) return;
+		if (ctx.getActiveSection() === section) return;
 		if (window.SDGui.switchSection) {
 			routingSection = true;
 			window.SDGui.switchSection(section);
@@ -278,176 +184,18 @@ window.SDGui.generateUi = (() => {
 	}
 
 	// ── Control binding ────────────────────────────────────────────────────
-	function bindText(id, flagId) {
-		var existing = controls[flagId];
-		if (existing && existing.kind === "text" && existing.id !== id) {
-			// A setting may appear in more than one place (init_img lives in
-			// both the img2img and upscale panels). Keep the first binding as
-			// the primary control and register later ones as mirrors that read
-			// the same flagCore state (UI State Sync Rule).
-			if (!controlMirrors[flagId]) controlMirrors[flagId] = [];
-			if (!controlMirrors[flagId].includes(id)) controlMirrors[flagId].push(id);
-		} else {
-			controls[flagId] = { id: id, kind: "text" };
-		}
-		var node = $(id);
-		if (node)
-			node.addEventListener("input", () => {
-				window.SDGui.flagCore.setFlagValue(flagId, node.value);
-			});
-	}
-
-	function bindNumber(id, flagId, isFloat) {
-		controls[flagId] = { id: id, kind: isFloat ? "float" : "int" };
-		var node = $(id);
-		if (node)
-			node.addEventListener("change", () => {
-				var v = isFloat ? parseFloat(node.value) : parseInt(node.value, 10);
-				window.SDGui.flagCore.setFlagValue(flagId, Number.isNaN(v) ? 0 : v);
-			});
-	}
-
-	function bindEnum(id, flagId) {
-		controls[flagId] = { id: id, kind: "enum" };
-		var node = $(id);
-		if (node)
-			node.addEventListener("change", () => {
-				window.SDGui.flagCore.setFlagValue(flagId, node.value);
-			});
-	}
-
-	function bindPathSelect(id, flagId, purpose) {
-		var node = $(id);
-		if (!node) return;
-		controls[flagId] = {
-			id: null,
-			kind: "path",
-			select: node,
-			purpose: purpose,
-		};
-		node.addEventListener("change", () => {
-			window.SDGui.flagCore.setFlagValue(flagId, node.value);
-		});
-		populateModelSelect(node, purpose).then(() => syncControl(flagId));
-	}
-
-	function bindBool(id, flagId) {
-		controls[flagId] = { id: id, kind: "bool" };
-		var node = $(id);
-		if (node)
-			node.addEventListener("change", () => {
-				window.SDGui.flagCore.setFlagValue(flagId, node.checked);
-			});
-	}
-
-	// A7 - enhance a bare number input into a slider + number compound, both
-	// bound to flagCore. Keeps exact entry via the number field.
-	function bindSliderNumber(id, flagId, min, max, step, isFloat) {
-		var number = $(id);
-		if (!number) return;
-		var wrap = el("div", "slider-number");
-		var slider = el("input");
-		slider.type = "range";
-		slider.min = String(min);
-		slider.max = String(max);
-		slider.step = String(step);
-		slider.setAttribute(
-			"aria-label",
-			number.getAttribute("aria-label") || flagId + " slider",
-		);
-		if (number.parentNode) number.parentNode.replaceChild(wrap, number);
-		wrap.appendChild(slider);
-		wrap.appendChild(number);
-		var fmt = (v) =>
-			isFloat
-				? String(Math.round(Number(v) * 100) / 100)
-				: String(parseInt(v, 10) || 0);
-		slider.value = number.value;
-		slider.addEventListener("input", () => {
-			number.value = fmt(slider.value);
-			window.SDGui.flagCore.setFlagValue(
-				flagId,
-				isFloat ? parseFloat(slider.value) : parseInt(slider.value, 10),
-			);
-		});
-		number.addEventListener("change", () => {
-			var n = isFloat ? parseFloat(number.value) : parseInt(number.value, 10);
-			if (Number.isNaN(n)) n = 0;
-			slider.value = String(n);
-			window.SDGui.flagCore.setFlagValue(flagId, n);
-		});
-		controls[flagId] = {
-			id: id,
-			kind: "slider",
-			slider: slider,
-			number: number,
-		};
-	}
-
-	function populateEnum(id, options, current) {
-		var node = $(id);
-		if (!node) return;
-		node.replaceChildren();
-		options.forEach((opt) => node.appendChild(new Option(opt, opt)));
-		if (current !== undefined && current !== null) node.value = String(current);
-	}
-
-	function syncControl(flagId) {
-		var entry = controls[flagId];
-		if (!entry) return;
-		var v = window.SDGui.flagCore.getFlagValues()[flagId];
-		if (v === undefined || v === null) return;
-		// Model-picker <select> (path kind).
-		if (entry.kind === "path" && entry.select) {
-			var sel = entry.select;
-			if (!sel.isConnected) return; // stale (bundle switched) - skip
-			if (v && !Array.from(sel.options).some((o) => o.value === v)) {
-				sel.appendChild(new Option(v, v));
-			}
-			sel.value = v || "";
-			return;
-		}
-		if (entry.kind === "range" && entry.slider) {
-			if (!entry.slider.isConnected) return;
-			entry.slider.value = String(v);
-			if (entry.valueLabel) entry.valueLabel.textContent = String(v);
-			return;
-		}
-		if (entry.kind === "slider" && entry.slider) {
-			if (!entry.slider.isConnected) return;
-			entry.slider.value = String(v);
-			if (entry.number && document.activeElement !== entry.number)
-				entry.number.value = String(v);
-			return;
-		}
-		var applyToNode = (node) => {
-			if (!node) return;
-			// Don't clobber the control the user is currently editing.
-			if (document.activeElement === node) return;
-			if (entry.kind === "bool") node.checked = v === true;
-			else node.value = String(v);
-		};
-		applyToNode($(entry.id));
-		// Mirror controls share one flag (e.g. init_img in img2img + upscale).
-		(controlMirrors[flagId] || []).forEach((mid) => {
-			applyToNode($(mid));
-		});
-	}
-
-	function syncControlsFromState() {
-		Object.keys(controls).forEach(syncControl);
-	}
+	// Stage 3: bindText / bindNumber / bindEnum / bindPathSelect / bindBool /
+	// bindSliderNumber / syncControl / syncControlsFromState / syncAll (and the
+	// controls + controlMirrors registries) now live in
+	// window.SDGui.generateControls, loaded before this file. They are aliased
+	// at the top of this IIFE so call sites are unchanged.
 
 	// ── Mode-aware section visibility (Phase 3) ────────────────────────────
-	function setHidden(node, hidden) {
-		if (node) node.classList.toggle("hidden", !!hidden);
-	}
-
 	function updateModeSections() {
 		var mode = window.SDGui.flagCore.getMode();
 		var activePanelId = MODE_INPUT_PANELS[mode];
 		var sectionMode = activeConfig().mode;
-		var imageTab = activeGenerateSection === "generate-image";
+		var imageTab = ctx.getActiveSection() === "generate-image";
 
 		// A3 - relabel the mode-inputs header + help per active mode.
 		var label = $("gen-mode-label");
@@ -476,7 +224,7 @@ window.SDGui.generateUi = (() => {
 		setHidden($("gen-advanced-section"), !usePrompt);
 
 		// Refresh shape/size highlights + live readout for the current size (A6).
-		updateDimensionAffordances();
+		dims.updateAffordances();
 		updateActionCopy();
 	}
 
@@ -533,25 +281,6 @@ window.SDGui.generateUi = (() => {
 			select.replaceChildren();
 			select.appendChild(new Option("(could not list models)", ""));
 		}
-	}
-
-	function loraNameFromPath(value) {
-		var text = String(value || "").replace(/\\/g, "/");
-		var name = text.split("/").pop() || "";
-		return name.replace(/\.(safetensors|ckpt|gguf|sft|bin)$/i, "");
-	}
-
-	function loraFolderFromPath(value) {
-		var text = String(value || "").replace(/\\/g, "/");
-		var idx = text.lastIndexOf("/");
-		if (idx <= 0) return "models/loras";
-		return text.slice(0, idx);
-	}
-
-	function formatLoraStrength(value) {
-		var n = Number(value);
-		if (!Number.isFinite(n)) n = 1;
-		return String(Math.round(n * 100) / 100);
 	}
 
 	async function populateLoraFileSelect(select) {
@@ -742,11 +471,6 @@ window.SDGui.generateUi = (() => {
 		renderLoraControls(container);
 	}
 
-	// path-kind control sync (model picker selects)
-	function syncAll() {
-		Object.keys(controls).forEach(syncControl);
-	}
-
 	function syncSelectorsFromState() {
 		var bundleSelect = $("gen-model-bundle");
 		if (bundleSelect) bundleSelect.value = window.SDGui.flagCore.getBundle();
@@ -803,21 +527,6 @@ window.SDGui.generateUi = (() => {
 		} catch (e) {
 			/* quota - ignore */
 		}
-	}
-
-	// Relative "2h ago" label for a timestamp (ms). Returns '' when unknown.
-	function relativeTime(ts) {
-		if (!ts) return "";
-		var s = Math.max(0, Math.round((Date.now() - ts) / 1000));
-		if (s < 45) return "just now";
-		if (s < 90) return "1m ago";
-		var m = Math.round(s / 60);
-		if (m < 60) return m + "m ago";
-		var h = Math.round(m / 60);
-		if (h < 24) return h + "h ago";
-		var d = Math.round(h / 24);
-		if (d < 7) return d + "d ago";
-		return new Date(ts).toLocaleDateString();
 	}
 
 	// Resolve the on-disk filename for a history entry. Newer entries store
@@ -894,13 +603,17 @@ window.SDGui.generateUi = (() => {
 			Date.now(),
 		);
 		var actions = $("gen-result-actions");
+		var entryIsVideo = window.SDGui.gallery.isVideoFile(historyFileName(entry));
 		if (actions) {
 			actions.classList.remove("hidden");
 			var openBtn = $("btn-open-result");
 			var sendBtn = $("btn-send-img2img");
 			var dlBtn = $("btn-download-result");
 			if (openBtn) openBtn.onclick = () => openResultFile();
-			if (sendBtn) sendBtn.onclick = () => sendToImg2img(name);
+			if (sendBtn) {
+				sendBtn.classList.toggle("hidden", entryIsVideo);
+				if (!entryIsVideo) sendBtn.onclick = () => sendToImg2img(name);
+			}
 			if (dlBtn) dlBtn.onclick = () => downloadResult(name);
 		}
 		if (entry.prompt) {
@@ -956,12 +669,64 @@ window.SDGui.generateUi = (() => {
 		if (fill) fill.style.width = Math.max(0, Math.min(100, percent)) + "%";
 	}
 
-	function refreshPreview(mtime) {
+	// vid_gen previews are multi-frame .webm files (sd-cli writes
+	// .avi/.webm/.webp previews), so render them in a <video> instead of the
+	// shared <img>. The <video> is created lazily inside the preview frame and
+	// only used on the Generate Video tab; image modes keep using <img>.
+	function ensurePreviewVideo() {
+		var frame = $("gen-preview-frame");
+		if (!frame) return null;
+		var v = $("gen-preview-video");
+		if (!v) {
+			v = el("video", "preview-video");
+			v.id = "gen-preview-video";
+			v.controls = true;
+			v.muted = true;
+			v.playsInline = true;
+			v.hidden = true;
+			frame.insertBefore(v, $("gen-preview-empty") || null);
+		}
+		return v;
+	}
+
+	// Returns the active preview media element for the current mode, hiding the
+	// inactive one so only one of <img>/<video> is visible at a time.
+	function activePreviewMedia() {
+		if (window.SDGui.flagCore.getMode() === "vid_gen") {
+			var img = $("gen-preview");
+			if (img) img.hidden = true;
+			return ensurePreviewVideo();
+		}
+		var v = $("gen-preview-video");
+		if (v) v.hidden = true;
+		return $("gen-preview");
+	}
+
+	function resetPreview() {
 		var img = $("gen-preview");
+		if (img) {
+			img.hidden = true;
+			img.removeAttribute("src");
+		}
+		var v = $("gen-preview-video");
+		if (v) {
+			v.hidden = true;
+			v.removeAttribute("src");
+		}
+		var previewEmpty = $("gen-preview-empty");
+		if (previewEmpty) previewEmpty.style.display = "";
+	}
+
+	function refreshPreview(mtime) {
+		var media = activePreviewMedia();
 		var empty = $("gen-preview-empty");
-		if (!img) return;
-		img.src = "/api/generate/preview?t=" + mtime;
-		img.hidden = false;
+		if (!media) return;
+		media.src = "/api/generate/preview?t=" + mtime;
+		media.hidden = false;
+		// Live video preview: muted autoplay so the denoising preview animates.
+		if (media.tagName === "VIDEO" && typeof media.play === "function") {
+			media.play().catch(() => {});
+		}
 		if (empty) empty.style.display = "none";
 	}
 
@@ -1096,13 +861,18 @@ window.SDGui.generateUi = (() => {
 			);
 		}
 		var first = files[0];
+		var firstIsVideo = window.SDGui.gallery.isVideoFile(first);
 		if (actions) {
 			actions.classList.remove("hidden");
 			var openBtn = $("btn-open-result");
 			var sendBtn = $("btn-send-img2img");
 			var dlBtn = $("btn-download-result");
 			if (openBtn) openBtn.onclick = () => openResultFile();
-			if (sendBtn) sendBtn.onclick = () => sendToImg2img(first);
+			// "Send to img2img" only applies to images; hide it for video results.
+			if (sendBtn) {
+				sendBtn.classList.toggle("hidden", firstIsVideo);
+				if (!firstIsVideo) sendBtn.onclick = () => sendToImg2img(first);
+			}
 			if (dlBtn) dlBtn.onclick = () => downloadResult(first);
 		}
 		// Add to history (one entry per result file for batch).
@@ -1293,13 +1063,7 @@ window.SDGui.generateUi = (() => {
 
 		// Reset preview area (only relevant for img_gen/vid_gen, harmless for others).
 		lastPreviewMtime = 0;
-		var img = $("gen-preview");
-		var previewEmpty = $("gen-preview-empty");
-		if (img) {
-			img.hidden = true;
-			img.removeAttribute("src");
-		}
-		if (previewEmpty) previewEmpty.style.display = "";
+		resetPreview();
 		// A9 — reset result frame to its empty state on a fresh run.
 		showResultEmpty(activeConfig().running);
 		setGenerating(true);
@@ -1333,7 +1097,9 @@ window.SDGui.generateUi = (() => {
 		var restoreMode = window.SDGui.flagCore.getMode();
 		window.SDGui.flagCore.setMode("metadata");
 		updateModeSections();
-		generate({ restoreMode: restoreMode === "metadata" ? "img_gen" : restoreMode });
+		generate({
+			restoreMode: restoreMode === "metadata" ? "img_gen" : restoreMode,
+		});
 	}
 
 	async function cancel() {
@@ -1350,7 +1116,7 @@ window.SDGui.generateUi = (() => {
 
 	function handleSectionChange(section) {
 		if (!SECTION_CONFIG[section]) return;
-		activeGenerateSection = section;
+		ctx.setActiveSection(section);
 		moveWorkbenchTo(section);
 		var desiredMode = SECTION_CONFIG[section].mode;
 		if (!routingSection && window.SDGui.flagCore.getMode() !== desiredMode) {
@@ -1362,7 +1128,14 @@ window.SDGui.generateUi = (() => {
 	}
 
 	function init() {
-		moveWorkbenchTo(activeGenerateSection);
+		// Stage 3: hand the control-binding registry its flagCore + the model
+		// select populator (still owned here until Stage 4 moves it into
+		// generateModelFields). Must run before any bind*() call below.
+		ctrl.init({
+			flagCore: window.SDGui.flagCore,
+			populateModelSelect: populateModelSelect,
+		});
+		moveWorkbenchTo(ctx.getActiveSection());
 		// Generate defaults: enable live preview (sd-cli defaults to none).
 		var vals = window.SDGui.flagCore.getFlagValues();
 		if (!vals.preview || vals.preview === "none") {
@@ -1385,7 +1158,6 @@ window.SDGui.generateUi = (() => {
 			window.SDGui.PREVIEW_METHODS,
 			vals.preview,
 		);
-		updateDimensionAffordances();
 
 		// Bundle dropdown.
 		var bundleSelect = $("gen-model-bundle");
@@ -1445,6 +1217,17 @@ window.SDGui.generateUi = (() => {
 		bindNumber("gen-fps", "fps");
 		bindNumber("gen-vace-strength", "vace_strength", true);
 		bindBool("gen-temporal-tiling", "temporal_tiling");
+		// Video start/end frames (image-to-video first frame; flf2v last frame).
+		// init_img shares state with the img2img panel (registered there first, so
+		// this binding becomes a mirror — both inputs read the same flagCore state).
+		bindText("gen-video-init-img", "init_img");
+		bindBrowse("btn-browse-video-init-img", () =>
+			browsePath("init_img", "image", "Select start frame"),
+		);
+		bindText("gen-video-end-img", "end_img");
+		bindBrowse("btn-browse-video-end-img", () =>
+			browsePath("end_img", "image", "Select end frame"),
+		);
 
 		// Upscale mode inputs (init_img shares state with img2img init_img).
 		bindText("gen-upscale-init-img", "init_img");
@@ -1479,95 +1262,12 @@ window.SDGui.generateUi = (() => {
 		var metadataBtn = $("btn-inspect-metadata");
 		if (metadataBtn) metadataBtn.addEventListener("click", inspectMetadata);
 
-		// A6 — dimension W/H swap + ratio chips + snap-to-multiple on blur.
-		// Swap W/H (exact row); the shape/size highlights re-derive from ratio.
-		var swapBtn = $("btn-swap-dims");
-		if (swapBtn) {
-			swapBtn.addEventListener("click", () => {
-				var vals = window.SDGui.flagCore.getFlagValues();
-				window.SDGui.flagCore.setMultipleFlagValues({
-					width: vals.height,
-					height: vals.width,
-				});
-				syncAll();
-				updateDimensionAffordances();
-			});
-		}
-
-		// Shape chips: switch ratio, preserving the current longer edge by
-		// snapping to the nearest quality-correct bucket for that shape.
-		document.querySelectorAll("#gen-dim-shapes .dim-shape").forEach((chip) => {
-			chip.addEventListener("click", () => {
-				var shape = chip.getAttribute("data-shape");
-				lastShape = shape;
-				var vals = window.SDGui.flagCore.getFlagValues();
-				var longEdge = Math.max(
-					Number(vals.width) || 1024,
-					Number(vals.height) || 1024,
-				);
-				var buckets = (window.SDGui.DIMENSION_BUCKETS || {})[shape] || [];
-				var best = null;
-				var bestD = Infinity;
-				buckets.forEach((b) => {
-					var d = Math.abs(b.long - longEdge);
-					if (d < bestD) {
-						bestD = d;
-						best = b;
-					}
-				});
-				if (best) {
-					window.SDGui.flagCore.setMultipleFlagValues({
-						width: best.width,
-						height: best.height,
-					});
-					syncAll();
-				}
-				updateDimensionAffordances();
-			});
-		});
-
-		// Size buttons (delegated — they're rebuilt on every render). A bucket
-		// click sets the exact W/H; Custom opens the exact <details>.
-		var sizesWrap = $("gen-dim-sizes");
-		if (sizesWrap) {
-			sizesWrap.addEventListener("click", (ev) => {
-				var btn = ev.target.closest(".dim-size");
-				if (!btn) return;
-				if (btn.getAttribute("data-long") === "custom") {
-					var adv = $("gen-dim-advanced");
-					if (adv) adv.open = true;
-					var wNode = $("gen-width");
-					if (wNode) wNode.focus();
-					return;
-				}
-				window.SDGui.flagCore.setMultipleFlagValues({
-					width: Number(btn.getAttribute("data-w")),
-					height: Number(btn.getAttribute("data-h")),
-				});
-				syncAll();
-				updateDimensionAffordances();
-			});
-		}
-
-		// Exact dimension inputs: snap to multiples of 8 on blur, and refresh
-		// the shape/size highlights (Custom when off-bucket) on change.
-		["gen-width", "gen-height"].forEach((id) => {
-			var node = $(id);
-			if (node) {
-				node.addEventListener("blur", () => {
-					var snapped = snapDim(node.value);
-					if (snapped !== parseInt(node.value, 10)) {
-						node.value = String(snapped);
-						window.SDGui.flagCore.setFlagValue(
-							id === "gen-width" ? "width" : "height",
-							snapped,
-						);
-					}
-					updateDimensionAffordances();
-				});
-				node.addEventListener("change", updateDimensionAffordances);
-			}
-		});
+		// A6 — dimension widget (shape/size chips + W/H swap + snap-to-multiple).
+		// Stage 2: the entire widget lives in window.SDGui.generateDimensions.
+		// We pass flagCore + syncAll so the widget can write shared state
+		// (Configure tab sync) and refresh non-focused controls after a
+		// local mutation. The widget also paints the initial readout.
+		dims.init({ flagCore: window.SDGui.flagCore, onSyncAll: syncAll });
 
 		// A5 — randomize seed button.
 		var seedBtn = $("btn-random-seed");

@@ -637,6 +637,13 @@ textarea {
 	max-height: 420px;
 	border-radius: var(--radius-sm);
 }
+/* Video results/previews (vid_gen) share the image sizing rules. */
+.preview-video,
+#gen-preview-video {
+	max-width: 100%;
+	max-height: 420px;
+	border-radius: var(--radius-sm);
+}
 
 /* ════════════════════════════════════════════
    COMMAND PREVIEW (Configure placeholder)
@@ -823,13 +830,17 @@ textarea {
 }
 
 .result-frame img,
-.preview-frame img {
+.preview-frame img,
+.result-frame video,
+.preview-frame video {
 	max-width: 100%;
 	max-height: 420px;
 	border-radius: var(--radius-sm);
 }
 .result-frame:has(img),
-.preview-frame:has(img) {
+.preview-frame:has(img),
+.result-frame:has(video),
+.preview-frame:has(video) {
 	border-style: solid;
 	background-image: none;
 }
@@ -922,7 +933,8 @@ textarea {
 	aspect-ratio: 1;
 	background: var(--bg-raised);
 }
-.history-item img {
+.history-item img,
+.history-item video {
 	width: 100%;
 	height: 100%;
 	object-fit: cover;

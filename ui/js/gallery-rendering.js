@@ -21,15 +21,55 @@ window.SDGui.gallery = (() => {
 		return "/api/image/" + encodeURIComponent(name) + "/thumbnail";
 	}
 
+	// Video file extensions sd-cli can emit for vid_gen (.avi/.webm/animated
+	// .webp). Only the Generate Video tab produces these, so branching here keeps
+	// gallery changes specific to video results — image files still render as
+	// <img> exactly as before.
+	var VIDEO_EXTS = { ".webm": true, ".avi": true, ".webp": true };
+
+	function fileExt(name) {
+		var i = String(name || "").lastIndexOf(".");
+		return i >= 0 ? String(name).slice(i).toLowerCase() : "";
+	}
+
+	function isVideoFile(name) {
+		return Object.hasOwn(VIDEO_EXTS, fileExt(name));
+	}
+
+	// Build an <img> or <video> for a result/thumbnail by file extension.
+	// `asThumb` swaps controls for muted autoplay-on-hover behavior in grids.
+	function createMedia(name, altText, bust, asThumb) {
+		var url = imageUrl(name, bust);
+		if (isVideoFile(name)) {
+			var v = el(
+				"video",
+				asThumb ? "result-video result-video-thumb" : "result-video",
+			);
+			v.src = url;
+			if (altText) v.title = altText;
+			v.preload = asThumb ? "metadata" : "auto";
+			if (asThumb) {
+				// Thumb: muted so browsers will show the first frame; no controls.
+				v.muted = true;
+				v.playsInline = true;
+			} else {
+				v.controls = true;
+			}
+			return v;
+		}
+		var img = el("img");
+		img.src = url;
+		img.alt = altText || "result";
+		if (asThumb) img.loading = "lazy";
+		return img;
+	}
+
 	// Render the main result image into a container (clears it first).
 	function renderResultImage(container, name, altText, bust) {
 		if (!container) return;
 		container.replaceChildren();
 		if (!name) return;
-		var img = el("img");
-		img.src = imageUrl(name, bust);
-		img.alt = altText || "result";
-		container.appendChild(img);
+		container.appendChild(createMedia(name, altText, bust, false));
 	}
 
 	// Build a tiny SVG icon button for the history hover toolbar.
@@ -65,24 +105,39 @@ window.SDGui.gallery = (() => {
 		item.setAttribute("data-id", entry.id || "");
 		item.title = entry.prompt || entry.name || "";
 
-		var img = el("img");
-		var src = entry.thumb || (entry.file ? thumbnailUrl(entry.file) : "");
-		img.src = src;
-		img.alt = entry.prompt || "";
-		img.loading = "lazy";
-		// Broken image (e.g. output file deleted on disk): swap to a
-		// "file missing" placeholder so the grid doesn't show a broken icon;
-		// the delete action is then the natural way to prune stale entries.
-		img.addEventListener("error", () => {
-			item.classList.add("is-missing");
-			img.style.display = "none";
-			var ph = el("div", "history-missing");
-			ph.appendChild(toolbarBtn("", "File missing", ICONS.missing));
-			var lbl = el("span", "history-missing-label", "file missing");
-			ph.appendChild(lbl);
-			item.insertBefore(ph, item.firstChild);
-		});
-		item.appendChild(img);
+		var isVideo = isVideoFile(entry.file);
+		if (isVideo) {
+			// Video thumb: muted <video> showing the first frame (no controls).
+			var vThumb = createMedia(entry.file, entry.prompt || "", null, true);
+			vThumb.addEventListener("error", () => {
+				item.classList.add("is-missing");
+				vThumb.style.display = "none";
+				var ph = el("div", "history-missing");
+				ph.appendChild(toolbarBtn("", "File missing", ICONS.missing));
+				ph.appendChild(el("span", "history-missing-label", "file missing"));
+				item.insertBefore(ph, item.firstChild);
+			});
+			item.appendChild(vThumb);
+		} else {
+			var img = el("img");
+			var src = entry.thumb || (entry.file ? thumbnailUrl(entry.file) : "");
+			img.src = src;
+			img.alt = entry.prompt || "";
+			img.loading = "lazy";
+			// Broken image (e.g. output file deleted on disk): swap to a
+			// "file missing" placeholder so the grid doesn't show a broken icon;
+			// the delete action is then the natural way to prune stale entries.
+			img.addEventListener("error", () => {
+				item.classList.add("is-missing");
+				img.style.display = "none";
+				var ph = el("div", "history-missing");
+				ph.appendChild(toolbarBtn("", "File missing", ICONS.missing));
+				var lbl = el("span", "history-missing-label", "file missing");
+				ph.appendChild(lbl);
+				item.insertBefore(ph, item.firstChild);
+			});
+			item.appendChild(img);
+		}
 
 		// Relative timestamp badge.
 		if (typeof opts.timeLabel === "function") {
@@ -177,10 +232,7 @@ window.SDGui.gallery = (() => {
 		container.replaceChildren();
 		(files || []).slice(0, 12).forEach((name) => {
 			var cell = el("div", "history-item");
-			var img = el("img");
-			img.src = imageUrl(name, bust);
-			img.alt = altText || "result";
-			cell.appendChild(img);
+			cell.appendChild(createMedia(name, altText, bust, false));
 			container.appendChild(cell);
 		});
 	}
@@ -190,6 +242,8 @@ window.SDGui.gallery = (() => {
 		renderHistoryGrid: renderHistoryGrid,
 		renderResultGallery: renderResultGallery,
 		createHistoryItem: createHistoryItem,
+		createMedia: createMedia,
+		isVideoFile: isVideoFile,
 		imageUrl: imageUrl,
 		thumbnailUrl: thumbnailUrl,
 	};

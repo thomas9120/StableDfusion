@@ -76,3 +76,22 @@ def test_get_preview_serves_png_with_no_cache_headers(tmp_path, monkeypatch):
     assert handler.wfile.getvalue() == payload
     assert _header(handler, "Content-Type") == "image/png"
     assert _header(handler, "Cache-Control") == "no-store, no-cache, must-revalidate"
+
+
+def test_get_preview_serves_webm_for_vid_gen(tmp_path, monkeypatch):
+    # Phase 6: video previews are multi-frame .webm files; the route must pick
+    # the .webm file (by mode) and serve it as video/webm, not image/png.
+    ctx = _ctx(tmp_path)
+    ctx.paths.output_preview.mkdir(parents=True)
+    payload = b"\x1a\x45\xdf\xa3webm-bytes"
+    (ctx.paths.output_preview / "job1.webm").write_bytes(payload)
+
+    handler = _preview(
+        ctx,
+        monkeypatch,
+        {"state": "running", "job_id": "job1", "mode": "vid_gen"},
+    )
+
+    assert handler.status == 200
+    assert handler.wfile.getvalue() == payload
+    assert _header(handler, "Content-Type") == "video/webm"

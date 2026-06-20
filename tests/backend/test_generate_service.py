@@ -281,3 +281,53 @@ def test_collect_results_includes_non_png(tmp_path):
     names = [p.name for p in results]
     assert f"{base}.gguf" in names
     assert "unrelated.gguf" not in names
+
+
+# ── Phase 6: video mode (vid_gen) output + preview naming ───────────────
+def test_video_mode_output_extension_is_webm():
+    # sd-cli single-file video out supports .avi/.webm/.webp; .webm is the only
+    # one that plays in the in-GUI <video> element, so that's the GUI default.
+    assert generate_service.MODE_OUTPUT_EXT["vid_gen"] == ".webm"
+    assert generate_service.preview_ext_for_mode("vid_gen") == ".webm"
+    assert generate_service.preview_content_type_for_mode("vid_gen") == "video/webm"
+
+
+def test_preview_ext_for_image_modes_is_png():
+    assert generate_service.preview_ext_for_mode("img_gen") == ".png"
+    assert generate_service.preview_ext_for_mode("upscale") == ".png"
+    assert generate_service.preview_content_type_for_mode("img_gen") == "image/png"
+
+
+def test_prepare_vid_gen_uses_webm_output_and_preview(tmp_path):
+    ctx = _ctx(tmp_path)
+    prepared = generate_service._prepare(
+        ctx,
+        {
+            "mode": "vid_gen",
+            "args": [["--diffusion-model", "wan.gguf"], ["--video-frames", "25"]],
+            "seed": 7,
+            "total_steps": 30,
+            "preview_method": "vae",
+            "params": {
+                "diffusion_model": "wan.gguf",
+                "video_frames": 25,
+                "fps": 16,
+                "vace_strength": 0.6,
+                "end_img": "output/last.png",
+            },
+        },
+    )
+    assert prepared["output_path"].suffix == ".webm"
+    # Preview must match the video extension so the live <video> can render it.
+    assert prepared["preview_path"].suffix == ".webm"
+    # argv carries -M vid_gen and the -o .webm path.
+    assert "-M" in prepared["argv"]
+    assert prepared["argv"][prepared["argv"].index("-M") + 1] == "vid_gen"
+    assert prepared["argv"][prepared["argv"].index("-o") + 1].endswith(".webm")
+    # Sidecar records the video-specific params for history restore.
+    side = prepared["sidecar"]
+    assert side["video_frames"] == 25
+    assert side["fps"] == 16
+    assert side["vace_strength"] == 0.6
+    assert side["end_img"] == "output/last.png"
+    assert side["mode"] == "vid_gen"

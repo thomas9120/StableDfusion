@@ -43,13 +43,48 @@ MODEL_REQUIRED_MODES = ("img_gen", "vid_gen", "convert")
 # Per-mode default output extension. The backend owns -o / --output naming so
 # gallery sidecars can locate results; the extension must match what sd-cli
 # will actually write for that mode.
+#
+# vid_gen: sd-cli single-file video outputs support .avi/.webm/animated .webp
+# (verified via `sd-cli -h`, commit 92a3b73). We use .webm because it is the only
+# one of the three that plays in the in-GUI <video> element (Chrome/Edge/Firefox)
+# — .avi is not browser-playable and animated .webp has no playback controls.
 MODE_OUTPUT_EXT = {
     "img_gen": ".png",
-    "vid_gen": ".png",
+    "vid_gen": ".webm",
     "upscale": ".png",
     "convert": ".gguf",  # sd-cli's convert target; user can override via custom args
     "metadata": ".txt",  # never written (stdout-only); sentinel for pathing
 }
+
+# Per-mode --preview-path extension. sd-cli multi-frame previews support
+# .avi/.webm/.webp (image modes stay .png). Must agree with MODE_OUTPUT_EXT's
+# video choice so the live preview renders in a <video> element.
+MODE_PREVIEW_EXT = {
+    "img_gen": ".png",
+    "vid_gen": ".webm",
+    "upscale": ".png",
+    "convert": ".png",
+    "metadata": ".png",
+}
+
+# Content-Type for a preview file by extension (used by the preview route).
+PREVIEW_CONTENT_TYPES = {
+    ".png": "image/png",
+    ".webm": "video/webm",
+    ".avi": "video/x-msvideo",
+    ".webp": "image/webp",
+}
+
+
+def preview_ext_for_mode(mode: str) -> str:
+    """Preview file extension for a mode (.webm for video, else .png)."""
+    return MODE_PREVIEW_EXT.get(mode, ".png")
+
+
+def preview_content_type_for_mode(mode: str) -> str:
+    """HTTP Content-Type for the preview file of a mode."""
+    return PREVIEW_CONTENT_TYPES.get(preview_ext_for_mode(mode), "application/octet-stream")
+
 
 # Modes that produce a file under output/ (vs. writing to stdout).
 FILE_PRODUCING_MODES = ("img_gen", "vid_gen", "upscale", "convert")
@@ -247,7 +282,8 @@ def _prepare(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
     base_name = f"{ts}_{seed_label}"
     ext = MODE_OUTPUT_EXT.get(mode, ".png")
     output_path = ctx.paths.output / f"{base_name}{ext}"
-    preview_path = ctx.paths.output_preview / f"{base_name}.png"
+    preview_ext = preview_ext_for_mode(mode)
+    preview_path = ctx.paths.output_preview / f"{base_name}{preview_ext}"
 
     argv = build_argv(user_args, mode, output_path, preview_path, preview_method)
 
@@ -278,6 +314,13 @@ def _prepare(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
         "upscale_model": params.get("upscale_model", ""),
         "convert_name": params.get("convert_name", ""),
         "metadata_format": params.get("metadata_format", ""),
+        # Video-specific params (vid_gen) — recorded so history restore and the
+        # gallery sidecar carry the full generation context.
+        "video_frames": params.get("video_frames"),
+        "fps": params.get("fps"),
+        "vace_strength": params.get("vace_strength"),
+        "end_img": params.get("end_img", ""),  # last frame (flf2v)
+        "control_video": params.get("control_video", ""),
         "timestamp": ts,
         "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
     }
