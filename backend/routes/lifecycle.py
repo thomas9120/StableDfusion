@@ -1,47 +1,45 @@
-"""Server lifecycle routes. TODO(Phase 1).
+"""Server lifecycle routes.
 
 - POST /api/shutdown
 - POST /api/restart
 - POST /api/open-folder
 """
 
-import subprocess
-import sys
-import threading
-
 from backend.context import AppContext
-from backend.http import Request, Response
+from backend.http import Request, Response, sanitize_error
 from backend.services import lifecycle_service
 
-
-def _shutdown_target(ctx: AppContext) -> None:
-    lifecycle_service.shutdown(ctx)
-    sys.exit(0)
+# Known folders the Install tab can open. Anything else is rejected.
+FOLDER_MAP_KEYS = {"models", "output", "sdcpp", "presets", "root"}
 
 
 def post_shutdown(request: Request, response: Response, ctx: AppContext) -> None:
-    response.json({"shutting_down": True})
-    threading.Thread(target=_shutdown_target, args=(ctx,), daemon=True).start()
+    shutting_down = lifecycle_service.shutdown_gui_server(ctx)
+    response.json({"shutting_down": shutting_down})
 
 
 def post_restart(request: Request, response: Response, ctx: AppContext) -> None:
-    # TODO(Phase 1): re-exec server.py like LLama-GUI.
-    response.error("Restart not implemented yet (Phase 1)", 501)
+    restarting = lifecycle_service.restart_gui_server(ctx)
+    response.json({"restarting": restarting})
 
 
 def post_open_folder(request: Request, response: Response, ctx: AppContext) -> None:
-    target = (request.body or {}).get("path", "")
-    if not target:
-        response.error("Missing path", 400)
+    body = request.body or {}
+    folder = str(body.get("folder", "models")).strip().lower()
+    if folder not in FOLDER_MAP_KEYS:
+        response.error(f"Unknown folder: {folder}", 400)
         return
-    # TODO(Phase 1): validate target is within known dirs before opening.
+    folder_paths = {
+        "models": ctx.paths.models,
+        "output": ctx.paths.output,
+        "sdcpp": ctx.paths.sdcpp,
+        "presets": ctx.paths.presets,
+        "root": ctx.paths.root,
+    }
+    target = folder_paths[folder]
+    target.mkdir(parents=True, exist_ok=True)
     try:
-        if sys.platform == "win32":
-            subprocess.Popen(["explorer", str(target)])
-        elif sys.platform == "darwin":
-            subprocess.Popen(["open", str(target)])
-        else:
-            subprocess.Popen(["xdg-open", str(target)])
+        lifecycle_service.open_folder_in_file_manager(target)
         response.json({"opened": True})
     except Exception as exc:
-        response.error(str(exc), 500)
+        response.error(sanitize_error(exc, 500), 500)

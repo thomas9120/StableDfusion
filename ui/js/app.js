@@ -1,4 +1,4 @@
-// Main orchestration: tab switching, module init, status badge polling.
+// Main orchestration: tab switching, module init, status polling.
 // Mirrors LLama-GUI's app.js (trimmed: no chat/benchmark wiring).
 window.SDGui = window.SDGui || {};
 
@@ -18,14 +18,24 @@ window.SDGui = window.SDGui || {};
 		});
 	}
 
+	// Lightweight sidebar-badge refresh. The Install tab's full status render
+	// (executables, repair, etc.) is owned by manager.checkStatus(); we reuse
+	// it when available so the badge + install panel stay in sync.
 	async function refreshStatusBadge() {
 		try {
+			if (window.SDGui.manager && window.SDGui.manager.checkStatus) {
+				await window.SDGui.manager.checkStatus();
+				return;
+			}
 			var data = await window.SDGui.fetchJson("/api/status");
 			var badge = document.getElementById("version-badge");
-			if (badge && data && data.installed && data.installed.tag) {
+			if (badge && data && data.installed) {
 				badge.textContent =
-					data.installed.tag + " / " + (data.installed.backend || "?");
-				badge.classList.remove("badge-neutral");
+					(data.installed_version_name || data.version) +
+					" (" +
+					(data.backend || "?") +
+					")";
+				badge.className = "badge badge-green";
 			}
 		} catch (e) {
 			/* server may be busy starting up; ignore */

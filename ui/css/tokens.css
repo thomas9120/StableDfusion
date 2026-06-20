@@ -1,7 +1,72 @@
-/* Theme tokens — minimal dark theme placeholder. TODO: full SD palette (Phase 1). */
+/* Theme tokens — Tokyo-Night-inspired dark palette with an SD accent.
+   Token names mirror LLama-GUI so component CSS ports cleanly. */
 :root {
-	--bg: #0b0e14;
-	--panel: #11151f;
-	--text: #c0caf5;
+	--bg-base: #0f111a;
+	--bg-surface: #161824;
+	--bg-raised: #1c1f2e;
+	--bg-elevated: #232738;
+	--bg-hover: #2a2e42;
+
+	--fg: #c0caf5;
+	--fg-muted: #8b91b0;
+	--fg-bright: #eaecf8;
+	--fg-faint: #555a74;
+
+	/* SD accent: a slightly warmer indigo than LLama-GUI's blue. */
 	--accent: #7aa2f7;
+	--accent-hover: #9ab8ff;
+	--accent-subtle: rgba(122, 162, 247, 0.12);
+	--accent-border: rgba(122, 162, 247, 0.3);
+
+	--green: #9ece6a;
+	--green-subtle: rgba(158, 206, 106, 0.12);
+	--green-border: rgba(158, 206, 106, 0.3);
+
+	--red: #f7768e;
+	--red-subtle: rgba(247, 118, 142, 0.12);
+	--red-border: rgba(247, 118, 142, 0.3);
+
+	--yellow: #e0af68;
+	--yellow-subtle: rgba(224, 175, 104, 0.12);
+	--yellow-border: rgba(224, 175, 104, 0.3);
+
+	--cyan: #7dcfff;
+	--magenta: #bb9af7;
+
+	--border: rgba(255, 255, 255, 0.06);
+	--border-strong: rgba(255, 255, 255, 0.1);
+
+	--radius-xs: 4px;
+	--radius-sm: 6px;
+	--radius-md: 10px;
+	--radius-lg: 14px;
+
+	--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+	--shadow-md: 0 4px 12px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.15);
+	--shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.2);
+	--shadow-accent: 0 2px 12px rgba(122, 162, 247, 0.25);
+
+	--font: "Inter", system-ui, -apple-system, sans-serif;
+	--mono: "JetBrains Mono", "Cascadia Code", "Fira Code", monospace;
+
+	--space-1: 4px;
+	--space-2: 8px;
+	--space-3: 12px;
+	--space-4: 16px;
+	--space-5: 20px;
+	--space-6: 24px;
+
+	--ease-fast: 0.12s ease;
+	--ease-med: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+	--sidebar-w: 230px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		transition-duration: 0s !important;
+		animation-duration: 0s !important;
+	}
 }

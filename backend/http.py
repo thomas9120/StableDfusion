@@ -72,9 +72,21 @@ def get_access_control_origin(headers, allowed_origins):
     return f"http://{config.GUI_HOST}:{config.GUI_PORT}"
 
 
-def sanitize_error(exc) -> dict:
-    """Return a client-safe error dict. Real details go to stderr by the caller."""
-    return {"error": str(exc) if exc else "Unknown error"}
+def sanitize_error(exc, status: int = 500) -> str:
+    """Return a client-safe error message.
+
+    For 5xx errors the client receives a generic placeholder so filesystem
+    paths, tracebacks, and host details never leak through the tunnel. For 4xx
+    the original message is preserved (intentional validation responses). The
+    raw exception is logged to stderr.
+    """
+    import sys as _sys
+
+    detail = str(exc) if exc else "Unknown error"
+    if status >= 500:
+        print(f"[sanitize_error] {type(exc).__name__}: {detail}", file=_sys.stderr)
+        return "Internal server error"
+    return detail
 
 
 class Request:

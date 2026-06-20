@@ -11,13 +11,22 @@ Mirrors the roadmap in `../PLAN.md` §15. Check items off as they land.
 - [x] Frontend shell: 5-tab `index.html` + JS module namespaces
 - [x] `PLAN.md`, `AGENTS.md`, `README.md`, `requirements.txt`, `package.json`
 
-## Phase 1 — Install + backend core
+## Phase 1 — Install + backend core ✅
 
-- [ ] `sdcpp_manager`: release fetch + suffix-pattern asset match + download + sha256 + extract
-- [ ] `install` route + `manager.js`: backend select, install/update/repair/remove
-- [ ] `/api/select-file` (tkinter), lifecycle (shutdown/restart/open-folder), git-update
-- [ ] Confirm release SHA256 source (per-asset `.sha256` vs single sumfile)
-- [ ] Verify: install a Windows release, capture `sd-cli -h`
+- [x] `sdcpp_manager`: release fetch + glob-pattern asset match + download + extract
+- [x] `install` route + `manager.js`: backend select, install/update/repair/remove
+- [x] `/api/select-file` (tkinter/osascript), lifecycle (shutdown/restart/open-folder), git-update
+- [x] `process_manager`: launch/stream/stop + shared-lib env builder (core plumbing for Phase 2/5)
+- [x] Release SHA256 source confirmed: **upstream ships none** → verification skipped with a stderr warning (resolves PLAN.md §16 #3)
+- [x] Backend unit tests: asset-pattern matcher (incl. macOS version-wildcard + avx/avx2/avx512 disambiguation) + arg flattening
+- [x] Verify: installed a Windows AVX2 release, captured `sd-cli -h` (commit 92a3b73)
+
+**Notes**
+
+- Asset matching is glob-based (`fnmatch`), not tag-derived — macOS variant uses `*-bin-Darwin-macOS-*-arm64.zip` to survive build-OS version bumps.
+- `save_config`/`BackendServices` type contract fixed: param widened to `Mapping[str, Any]`.
+- `tunnel_service.stop_remote_tunnel` added as a Phase 1 no-op so lifecycle can call it unconditionally (real cloudflared logic is Phase 5).
+- Removed `tests/backend/__init__.py` — it made pytest import tests as a `backend` package, colliding with the app's `backend/`.
 
 ## Phase 2 — Generate (txt2img)
 

@@ -15,6 +15,8 @@ import socket
 import ssl
 import sys
 import urllib.parse
+from collections.abc import Mapping
+from typing import Any
 
 from . import config
 from .context import DEFAULT_CONTEXT
@@ -78,6 +80,12 @@ def _create_ssl_context():
     return ssl.create_default_context()
 
 
+def urlopen_with_ssl(request, timeout):
+    import urllib.request
+
+    return urllib.request.urlopen(request, timeout=timeout, context=_create_ssl_context())
+
+
 def get_platform_label() -> str:
     if CURRENT_PLATFORM == "win32":
         return "Windows"
@@ -110,7 +118,7 @@ def load_config() -> dict:
     return {"version": None, "backend": None, "tag": None}
 
 
-def save_config(cfg: dict) -> None:
+def save_config(cfg: Mapping[str, Any]) -> None:
     config.CONFIG_FILE.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
 
 
@@ -127,6 +135,7 @@ def configure_services(ctx=APP_CONTEXT) -> None:
     ctx.services.load_config = load_config
     ctx.services.save_config = save_config
     ctx.services.ssl_context = _create_ssl_context()
+    ctx.services.urlopen_with_ssl = urlopen_with_ssl
 
 
 def _build_backend_specs() -> dict:

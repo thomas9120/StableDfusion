@@ -404,12 +404,16 @@ For users who want a persistent API / the embedded web UI:
 
 Directory structure, bootable `server.py` + `backend/app.py` serving a placeholder UI, generic core (`config/context/state/http/routing`), stubbed routes/services with TODOs, stub frontend modules with `window.SDGui` namespaces, `PLAN.md`, `AGENTS.md`, `README.md`, `requirements.txt`, `package.json`, `.gitignore`.
 
-### Phase 1 — Install + backend core (next)
+### Phase 1 — Install + backend core ✅
 
-- `sdcpp_manager.py`: real release fetch + pattern-based asset matching + download + sha256 + extract.
-- `install.py` route + `manager.js` UI: backend select, install/update/repair/remove.
-- `/api/status`, `/api/select-file`, lifecycle (shutdown/restart/open-folder), git-update.
-- **Verify:** install a release on Windows, see `sd-cli -h` output captured via a scratch run.
+- `sdcpp_manager.py`: real release fetch (60s cache) + **glob-pattern asset matching** (not tag-derived) + streaming download + flat zip extract + CUDA companion asset + `remove_sdcpp_files` + macOS `validate_runtime_dependencies`.
+- `process_manager.py`: launch/stream/stop + shared-lib env builder (PATH/LD/DYLD prepend) + Windows `CREATE_NEW_PROCESS_GROUP` — core plumbing reused by Phase 2/5.
+- `install.py` + `status.py` + `lifecycle.py` routes, `manager.js` UI (release/backend select, install/update/repair/remove, progress polling, installed-info, folders, maintenance, app-update).
+- `/api/select-file` (tkinter + osascript, 12 SD-purpose filters), lifecycle (shutdown/restart/open-folder), git-update (safe-dirty-path classification).
+- Backend unit tests: asset-pattern matcher + arg flattening (12 passing).
+- **Verify:** ✅ installed Windows AVX2 build `master-709-92a3b73`, captured `sd-cli -h` / `--version` (commit 92a3b73).
+- **Resolved §16 #3:** upstream ships **no** SHA256 → verification conditionally skipped with a stderr warning (no sumfile, no per-asset `.sha256`, GitHub `assets[]` carries none).
+- **Notable:** `save_config`/`BackendServices` type contract fixed (param widened to `Mapping[str, Any]`); `tunnel_service.stop_remote_tunnel` added as a Phase 1 no-op so lifecycle is Phase-5-safe; `.gitkeep` preserved across install/cleanup.
 
 ### Phase 2 — Generate (txt2img)
 
