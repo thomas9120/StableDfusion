@@ -24,6 +24,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import urllib.request
 import zipfile
 from collections.abc import Callable, Iterable, Mapping
@@ -35,8 +36,10 @@ from ..context import AppContext
 RPATH_LIBRARY_RE = re.compile(r"^\s*@rpath/([^\s(]+)")
 
 # Short-term in-memory cache so the Install tab doesn't hammer GitHub on every
-# poll. Bypassed by passing force=True (e.g. a manual refresh).
+# poll. Bypassed by passing force=True (e.g. a manual refresh). Protected by a
+# lock so concurrent requests to /api/releases don't race on reads/writes.
 _RELEASES_CACHE: dict[str, Any] = {"data": None, "fetched_at": 0.0}
+_RELEASES_CACHE_LOCK = threading.Lock()
 _RELEASES_CACHE_TTL = 60.0
 
 
@@ -124,9 +127,10 @@ def get_releases(ctx: AppContext, force: bool = False) -> list[dict[str, Any]]:
     import time
 
     now = time.time()
-    if not force and _RELEASES_CACHE["data"] is not None:
-        if now - _RELEASES_CACHE["fetched_at"] < _RELEASES_CACHE_TTL:
-            return _RELEASES_CACHE["data"]
+    with _RELEASES_CACHE_LOCK:
+        if not force and _RELEASES_CACHE["data"] is not None:
+            if now - _RELEASES_CACHE["fetched_at"] < _RELEASES_CACHE_TTL:
+                return _RELEASES_CACHE["data"]
 
     req = urllib.request.Request(
         ctx.config.github_api,
@@ -134,8 +138,9 @@ def get_releases(ctx: AppContext, force: bool = False) -> list[dict[str, Any]]:
     )
     with ctx.services.urlopen_with_ssl(req, timeout=30) as resp:
         data = json.loads(resp.read())
-    _RELEASES_CACHE["data"] = data
-    _RELEASES_CACHE["fetched_at"] = now
+    with _RELEASES_CACHE_LOCK:
+        _RELEASES_CACHE["data"] = data
+        _RELEASES_CACHE["fetched_at"] = now
     return data
 
 

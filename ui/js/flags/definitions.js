@@ -128,7 +128,7 @@ window.SDGui.SD_CLI_FLAGS = [
 		category: "sampling",
 		label: "Image CFG scale",
 		desc: "Image guidance scale for inpaint or image-edit models.",
-		default: "",
+		default: 0,
 		mode: ["img_gen", "vid_gen"],
 	},
 	{

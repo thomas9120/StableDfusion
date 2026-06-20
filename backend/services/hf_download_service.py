@@ -103,7 +103,7 @@ def get_repo_files(
     except Exception as exc:
         # Translate the underlying HfHubHTTPError / RepositoryNotFoundError into
         # a string the route layer can return as a 4xx message.
-        raise _RepoListingError(str(exc)) from exc
+        raise RepoListingError(str(exc)) from exc
 
     # Build name → size map (best-effort; missing sizes are reported as 0).
     sizes: dict[str, int] = {}
@@ -135,7 +135,7 @@ def get_repo_files(
     }
 
 
-class _RepoListingError(Exception):
+class RepoListingError(Exception):
     """Raised when HF repo listing fails; the route returns 4xx."""
 
 

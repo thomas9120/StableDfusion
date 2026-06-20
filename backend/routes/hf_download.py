@@ -25,7 +25,7 @@ def list_repo_files(request: Request, response: Response, ctx: AppContext) -> No
         return
     try:
         response.json(hf_download_service.get_repo_files(ctx, repo_id, revision, token))
-    except hf_download_service._RepoListingError as exc:
+    except hf_download_service.RepoListingError as exc:
         # 502: we reached HuggingFace but it rejected the request (not found,
         # unauthorized, rate-limited, etc.).
         response.error(f"Hugging Face: {exc}", 502)

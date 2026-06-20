@@ -206,7 +206,14 @@ window.SDGui.generateUi = (() => {
 		var fields = bundle ? bundle.fields : null;
 
 		var fieldList;
-		if (fields === "all") {
+		if (fields && fields.length) {
+			fieldList = fields.map((f) => ({
+				key: f.key,
+				purpose: f.purpose || f.key,
+				required: !!f.required,
+			}));
+		} else {
+			// Custom / empty bundle: show all model-component field pickers.
 			fieldList = [
 				"model",
 				"diffusion_model",
@@ -230,12 +237,6 @@ window.SDGui.generateUi = (() => {
 				key: key,
 				purpose: (window.SDGui.BUNDLE_FIELD_PURPOSES || {})[key] || key,
 				required: false,
-			}));
-		} else {
-			fieldList = (fields || []).map((f) => ({
-				key: f.key,
-				purpose: f.purpose || f.key,
-				required: !!f.required,
 			}));
 		}
 

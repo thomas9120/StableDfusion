@@ -76,11 +76,11 @@ Mirrors the roadmap in `../PLAN.md` §15. Check items off as they land.
 - **#3 img2img end-to-end**: Same pipeline with `--strength 0.6` + `-i output/<previous>.png`. New file produced in ~6s; sidecar records the `init_img` (strength also added to the sidecar after a quick patch — verified by the unit tests, would re-emit cleanly on next run).
 - Full FLUX schnell bundle download (12 GB across multiple gated repos) was deliberately scoped down — the *FLUX VAE* route surfaced HuggingFace gating (401 on `black-forest-labs/FLUX.1-schnell`), confirming the auth/bearer header path. A gated-repo run is a follow-up.
 
-## Phase 4 — Configure parity + Presets
+## Phase 4 — Configure parity + Presets ✅
 
-- [ ] Expand `definitions.js` to full sd-cli flag set (verify vs `-h` / `common.cpp`)
-- [ ] `presets` route + `presets.js` (CRUD, import/export, grouped by model type)
-- [ ] Custom launch args parser + command preview
+- [x] Expand `definitions.js` to full sd-cli flag set (verify vs `-h` / `common.cpp`)
+- [x] `presets` route + `presets.js` (CRUD, import/export, grouped by model type)
+- [x] Custom launch args parser + command preview
 
 ## Phase 5 — Server mode + API + tunnel
 

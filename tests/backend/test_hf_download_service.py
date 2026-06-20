@@ -377,7 +377,7 @@ def test_get_repo_files_translates_listing_error(tmp_path, monkeypatch):
     monkeypatch.setattr(hf_download_service, "HfApi", lambda token=None: _BoomApi([]))
     try:
         hf_download_service.get_repo_files(_ctx(tmp_path), "owner/repo")
-    except hf_download_service._RepoListingError as exc:
+    except hf_download_service.RepoListingError as exc:
         assert "Repository Not Found" in str(exc)
         return
-    raise AssertionError("expected _RepoListingError")
+    raise AssertionError("expected RepoListingError")

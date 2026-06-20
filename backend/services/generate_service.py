@@ -97,8 +97,33 @@ def parse_step_progress(output: str) -> tuple[int, int] | None:
     return last
 
 
+def _strip_owned_pairs(pairs: list[Any], owned_flags: tuple[str, ...]) -> list[Any]:
+    """Remove any pair whose flag is backend-owned (e.g. -o / --preview-path).
+
+    Operates on the structured [flag, value] pair form so a user-supplied value
+    that happens to equal a flag name (e.g. a prompt that starts with ``-o``)
+    is never mistaken for a flag.
+    """
+    flagset = set(owned_flags)
+    out: list[Any] = []
+    for pair in pairs or []:
+        if not isinstance(pair, (list, tuple)) or not pair:
+            out.append(pair)
+            continue
+        flag = str(pair[0])
+        if flag in flagset:
+            continue
+        out.append(pair)
+    return out
+
+
 def _strip_value_flags(tokens: list[str], flags: tuple[str, ...]) -> list[str]:
-    """Remove each occurrence of ``flags`` and the value that follows it."""
+    """Remove each occurrence of ``flags`` and the value that follows it.
+
+    Kept as a defensive fallback for flat argv lists that may arrive from
+    non-pair callers. ``build_argv`` now strips from the structured pair form
+    via ``_strip_owned_pairs`` first, so this is only reached as a second layer.
+    """
     flagset = set(flags)
     out: list[str] = []
     i = 0
@@ -130,14 +155,15 @@ def build_argv(
     """Assemble the final sd-cli argv from user pairs + backend-owned args.
 
     Pure & unit-testable. ``user_args`` is the list of [flag, value?] pairs from
-    the frontend's getLaunchArgs(); it is flattened, override-stripped, and the
-    backend's -M / -o / --preview-path are injected. A --preview method is
-    ensured so the live preview file is written.
+    the frontend's getLaunchArgs(); backend-owned flags are stripped from the
+    structured pair form before flattening so a user-supplied value that happens
+    to equal a flag name is never mistaken for an override.
     """
     if mode not in SD_MODES:
         raise ValueError(f"Invalid mode: {mode!r}")
 
-    flat = process_manager.flatten_launch_args(user_args)
+    stripped = _strip_owned_pairs(user_args, BACKEND_OWNED_VALUE_FLAGS)
+    flat = process_manager.flatten_launch_args(stripped)
     _validate_tokens(flat)
     cleaned = _strip_value_flags(flat, BACKEND_OWNED_VALUE_FLAGS)
 
@@ -316,18 +342,7 @@ def _run_job(
 
     ctx.state.generation.update(
         state="running",
-        job_id=job_id,
-        mode=mode,
-        step=0,
-        total_steps=total_steps,
-        percent=0,
         message="Starting sd-cli…",
-        started_at=time.time(),
-        finished_at=0.0,
-        preview_mtime=0,
-        result_files=[],
-        seed=sidecar.get("seed"),
-        error="",
     )
 
     launch = process_manager.launch_process(ctx, "sd-cli", argv)

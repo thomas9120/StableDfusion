@@ -14,24 +14,21 @@ window.SDGui.MODEL_TYPE_BUNDLES = [
 	{
 		value: "sd1",
 		label: "SD 1.x / 2.x",
-		mode: "img_gen",
 		fields: [{ key: "model", purpose: "model", required: true }],
-		defaults: { width: 512, height: 512, steps: 20, cfg_scale: 7.0 },
+		defaults: { mode: "img_gen", width: 512, height: 512, steps: 20, cfg_scale: 7.0 },
 	},
 	{
 		value: "sdxl",
 		label: "SDXL / SDXL-Turbo",
-		mode: "img_gen",
 		fields: [
 			{ key: "model", purpose: "model", required: true },
 			{ key: "vae", purpose: "vae", required: false },
 		],
-		defaults: { width: 1024, height: 1024, steps: 20, cfg_scale: 7.0 },
+		defaults: { mode: "img_gen", width: 1024, height: 1024, steps: 20, cfg_scale: 7.0 },
 	},
 	{
 		value: "sd3",
 		label: "SD3 / SD3.5",
-		mode: "img_gen",
 		fields: [
 			{ key: "model", purpose: "model", required: true },
 			{ key: "clip_l", purpose: "clip_l", required: false },
@@ -39,6 +36,7 @@ window.SDGui.MODEL_TYPE_BUNDLES = [
 			{ key: "t5xxl", purpose: "t5xxl", required: false },
 		],
 		defaults: {
+			mode: "img_gen",
 			width: 1024,
 			height: 1024,
 			steps: 30,
@@ -49,7 +47,6 @@ window.SDGui.MODEL_TYPE_BUNDLES = [
 	{
 		value: "flux1",
 		label: "FLUX.1 (dev/schnell)",
-		mode: "img_gen",
 		fields: [
 			{ key: "diffusion_model", purpose: "diffusion_model", required: true },
 			{ key: "vae", purpose: "vae", required: true },
@@ -57,6 +54,7 @@ window.SDGui.MODEL_TYPE_BUNDLES = [
 			{ key: "t5xxl", purpose: "t5xxl", required: true },
 		],
 		defaults: {
+			mode: "img_gen",
 			width: 1024,
 			height: 1024,
 			steps: 4,
@@ -67,29 +65,26 @@ window.SDGui.MODEL_TYPE_BUNDLES = [
 	{
 		value: "flux2",
 		label: "FLUX.2",
-		mode: "img_gen",
 		fields: [
 			{ key: "diffusion_model", purpose: "diffusion_model", required: true },
 			{ key: "vae", purpose: "vae", required: true },
 			{ key: "llm", purpose: "llm", required: true },
 		],
-		defaults: { width: 1024, height: 1024, cfg_scale: 1.0 },
+		defaults: { mode: "img_gen", width: 1024, height: 1024, cfg_scale: 1.0 },
 	},
 	{
 		value: "qwen_image",
 		label: "Qwen-Image / Edit",
-		mode: "img_gen",
 		fields: [
 			{ key: "diffusion_model", purpose: "diffusion_model", required: true },
 			{ key: "vae", purpose: "vae", required: true },
 			{ key: "llm", purpose: "llm", required: true },
 		],
-		defaults: { width: 1328, height: 1328 },
+		defaults: { mode: "img_gen", width: 1328, height: 1328 },
 	},
 	{
 		value: "wan",
 		label: "Wan2.1 / 2.2 (video)",
-		mode: "vid_gen",
 		fields: [
 			{ key: "diffusion_model", purpose: "diffusion_model", required: true },
 			{ key: "vae", purpose: "vae", required: true },
@@ -100,20 +95,18 @@ window.SDGui.MODEL_TYPE_BUNDLES = [
 	{
 		value: "z_image",
 		label: "Z-Image",
-		mode: "img_gen",
 		fields: [
 			{ key: "diffusion_model", purpose: "diffusion_model", required: true },
 			{ key: "vae", purpose: "vae", required: true },
 			{ key: "llm", purpose: "llm", required: true },
 		],
-		defaults: { diffusion_fa: true, offload_to_cpu: true, cfg_scale: 1.0 },
+		defaults: { mode: "img_gen", diffusion_fa: true, offload_to_cpu: true, cfg_scale: 1.0 },
 	},
 	{
 		value: "custom",
 		label: "Custom (show all fields)",
-		mode: "img_gen",
-		fields: "all",
-		defaults: {},
+		fields: [],
+		defaults: { mode: "img_gen" },
 	},
 ];
 
