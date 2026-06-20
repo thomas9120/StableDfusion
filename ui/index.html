@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>Stable-D GUI — stable-diffusion.cpp Launcher</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>🎨</text></svg>"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/css/tokens.css" />
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body>
+    <div class="toast-container" id="toast-container"></div>
+
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+          <div class="sidebar-logo">🎨</div>
+          <div>
+            <div class="sidebar-title">Stable-D GUI</div>
+            <div class="sidebar-subtitle">stable-diffusion.cpp</div>
+          </div>
+        </div>
+
+        <nav class="sidebar-nav">
+          <div class="nav-section-label">Setup</div>
+          <button class="nav-item" data-section="install">
+            <span class="icon">⬇️</span> Install
+          </button>
+          <button class="nav-item active" data-section="generate">
+            <span class="icon">⚡</span> Generate
+          </button>
+          <button class="nav-item" data-section="configure">
+            <span class="icon">🛠️</span> Configure
+          </button>
+
+          <div class="nav-section-label">Serve</div>
+          <button class="nav-item" data-section="server">
+            <span class="icon">🌐</span> Server &amp; API
+          </button>
+
+          <div class="nav-section-label">Manage</div>
+          <button class="nav-item" data-section="presets">
+            <span class="icon">📑</span> Presets
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <span id="version-badge" class="badge badge-neutral"
+            >Not Installed</span
+          >
+        </div>
+      </aside>
+
+      <div class="main-content">
+        <!-- ═══ INSTALL ═══ -->
+        <div class="section-panel" id="section-install" style="display: none">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Install stable-diffusion.cpp</div>
+              <div class="page-title-sub">
+                Download releases, select a backend, manage binaries.
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div id="install-status" class="status-box">
+              TODO(Phase 1): release listing, backend select,
+              install/update/repair/remove.
+            </div>
+            <div class="form-group">
+              <label class="form-label">Version</label>
+              <select id="release-select">
+                <option value="">Loading…</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Backend</label>
+              <select id="backend-select">
+                <option value="">Loading…</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <button id="btn-install" class="btn btn-primary">Install</button>
+              <button id="btn-update" class="btn">Check for Updates</button>
+            </div>
+            <div id="download-progress" class="progress-container hidden">
+              <div class="progress-bar">
+                <div id="progress-fill" class="progress-fill"></div>
+              </div>
+              <span id="progress-text">0%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══ GENERATE (primary) ═══ -->
+        <div class="section-panel" id="section-generate">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Generate</div>
+              <div class="page-title-sub">
+                Prompt → run sd-cli → live preview → gallery + history.
+              </div>
+            </div>
+          </div>
+          <div class="generate-grid">
+            <div class="card">
+              <div class="form-group">
+                <label class="form-label">Mode</label>
+                <select id="gen-mode">
+                  <option value="img_gen">
+                    Text-to-Image / Image-to-Image
+                  </option>
+                  <option value="vid_gen">Video</option>
+                  <option value="upscale">Upscale (RealESRGAN)</option>
+                  <option value="convert">Convert (→ GGUF)</option>
+                  <option value="metadata">Read Metadata</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Model type bundle</label>
+                <select id="gen-model-bundle">
+                  <option value="">Loading…</option>
+                </select>
+              </div>
+              <div id="gen-model-components" class="form-group">
+                <!-- bundle-driven file pickers rendered by generate-ui.js -->
+                <p class="help-text">
+                  TODO(Phase 2/3): model component pickers.
+                </p>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Prompt</label>
+                <textarea
+                  id="gen-prompt"
+                  rows="3"
+                  placeholder="a lovely cat"
+                ></textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Negative prompt</label>
+                <textarea id="gen-negative" rows="2"></textarea>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Width</label>
+                  <input type="number" id="gen-width" value="512" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Height</label>
+                  <input type="number" id="gen-height" value="512" />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Steps</label>
+                  <input type="number" id="gen-steps" value="20" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">CFG scale</label>
+                  <input type="number" id="gen-cfg" step="0.1" value="7.0" />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Sampler</label>
+                  <select id="gen-sampler">
+                    <option>euler</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Seed</label>
+                  <input type="number" id="gen-seed" value="42" />
+                </div>
+              </div>
+              <button id="btn-generate" class="btn btn-primary">
+                Generate
+              </button>
+              <button id="btn-generate-cancel" class="btn btn-danger hidden">
+                Cancel
+              </button>
+            </div>
+            <div class="card">
+              <div class="form-group">
+                <span class="form-label">Live preview</span>
+                <div class="preview-frame">
+                  <img id="gen-preview" alt="preview" hidden />
+                  <div id="gen-progress-text" class="help-text">Idle.</div>
+                </div>
+              </div>
+              <div class="form-group">
+                <span class="form-label">Result</span>
+                <div id="gen-result" class="result-frame"></div>
+              </div>
+              <div class="form-group">
+                <span class="form-label">History</span>
+                <div id="gen-history" class="history-grid"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══ CONFIGURE ═══ -->
+        <div class="section-panel" id="section-configure" style="display: none">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Configure</div>
+              <div class="page-title-sub">
+                Full sd-cli flag editor with search + command preview.
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <input type="text" id="flag-search" placeholder="Search flags…" />
+            <div id="configure-flags"></div>
+            <pre id="command-preview" class="command-preview"></pre>
+            <textarea
+              id="custom-launch-args"
+              placeholder="Custom launch args (appended verbatim)"
+            ></textarea>
+          </div>
+        </div>
+
+        <!-- ═══ SERVER & API ═══ -->
+        <div class="section-panel" id="section-server" style="display: none">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Server &amp; API</div>
+              <div class="page-title-sub">
+                Run sd-server persistently; view endpoints; Cloudflare tunnel.
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div id="server-status" class="status-box">
+              TODO(Phase 5): sd-server start/stop + endpoint snippets + tunnel.
+            </div>
+            <div class="form-row">
+              <button id="btn-sd-server-start" class="btn btn-primary">
+                Start sd-server
+              </button>
+              <button id="btn-sd-server-stop" class="btn btn-danger">
+                Stop
+              </button>
+            </div>
+            <div id="api-endpoints"></div>
+          </div>
+        </div>
+
+        <!-- ═══ PRESETS ═══ -->
+        <div class="section-panel" id="section-presets" style="display: none">
+          <div class="page-header">
+            <div>
+              <div class="page-title">Presets</div>
+              <div class="page-title-sub">
+                Save / load / import / export generation configs.
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div id="presets-list">
+              TODO(Phase 4): preset CRUD grouped by model type.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scripts loaded in strict dependency order (see PLAN.md §8). Do not reorder. -->
+    <script src="/js/flags/options.js"></script>
+    <script src="/js/flags/model-bundles.js"></script>
+    <script src="/js/flags/definitions.js"></script>
+    <script src="/js/flags/categories.js"></script>
+    <script src="/js/flags/helpers.js"></script>
+    <script src="/js/flag-validation.js"></script>
+    <script src="/js/flag-core.js"></script>
+    <script src="/js/config-flags-ui.js"></script>
+    <script src="/js/manager.js"></script>
+    <script src="/js/presets.js"></script>
+    <script src="/js/app-data.js"></script>
+    <script src="/js/generate-ui.js"></script>
+    <script src="/js/gallery-rendering.js"></script>
+    <script src="/js/hf-download-ui.js"></script>
+    <script src="/js/server-ui.js"></script>
+    <script src="/js/api-tab.js"></script>
+    <script src="/js/remote-tunnel-ui.js"></script>
+    <script src="/js/app.js"></script>
+  </body>
+</html>

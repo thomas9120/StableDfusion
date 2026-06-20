@@ -1,0 +1,8 @@
+{
+  "include": ["backend", "server.py", "tests"],
+  "extraPaths": ["."],
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "standard",
+  "reportMissingImports": "error",
+  "reportAttributeAccessIssue": "error"
+}

@@ -1,0 +1,9 @@
+"""Stable-D GUI entrypoint. Delegates to backend.app.
+
+Run with: ``python server.py``
+"""
+
+from backend.app import main
+
+if __name__ == "__main__":
+    main()

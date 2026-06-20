@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+
+# App data (created at runtime)
+sdcpp/bin/*
+!sdcpp/bin/.gitkeep
+output/
+models/*
+!models/.gitkeep
+presets/*
+!presets/.gitkeep
+tools/
+config.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.log

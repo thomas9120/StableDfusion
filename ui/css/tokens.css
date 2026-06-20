@@ -1,0 +1,7 @@
+/* Theme tokens — minimal dark theme placeholder. TODO: full SD palette (Phase 1). */
+:root {
+	--bg: #0b0e14;
+	--panel: #11151f;
+	--text: #c0caf5;
+	--accent: #7aa2f7;
+}

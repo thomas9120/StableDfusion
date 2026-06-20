@@ -1,0 +1,14 @@
+[project]
+name = "stable-d-gui"
+version = "0.1.0"
+description = "A web GUI for leejet/stable-diffusion.cpp"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["sdcpp", "models", "output", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "W", "B"]
+# I001 (import sorting) and the pyupgrade (UP) rules are enforced by pi-lens.

@@ -1,0 +1,2 @@
+certifi>=2026.5.20
+huggingface_hub>=0.24.0

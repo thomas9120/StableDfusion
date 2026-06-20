@@ -1,0 +1,11 @@
+{
+  "name": "stable-d-gui",
+  "private": true,
+  "scripts": {
+    "test:syntax": "node tests/frontend/js_syntax_check.cjs",
+    "test:frontend": "node tests/frontend/flag_sync_smoke.cjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.60.0"
+  }
+}

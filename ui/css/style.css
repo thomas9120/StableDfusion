@@ -1,0 +1,10 @@
+/* Layout placeholder. TODO: full component styles mirroring LLama-GUI (Phase 1). */
+body {
+	background: var(--bg);
+	color: var(--text);
+	font-family: system-ui, sans-serif;
+	margin: 2rem;
+}
+code {
+	color: var(--accent);
+}
