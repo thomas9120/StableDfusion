@@ -1,4 +1,4 @@
-"""Stable-D GUI entrypoint. Delegates to backend.app.
+"""StableDfusion entrypoint. Delegates to backend.app.
 
 Run with: ``python server.py``
 """

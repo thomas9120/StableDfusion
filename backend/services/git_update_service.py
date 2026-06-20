@@ -1,6 +1,6 @@
 """Git-based app auto-update. ~Verbatim from LLama-GUI (generic).
 
-Adapted safe-dirty path prefixes for Stable-D GUI: ``sdcpp/`` (downloaded
+Adapted safe-dirty path prefixes for StableDfusion: ``sdcpp/`` (downloaded
 binaries), ``models/``, ``output/``, ``presets/``, ``tools/`` (cloudflared).
 """
 

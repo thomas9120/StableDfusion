@@ -1,4 +1,4 @@
-# Stable-D GUI — Directory Reference
+# StableDfusion — Directory Reference
 
 > **Companion to `PLAN.md`.** This file tracks the *as-built* structure.
 > `PLAN.md` is the design source of truth; this file reflects what's on disk.

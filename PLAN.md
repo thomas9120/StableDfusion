@@ -1,4 +1,4 @@
-# Stable-D GUI — Build Plan
+# StableDfusion — Build Plan
 
 > A desktop-friendly web GUI for [`leejet/stable-diffusion.cpp`](https://github.com/leejet/stable-diffusion.cpp),
 > modeled on the architecture of **LLama-GUI** (its sibling project for `llama.cpp`).
@@ -52,7 +52,7 @@ Other key differences driving design:
 
 ## 3. What we keep / change / drop vs. LLama-GUI
 
-| Concern | LLama-GUI | Stable-D GUI |
+| Concern | LLama-GUI | StableDfusion |
 |---|---|---|
 | Backend framework | Python stdlib `http.server` | **Keep** (identical) |
 | HTTP / CORS / SSE helpers | `backend/http.py` | **Keep** (identical, generic) |
@@ -390,7 +390,7 @@ For users who want a persistent API / the embedded web UI:
 
 | | Value |
 |---|---|
-| Display name | **Stable-D GUI** |
+| Display name | **StableDfusion** |
 | Env prefix | `SD_GUI_HOST`, `SD_GUI_PORT`, `SD_GUI_ALLOWED_HOSTS` |
 | GUI port | `5250` (default) |
 | sd-server port | `1234` (upstream default) |
@@ -505,7 +505,7 @@ Don't do this yet:
 3. **Asset SHA256 source.** Confirm each release ships a single sha256sums file vs. per-asset `.sha256`. (The listing shows a 16th asset — to verify during Phase 1.)
 4. **One vs. two process slots.** Decide whether the one-shot generator and the persistent sd-server share a lock or are independent. **Recommend independent** (two locks in `ServerState`) so Generate works while a server runs.
 5. **macOS x64 / Win arm64.** Upstream ships no asset for these today — backend specs should simply offer nothing (graceful "no backend available" message), as LLama-GUI does for unsupported combos.
-6. **Naming.** "Stable-D GUI" is provisional; easy to rename later (no architecture impact).
+6. **Naming.** Display name settled on "StableDfusion"; repository/package identifiers may still use stable-d-gui for compatibility.
 
 ---
 

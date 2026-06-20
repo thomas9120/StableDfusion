@@ -35,7 +35,7 @@ def get_status(request: Request, response: Response, ctx: AppContext) -> None:
 
         response.json(
             {
-                "app": "Stable-D GUI",
+                "app": "StableDfusion",
                 "installed": installed,
                 "config_stale": config_stale,
                 "version": cfg.get("tag"),

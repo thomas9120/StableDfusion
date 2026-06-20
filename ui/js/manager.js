@@ -624,7 +624,7 @@ window.SDGui.manager = (() => {
 			var note = safe
 				? " Local app data is present and ignored: " + safe + "."
 				: "";
-			return "Stable-D GUI is up to date on " + branch + "." + note;
+			return "StableDfusion is up to date on " + branch + "." + note;
 		}
 		if (status.state === "behind") {
 			var n = status.behind || 0;
@@ -682,7 +682,7 @@ window.SDGui.manager = (() => {
 			return;
 		}
 		var ok = await window.SDGui.confirmAction(
-			"Update Stable-D GUI",
+			"Update StableDfusion",
 			"Pull latest changes from GitHub now? Python dependencies will be reinstalled. The app restarts after updating.",
 			"Update",
 		);
@@ -700,8 +700,8 @@ window.SDGui.manager = (() => {
 				} else {
 					await restartPythonServerAndReload({
 						showStatusFn: showAppUpdateStatus,
-						restartingMessage: "App updated. Restarting Stable-D GUI...",
-						successMessage: "Stable-D GUI restarted.",
+						restartingMessage: "App updated. Restarting StableDfusion...",
+						successMessage: "StableDfusion restarted.",
 					});
 					return;
 				}
@@ -718,7 +718,7 @@ window.SDGui.manager = (() => {
 	async function stopPythonServer() {
 		var ok = await window.SDGui.confirmAction(
 			"Stop GUI Server",
-			"Stop this Stable-D GUI server? The page will disconnect until you start server.py again.",
+			"Stop this StableDfusion server? The page will disconnect until you start server.py again.",
 			"Stop Server",
 		);
 		if (!ok) return;
@@ -744,7 +744,7 @@ window.SDGui.manager = (() => {
 	async function restartPythonServer() {
 		var ok = await window.SDGui.confirmAction(
 			"Restart GUI Server",
-			"Restart the Stable-D GUI server? The page will briefly disconnect.",
+			"Restart the StableDfusion server? The page will briefly disconnect.",
 			"Restart",
 		);
 		if (!ok) return;
