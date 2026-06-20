@@ -18,13 +18,50 @@ window.SDGui.generateUi = (() => {
 	var HISTORY_STORE_CAP = 60; // max entries persisted to localStorage
 	var HISTORY_VISIBLE_DEFAULT = 20; // max rendered before "show more"
 	var historyExpanded = false; // whether the grid shows all entries
+	var activeGenerateSection = "generate-image";
+	var routingSection = false;
+
+	var SECTION_CONFIG = {
+		"generate-image": {
+			mode: "img_gen",
+			button: "Generate",
+			empty: "Your generated image will appear here.",
+			running: "Generating... your image will appear here.",
+		},
+		"generate-video": {
+			mode: "vid_gen",
+			button: "Generate video",
+			empty: "Your generated video will appear here.",
+			running: "Generating... your video will appear here.",
+		},
+		upscale: {
+			mode: "upscale",
+			button: "Upscale",
+			empty: "Your upscaled image will appear here.",
+			running: "Upscaling... your image will appear here.",
+		},
+		convert: {
+			mode: "convert",
+			button: "Convert",
+			empty: "Conversion output will appear here.",
+			running: "Converting... output will appear here.",
+		},
+	};
+
+	var MODE_SECTION = {
+		img_gen: "generate-image",
+		metadata: "generate-image",
+		vid_gen: "generate-video",
+		upscale: "upscale",
+		convert: "convert",
+	};
 
 	// Mode → mode-inputs container id (which sub-section is visible). Each
 	// mode-inputs container holds the file pickers + numeric controls specific
 	// to that mode (Phase 3: img2img, upscale, convert, metadata).
 	var MODE_INPUT_PANELS = {
 		img_gen: "gen-img2img-inputs",
-		vid_gen: "gen-img2img-inputs", // vid_gen reuses img2img layout (init-img/end-img)
+		vid_gen: "gen-video-inputs",
 		upscale: "gen-upscale-inputs",
 		convert: "gen-convert-inputs",
 		metadata: "gen-metadata-inputs",
@@ -204,6 +241,42 @@ window.SDGui.generateUi = (() => {
 		return n;
 	}
 
+	function sectionForMode(mode) {
+		return MODE_SECTION[mode] || "generate-image";
+	}
+
+	function activeConfig() {
+		return SECTION_CONFIG[activeGenerateSection] || SECTION_CONFIG["generate-image"];
+	}
+
+	function moveWorkbenchTo(section) {
+		var host = document.querySelector(
+			'.generate-tab-host[data-generate-host="' + section + '"]',
+		);
+		var workbench = $("generate-workbench");
+		if (host && workbench && workbench.parentNode !== host) {
+			host.appendChild(workbench);
+		}
+	}
+
+	function switchToModeSection(mode) {
+		var section = sectionForMode(mode);
+		if (activeGenerateSection === section) return;
+		if (window.SDGui.switchSection) {
+			routingSection = true;
+			window.SDGui.switchSection(section);
+			routingSection = false;
+		}
+	}
+
+	function updateActionCopy() {
+		var cfg = activeConfig();
+		var genBtn = $("btn-generate");
+		if (genBtn) genBtn.textContent = cfg.button;
+		var resultEmpty = $("gen-result-empty");
+		if (resultEmpty) resultEmpty.textContent = cfg.empty;
+	}
+
 	// ── Control binding ────────────────────────────────────────────────────
 	function bindText(id, flagId) {
 		var existing = controls[flagId];
@@ -373,11 +446,13 @@ window.SDGui.generateUi = (() => {
 	function updateModeSections() {
 		var mode = window.SDGui.flagCore.getMode();
 		var activePanelId = MODE_INPUT_PANELS[mode];
+		var sectionMode = activeConfig().mode;
+		var imageTab = activeGenerateSection === "generate-image";
 
 		// A3 - relabel the mode-inputs header + help per active mode.
 		var label = $("gen-mode-label");
 		var help = $("gen-mode-help");
-		var meta = MODE_META[mode];
+		var meta = MODE_META[mode === "metadata" ? "metadata" : sectionMode];
 		if (label && meta) label.textContent = meta.label;
 		if (help && meta) help.textContent = meta.help;
 		var helpWrap = $("gen-mode-inputs");
@@ -385,10 +460,12 @@ window.SDGui.generateUi = (() => {
 
 		// Toggle which mode-inputs panel is visible.
 		Object.keys(MODE_INPUT_PANELS).forEach((m) => {
-			setHidden(
-				$(MODE_INPUT_PANELS[m]),
-				MODE_INPUT_PANELS[m] !== activePanelId,
-			);
+			var panelId = MODE_INPUT_PANELS[m];
+			var visible = panelId === activePanelId;
+			if (imageTab && mode === "img_gen" && panelId === "gen-metadata-inputs") {
+				visible = true;
+			}
+			setHidden($(panelId), !visible);
 		});
 
 		// Prompt + negative prompt + dimensions/steps/seed are only relevant
@@ -400,6 +477,7 @@ window.SDGui.generateUi = (() => {
 
 		// Refresh shape/size highlights + live readout for the current size (A6).
 		updateDimensionAffordances();
+		updateActionCopy();
 	}
 
 	// ── Model-component pickers (bundle-driven) ───────────────────────────
@@ -670,13 +748,12 @@ window.SDGui.generateUi = (() => {
 	}
 
 	function syncSelectorsFromState() {
-		var modeSelect = $("gen-mode");
-		if (modeSelect) modeSelect.value = window.SDGui.flagCore.getMode();
 		var bundleSelect = $("gen-model-bundle");
 		if (bundleSelect) bundleSelect.value = window.SDGui.flagCore.getBundle();
 	}
 
 	function syncFromState(renderFields) {
+		switchToModeSection(window.SDGui.flagCore.getMode());
 		syncSelectorsFromState();
 		updateModeSections();
 		if (renderFields) renderBundleFields();
@@ -801,6 +878,7 @@ window.SDGui.generateUi = (() => {
 		window.SDGui.flagCore.setMultipleFlagValues(entry.params);
 		if (entry.bundle) window.SDGui.flagCore.setBundle(entry.bundle);
 		if (entry.mode) window.SDGui.flagCore.setMode(entry.mode);
+		if (entry.mode) switchToModeSection(entry.mode);
 		syncFromState(true);
 		window.SDGui.toast("Restored settings from history.", "info");
 	}
@@ -1086,6 +1164,7 @@ window.SDGui.generateUi = (() => {
 		if (window.SDGui.flagCore.getMode() !== "img_gen") {
 			window.SDGui.flagCore.setMode("img_gen");
 		}
+		switchToModeSection("img_gen");
 		updateModeSections();
 		syncAll();
 		// The init-image field sits inside a collapsed <details> disclosure;
@@ -1111,7 +1190,7 @@ window.SDGui.generateUi = (() => {
 			thumb: "/api/image/" + encodeURIComponent(file) + "/thumbnail",
 			timestamp: ts,
 			bundle: window.SDGui.flagCore.getBundle(),
-			mode: window.SDGui.flagCore.getMode(),
+			mode: snap.mode || window.SDGui.flagCore.getMode(),
 			params: vals,
 		};
 		var entries = loadHistory();
@@ -1166,11 +1245,17 @@ window.SDGui.generateUi = (() => {
 		pollTimer = setInterval(poll, 400);
 	}
 
-	async function generate() {
+	async function generate(options) {
+		options = options || {};
 		if (generating) return;
+		var restoreMode = options.restoreMode || null;
 		var result = window.SDGui.flagCore.getLaunchArgs();
 		if (result.error) {
 			window.SDGui.toast(result.error, "error");
+			if (restoreMode) {
+				window.SDGui.flagCore.setMode(restoreMode);
+				syncFromState(false);
+			}
 			return;
 		}
 		(result.warnings || []).forEach((w) => window.SDGui.toast(w, "warning"));
@@ -1216,7 +1301,7 @@ window.SDGui.generateUi = (() => {
 		}
 		if (previewEmpty) previewEmpty.style.display = "";
 		// A9 — reset result frame to its empty state on a fresh run.
-		showResultEmpty("Generating… your image will appear here.");
+		showResultEmpty(activeConfig().running);
 		setGenerating(true);
 		runStartTime = Date.now();
 		showProgressBar(true, true);
@@ -1229,11 +1314,26 @@ window.SDGui.generateUi = (() => {
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify(body),
 			});
+			if (restoreMode) {
+				window.SDGui.flagCore.setMode(restoreMode);
+				syncFromState(false);
+			}
 			startPolling();
 		} catch (e) {
+			if (restoreMode) {
+				window.SDGui.flagCore.setMode(restoreMode);
+				syncFromState(false);
+			}
 			setGenerating(false);
 			window.SDGui.toast(e.message, "error");
 		}
+	}
+
+	function inspectMetadata() {
+		var restoreMode = window.SDGui.flagCore.getMode();
+		window.SDGui.flagCore.setMode("metadata");
+		updateModeSections();
+		generate({ restoreMode: restoreMode === "metadata" ? "img_gen" : restoreMode });
 	}
 
 	async function cancel() {
@@ -1248,7 +1348,21 @@ window.SDGui.generateUi = (() => {
 		}
 	}
 
+	function handleSectionChange(section) {
+		if (!SECTION_CONFIG[section]) return;
+		activeGenerateSection = section;
+		moveWorkbenchTo(section);
+		var desiredMode = SECTION_CONFIG[section].mode;
+		if (!routingSection && window.SDGui.flagCore.getMode() !== desiredMode) {
+			window.SDGui.flagCore.setMode(desiredMode);
+		}
+		syncSelectorsFromState();
+		updateModeSections();
+		syncAll();
+	}
+
 	function init() {
+		moveWorkbenchTo(activeGenerateSection);
 		// Generate defaults: enable live preview (sd-cli defaults to none).
 		var vals = window.SDGui.flagCore.getFlagValues();
 		if (!vals.preview || vals.preview === "none") {
@@ -1283,23 +1397,12 @@ window.SDGui.generateUi = (() => {
 			bundleSelect.value = window.SDGui.flagCore.getBundle();
 			bundleSelect.addEventListener("change", () => {
 				window.SDGui.flagCore.setBundle(bundleSelect.value, true);
-				// applyBundleDefaults may switch the mode (e.g. wan → vid_gen);
-				// reflect that in the mode dropdown + mode-specific UI.
-				var modeSelect = $("gen-mode");
-				if (modeSelect) modeSelect.value = window.SDGui.flagCore.getMode();
+				// applyBundleDefaults may switch the mode (e.g. wan -> vid_gen);
+				// route the shared workbench to the matching top-level tab.
+				switchToModeSection(window.SDGui.flagCore.getMode());
 				updateModeSections();
 				renderBundleFields();
 				syncAll();
-			});
-		}
-
-		// Mode dropdown.
-		var modeSelect = $("gen-mode");
-		if (modeSelect) {
-			modeSelect.value = window.SDGui.flagCore.getMode();
-			modeSelect.addEventListener("change", () => {
-				window.SDGui.flagCore.setMode(modeSelect.value);
-				updateModeSections();
 			});
 		}
 
@@ -1338,6 +1441,10 @@ window.SDGui.generateUi = (() => {
 		bindBrowse("btn-browse-control-image", () =>
 			browsePath("control_image", "image", "Select control image"),
 		);
+		bindNumber("gen-video-frames", "video_frames");
+		bindNumber("gen-fps", "fps");
+		bindNumber("gen-vace-strength", "vace_strength", true);
+		bindBool("gen-temporal-tiling", "temporal_tiling");
 
 		// Upscale mode inputs (init_img shares state with img2img init_img).
 		bindText("gen-upscale-init-img", "init_img");
@@ -1369,6 +1476,8 @@ window.SDGui.generateUi = (() => {
 		if (genBtn) genBtn.addEventListener("click", generate);
 		var cancelBtn = $("btn-generate-cancel");
 		if (cancelBtn) cancelBtn.addEventListener("click", cancel);
+		var metadataBtn = $("btn-inspect-metadata");
+		if (metadataBtn) metadataBtn.addEventListener("click", inspectMetadata);
 
 		// A6 — dimension W/H swap + ratio chips + snap-to-multiple on blur.
 		// Swap W/H (exact row); the shape/size highlights re-derive from ratio.
@@ -1472,8 +1581,7 @@ window.SDGui.generateUi = (() => {
 		}
 
 		// A4 — Ctrl/Cmd+Enter to generate from the prompt or the panel.
-		var generatePanel = $("section-generate");
-		if (generatePanel) {
+		document.querySelectorAll(".generate-tab-host").forEach((generatePanel) => {
 			generatePanel.addEventListener("keydown", (e) => {
 				if (
 					(e.ctrlKey || e.metaKey) &&
@@ -1483,7 +1591,7 @@ window.SDGui.generateUi = (() => {
 					generate();
 				}
 			});
-		}
+		});
 
 		// Cross-tab / cross-control sync: refresh non-focused controls on change.
 		window.SDGui.flagCore.onChange(() => {
@@ -1492,6 +1600,7 @@ window.SDGui.generateUi = (() => {
 
 		renderBundleFields();
 		renderHistory();
+		updateActionCopy();
 
 		// History toolbar: clear-all (confirmed) + show-more toggle.
 		var clearBtn = $("btn-clear-history");
@@ -1522,5 +1631,6 @@ window.SDGui.generateUi = (() => {
 		renderHistory: renderHistory,
 		updateModeSections: updateModeSections,
 		syncFromState: syncFromState,
+		handleSectionChange: handleSectionChange,
 	};
 })();
