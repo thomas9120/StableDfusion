@@ -228,9 +228,9 @@ confirm + show-more toggle).
 
 Cross-module actions (`sendToImg2img`, `downloadResult`, `openResultFile`,
 `syncFromState`, `switchToModeSection`) are injected through `init()` so
-the module never reaches back into the coordinator's closure. They
-remain owned by the coordinator until Stage 6 (preview/results) and
-Stage 8 (run controller) extract them.
+the module never reaches back into the coordinator's closure. The live result
+actions now come from `results.js`, and the run lifecycle now lives in
+`run-controller.js`.
 
 `generate-ui.js` now aliases the module at the top of its IIFE
 (`var hist = window.SDGui.generateHistory`) and:
@@ -347,7 +347,39 @@ Then move result rendering:
 
 Pitfall: video handling is subtle. `vid_gen` preview uses a `<video>`, image modes use `<img>`, and result actions hide "Send to img2img" for video files. Keep this behavior in one module or provide a single `isVideoFile` dependency from `gallery-rendering.js`.
 
-### Stage 7: Extract Run Controller
+### Stage 7: Extract Run Controller — ✅ DONE (2026-06-20)
+
+Created `ui/js/generate/run-controller.js`
+(`window.SDGui.generateRunController`), loaded after `results.js` and before
+`generate-ui.js` in `ui/index.html`. The module now owns the backend run
+lifecycle: request body construction, LoRA prompt-tag injection,
+`--lora-model-dir` derivation, polling, terminal state handling, cancel,
+metadata inspection, generate/cancel button state, and reload-time polling
+resume.
+
+`generate-ui.js` now injects the few coordinator concerns the controller still
+needs:
+
+- `activeConfig()` for the current running placeholder copy.
+- `syncFromState(false)` for restoring the previous mode after metadata
+  inspection or launch validation/fetch failures.
+- `updateModeSections()` for the temporary metadata-mode route.
+- `previewProgress` for preview/progress effects.
+- `results` for terminal result/error rendering.
+
+The public `window.SDGui.generateUi.generate` and `.cancel` methods remain
+available as thin aliases to the controller, so external callers keep the same
+surface. `inspectMetadata()` remains button-wired through the coordinator but
+is implemented by the controller. `resumeIfRunning()` preserves the previous
+page-reload behavior that queried `/api/generate/status` and restarted polling
+for an active run.
+
+Result: `generate-ui.js` dropped from 735 to 576 lines (~159 lines moved out,
+no behavior change expected). Verified: `node --check` on the touched JS files,
+`npm run test:syntax`, `npm run test:frontend`, and temporary `python server.py`
++ `/api/status` all pass.
+
+#### Original plan (kept for reference)
 
 Move the backend lifecycle last:
 

@@ -5,10 +5,6 @@
 window.SDGui = window.SDGui || {};
 
 window.SDGui.generateUi = (() => {
-	var pollTimer = null;
-	var lastPreviewMtime = 0;
-	var generating = false;
-
 	var activeGenerateSection = "generate-image";
 	var routingSection = false;
 
@@ -17,7 +13,6 @@ window.SDGui.generateUi = (() => {
 	// stay short. The dimension module is invoked by namespace since its
 	// init/setup is wired up explicitly in init() below.
 	var dom = window.SDGui.generateDom;
-	var fmt = window.SDGui.generateFormatters;
 	var dims = window.SDGui.generateDimensions;
 	// Stage 3: control binding + the controls/controlMirrors registries live
 	// in window.SDGui.generateControls. Alias the bind/sync helpers so call
@@ -60,21 +55,19 @@ window.SDGui.generateUi = (() => {
 	// cross-module actions they need.
 	var preview = window.SDGui.generatePreviewProgress;
 	var results = window.SDGui.generateResults;
-	var resetPreview = preview.resetPreview;
-	var refreshPreview = preview.refreshPreview;
-	var updateProgress = preview.updateProgress;
-	var showProgressBar = preview.showProgressBar;
-	var showResultEmpty = preview.showResultEmpty;
-	var renderResult = results.renderResult;
-	var renderResultError = results.renderResultError;
+	// Stage 7: request construction, polling, cancel, metadata inspect, and
+	// generate/cancel button state live in window.SDGui.generateRunController.
+	// The coordinator injects mode/routing callbacks and then exposes the same
+	// public generate/cancel methods through thin aliases.
+	var runner = window.SDGui.generateRunController;
+	var generate = runner.generate;
+	var cancel = runner.cancel;
+	var inspectMetadata = runner.inspectMetadata;
 	var downloadResult = results.downloadResult;
 	var openResultFile = results.openResultFile;
 	var $ = dom.$;
 	var setHidden = dom.setHidden;
 	var populateEnum = dom.populateEnum;
-	var loraNameFromPath = fmt.loraNameFromPath;
-	var loraFolderFromPath = fmt.loraFolderFromPath;
-	var formatLoraStrength = fmt.formatLoraStrength;
 
 	var SECTION_CONFIG = {
 		"generate-image": {
@@ -302,14 +295,6 @@ window.SDGui.generateUi = (() => {
 	// via `hist.addHistoryEntry`.
 
 	// ── Generation flow ───────────────────────────────────────────────────
-	function setGenerating(on) {
-		generating = on;
-		var genBtn = $("btn-generate");
-		var cancelBtn = $("btn-generate-cancel");
-		if (genBtn) genBtn.disabled = on;
-		if (cancelBtn) cancelBtn.classList.toggle("hidden", !on);
-	}
-
 	function sendToImg2img(name) {
 		if (!name) return;
 		// Result files live under output/ (sd-cli runs with cwd = project root),
@@ -333,151 +318,6 @@ window.SDGui.generateUi = (() => {
 			"Set as init image. Adjust strength then Generate.",
 			"info",
 		);
-	}
-
-	async function poll() {
-		try {
-			var snap = await window.SDGui.fetchJson("/api/generate/status");
-			updateProgress(snap);
-			if (snap.state === "running") {
-				if (snap.preview_mtime && snap.preview_mtime !== lastPreviewMtime) {
-					lastPreviewMtime = snap.preview_mtime;
-					refreshPreview(snap.preview_mtime);
-				}
-				return;
-			}
-			// Terminal state.
-			stopPolling();
-			setGenerating(false);
-			if (snap.state === "done") {
-				preview.setRunStartTime(0);
-				showProgressBar(false);
-				renderResult(snap);
-				window.SDGui.toast("Generation complete.", "success");
-			} else if (snap.state === "error") {
-				preview.setRunStartTime(0);
-				showProgressBar(false);
-				renderResultError(snap);
-				window.SDGui.toast(snap.error || "Generation failed.", "error");
-			} else if (snap.state === "canceled") {
-				preview.setRunStartTime(0);
-				showProgressBar(false);
-				window.SDGui.toast("Generation canceled.", "warning");
-			}
-		} catch (e) {
-			/* transient network - keep polling */
-		}
-	}
-
-	function stopPolling() {
-		if (pollTimer) {
-			clearInterval(pollTimer);
-			pollTimer = null;
-		}
-	}
-
-	function startPolling() {
-		stopPolling();
-		pollTimer = setInterval(poll, 400);
-	}
-
-	async function generate(options) {
-		options = options || {};
-		if (generating) return;
-		var restoreMode = options.restoreMode || null;
-		var result = window.SDGui.flagCore.getLaunchArgs();
-		if (result.error) {
-			window.SDGui.toast(result.error, "error");
-			if (restoreMode) {
-				window.SDGui.flagCore.setMode(restoreMode);
-				syncFromState(false);
-			}
-			return;
-		}
-		(result.warnings || []).forEach((w) => window.SDGui.toast(w, "warning"));
-
-		var vals = Object.assign({}, window.SDGui.flagCore.getFlagValues());
-		if (vals.lora_file) {
-			var loraName = loraNameFromPath(vals.lora_file);
-			var loraStrength = formatLoraStrength(vals.lora_strength);
-			var loraTag = "<lora:" + loraName + ":" + loraStrength + ">";
-			vals.prompt = ((vals.prompt || "").trim() + " " + loraTag).trim();
-			var promptPair = result.args.find(
-				(pair) => pair[0] === "--prompt" || pair[0] === "-p",
-			);
-			if (promptPair) {
-				promptPair[1] = vals.prompt;
-			} else {
-				result.args.push(["--prompt", vals.prompt]);
-			}
-			var loraDir = vals.lora_model_dir || loraFolderFromPath(vals.lora_file);
-			vals.lora_model_dir = loraDir;
-			if (!result.args.some((pair) => pair[0] === "--lora-model-dir")) {
-				result.args.push(["--lora-model-dir", loraDir]);
-			}
-		}
-		var body = {
-			mode: window.SDGui.flagCore.getMode(),
-			bundle: window.SDGui.flagCore.getBundle(),
-			args: result.args,
-			seed: vals.seed,
-			total_steps: vals.steps,
-			preview_method: vals.preview,
-			preview_interval: vals.preview_interval,
-			params: vals,
-		};
-
-		// Reset preview area (only relevant for img_gen/vid_gen, harmless for others).
-		lastPreviewMtime = 0;
-		resetPreview();
-		// A9 — reset result frame to its empty state on a fresh run.
-		showResultEmpty(activeConfig().running);
-		setGenerating(true);
-		preview.setRunStartTime(Date.now());
-		showProgressBar(true, true);
-		var prog = $("gen-progress-text");
-		if (prog) prog.textContent = "Starting…";
-
-		try {
-			await window.SDGui.fetchJson("/api/generate", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(body),
-			});
-			if (restoreMode) {
-				window.SDGui.flagCore.setMode(restoreMode);
-				syncFromState(false);
-			}
-			startPolling();
-		} catch (e) {
-			if (restoreMode) {
-				window.SDGui.flagCore.setMode(restoreMode);
-				syncFromState(false);
-			}
-			setGenerating(false);
-			window.SDGui.toast(e.message, "error");
-		}
-	}
-
-	function inspectMetadata() {
-		var restoreMode = window.SDGui.flagCore.getMode();
-		window.SDGui.flagCore.setMode("metadata");
-		updateModeSections();
-		generate({
-			restoreMode: restoreMode === "metadata" ? "img_gen" : restoreMode,
-		});
-	}
-
-	async function cancel() {
-		try {
-			await window.SDGui.fetchJson("/api/generate/cancel", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: "{}",
-			});
-		} catch (e) {
-			window.SDGui.toast(e.message, "error");
-		}
 	}
 
 	function handleSectionChange(section) {
@@ -521,6 +361,14 @@ window.SDGui.generateUi = (() => {
 			history: hist,
 			previewProgress: preview,
 			sendToImg2img: sendToImg2img,
+		});
+		runner.init({
+			flagCore: window.SDGui.flagCore,
+			previewProgress: preview,
+			results: results,
+			activeConfig: activeConfig,
+			syncFromState: syncFromState,
+			updateModeSections: updateModeSections,
 		});
 		// Stage 5: hand the history module its flagCore + the cross-module
 		// actions it needs (sendToImg2img / downloadResult / openResultFile
@@ -709,14 +557,7 @@ window.SDGui.generateUi = (() => {
 		hist.attachToolbar();
 
 		// If a generation is already running (page reload), resume polling.
-		window.SDGui.fetchJson("/api/generate/status")
-			.then((snap) => {
-				if (snap && snap.state === "running") {
-					setGenerating(true);
-					startPolling();
-				}
-			})
-			.catch(() => {});
+		runner.resumeIfRunning();
 	}
 
 	return {
