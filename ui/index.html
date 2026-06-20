@@ -235,221 +235,7 @@
           </div>
           <div class="generate-grid">
             <div class="card">
-              <div class="form-group">
-                <label class="form-label">Mode</label>
-                <select id="gen-mode">
-                  <option value="img_gen">
-                    Text-to-Image / Image-to-Image
-                  </option>
-                  <option value="vid_gen">Video</option>
-                  <option value="upscale">Upscale (RealESRGAN)</option>
-                  <option value="convert">Convert (→ GGUF)</option>
-                  <option value="metadata">Inspect Metadata</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Model type bundle</label>
-                <select id="gen-model-bundle">
-                  <option value="">Loading…</option>
-                </select>
-              </div>
-              <div id="gen-model-components" class="form-group">
-                <!-- bundle-driven file pickers rendered by generate-ui.js -->
-                <p class="help-text">
-                  Select a model type bundle to show its file pickers.
-                </p>
-              </div>
-
-              <!-- Mode-specific inputs: shown/hidden per mode by generate-ui.js -->
-              <div id="gen-mode-inputs" class="form-group">
-                <span id="gen-mode-label" class="form-label"
-                  >Image references (optional)</span
-                >
-                <p id="gen-mode-help" class="gen-mode-help">
-                  Add a reference image for image-to-image, inpainting, or
-                  ControlNet.
-                </p>
-
-                <!-- img_gen / vid_gen: img2img (init-image / mask / control) -->
-                <div id="gen-img2img-inputs" class="mode-inputs">
-                  <details class="mode-details">
-                    <summary>Image references (optional)</summary>
-                    <div class="form-group">
-                      <label class="form-label"
-                        >Init image
-                        <span class="help-text"
-                          >(optional, enables img2img)</span
-                        ></label
-                      >
-                      <div class="field-row">
-                        <input
-                          type="text"
-                          id="gen-init-img"
-                          placeholder="output/cat.png"
-                        />
-                        <button
-                          id="btn-browse-init-img"
-                          class="btn btn-sm"
-                          type="button"
-                        >
-                          Browse
-                        </button>
-                      </div>
-                    </div>
-                    <div class="form-row">
-                      <div class="form-group">
-                        <label class="form-label">Strength</label>
-                        <input
-                          type="number"
-                          id="gen-strength"
-                          min="0"
-                          max="1"
-                          step="0.05"
-                          value="0.75"
-                        />
-                      </div>
-                      <div class="form-group">
-                        <label class="form-label">Control strength</label>
-                        <input
-                          type="number"
-                          id="gen-control-strength"
-                          min="0"
-                          max="2"
-                          step="0.05"
-                          value="0.9"
-                        />
-                      </div>
-                    </div>
-                    <div class="form-group">
-                      <label class="form-label">Mask (inpaint)</label>
-                      <div class="field-row">
-                        <input type="text" id="gen-mask" />
-                        <button
-                          id="btn-browse-mask"
-                          class="btn btn-sm"
-                          type="button"
-                        >
-                          Browse
-                        </button>
-                      </div>
-                    </div>
-                    <div class="form-group">
-                      <label class="form-label"
-                        >Control image (ControlNet)</label
-                      >
-                      <div class="field-row">
-                        <input type="text" id="gen-control-image" />
-                        <button
-                          id="btn-browse-control-image"
-                          class="btn btn-sm"
-                          type="button"
-                        >
-                          Browse
-                        </button>
-                      </div>
-                    </div>
-                  </details>
-                </div>
-
-                <!-- upscale: required init image + ESRGAN model -->
-                <div id="gen-upscale-inputs" class="mode-inputs hidden">
-                  <div class="form-group">
-                    <label class="form-label"
-                      >Init image <span class="req">required</span></label
-                    >
-                    <div class="field-row">
-                      <input type="text" id="gen-upscale-init-img" />
-                      <button
-                        id="btn-browse-upscale-init-img"
-                        class="btn btn-sm"
-                        type="button"
-                      >
-                        Browse
-                      </button>
-                    </div>
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label"
-                      >ESRGAN upscale model
-                      <span class="req">required</span></label
-                    >
-                    <div class="field-row">
-                      <select id="gen-upscale-model"></select>
-                      <button
-                        id="btn-browse-upscale-model"
-                        class="btn btn-sm"
-                        type="button"
-                      >
-                        Browse
-                      </button>
-                    </div>
-                  </div>
-                  <div class="form-row">
-                    <div class="form-group">
-                      <label class="form-label">Repeats</label>
-                      <input
-                        type="number"
-                        id="gen-upscale-repeats"
-                        min="1"
-                        value="1"
-                      />
-                    </div>
-                    <div class="form-group">
-                      <label class="form-label">Tile size</label>
-                      <input
-                        type="number"
-                        id="gen-upscale-tile-size"
-                        min="32"
-                        value="128"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <!-- convert: source model comes from bundle picker; optional --convert-name -->
-                <div id="gen-convert-inputs" class="mode-inputs hidden">
-                  <p class="help-text">
-                    Source model is selected above. Convert mode writes the
-                    converted tensor file to <code>-o / --output</code>.
-                  </p>
-                  <div class="form-group">
-                    <label class="form-label"
-                      >Convert single tensor name (optional)</label
-                    >
-                    <input
-                      type="text"
-                      id="gen-convert-name"
-                      placeholder="model.diffusion_model."
-                    />
-                  </div>
-                </div>
-
-                <!-- metadata: image + format -->
-                <div id="gen-metadata-inputs" class="mode-inputs hidden">
-                  <div class="form-group">
-                    <label class="form-label"
-                      >Image <span class="req">required</span></label
-                    >
-                    <div class="field-row">
-                      <input type="text" id="gen-metadata-image" />
-                      <button
-                        id="btn-browse-metadata-image"
-                        class="btn btn-sm"
-                        type="button"
-                      >
-                        Browse
-                      </button>
-                    </div>
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label">Format</label>
-                    <select id="gen-metadata-format">
-                      <option value="text">text</option>
-                      <option value="json">json</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
+              <!-- @section prompt -->
               <div id="gen-prompt-section">
                 <div class="form-group">
                   <label class="form-label">Prompt</label>
@@ -464,6 +250,7 @@
                   <textarea id="gen-negative" rows="2"></textarea>
                 </div>
               </div>
+              <!-- @section sampling -->
               <div id="gen-sampling-section">
                 <div class="dim-widget">
                   <!-- Step 1: shape (aspect ratio) -->
@@ -672,6 +459,7 @@
                 </div>
               </div>
 
+              <!-- @section advanced -->
               <details id="gen-advanced-section" class="gen-advanced">
                 <summary>Advanced</summary>
                 <div class="form-row">
@@ -719,6 +507,7 @@
                 </div>
               </details>
 
+              <!-- @section actions -->
               <div class="gen-actions">
                 <button
                   id="btn-generate"
@@ -733,6 +522,227 @@
                 <span class="gen-kbd-hint"
                   ><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span
                 >
+              </div>
+              <div class="gen-section-break" aria-hidden="true">
+                <span>Model &amp; mode setup</span>
+              </div>
+              <!-- @section mode -->
+              <div class="form-group">
+                <label class="form-label">Mode</label>
+                <select id="gen-mode">
+                  <option value="img_gen">
+                    Text-to-Image / Image-to-Image
+                  </option>
+                  <option value="vid_gen">Video</option>
+                  <option value="upscale">Upscale (RealESRGAN)</option>
+                  <option value="convert">Convert (→ GGUF)</option>
+                  <option value="metadata">Inspect Metadata</option>
+                </select>
+              </div>
+              <!-- @section mode-inputs -->
+              <!-- Mode-specific inputs: shown/hidden per mode by generate-ui.js -->
+              <div id="gen-mode-inputs" class="form-group">
+                <span id="gen-mode-label" class="form-label"
+                  >Image references (optional)</span
+                >
+                <p id="gen-mode-help" class="gen-mode-help">
+                  Add a reference image for image-to-image, inpainting, or
+                  ControlNet.
+                </p>
+
+                <!-- img_gen / vid_gen: img2img (init-image / mask / control) -->
+                <div id="gen-img2img-inputs" class="mode-inputs">
+                  <details class="mode-details">
+                    <summary>Image references (optional)</summary>
+                    <div class="form-group">
+                      <label class="form-label"
+                        >Init image
+                        <span class="help-text"
+                          >(optional, enables img2img)</span
+                        ></label
+                      >
+                      <div class="field-row">
+                        <input
+                          type="text"
+                          id="gen-init-img"
+                          placeholder="output/cat.png"
+                        />
+                        <button
+                          id="btn-browse-init-img"
+                          class="btn btn-sm"
+                          type="button"
+                        >
+                          Browse
+                        </button>
+                      </div>
+                    </div>
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label class="form-label">Strength</label>
+                        <input
+                          type="number"
+                          id="gen-strength"
+                          min="0"
+                          max="1"
+                          step="0.05"
+                          value="0.75"
+                        />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">Control strength</label>
+                        <input
+                          type="number"
+                          id="gen-control-strength"
+                          min="0"
+                          max="2"
+                          step="0.05"
+                          value="0.9"
+                        />
+                      </div>
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Mask (inpaint)</label>
+                      <div class="field-row">
+                        <input type="text" id="gen-mask" />
+                        <button
+                          id="btn-browse-mask"
+                          class="btn btn-sm"
+                          type="button"
+                        >
+                          Browse
+                        </button>
+                      </div>
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label"
+                        >Control image (ControlNet)</label
+                      >
+                      <div class="field-row">
+                        <input type="text" id="gen-control-image" />
+                        <button
+                          id="btn-browse-control-image"
+                          class="btn btn-sm"
+                          type="button"
+                        >
+                          Browse
+                        </button>
+                      </div>
+                    </div>
+                  </details>
+                </div>
+
+                <!-- upscale: required init image + ESRGAN model -->
+                <div id="gen-upscale-inputs" class="mode-inputs hidden">
+                  <div class="form-group">
+                    <label class="form-label"
+                      >Init image <span class="req">required</span></label
+                    >
+                    <div class="field-row">
+                      <input type="text" id="gen-upscale-init-img" />
+                      <button
+                        id="btn-browse-upscale-init-img"
+                        class="btn btn-sm"
+                        type="button"
+                      >
+                        Browse
+                      </button>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label"
+                      >ESRGAN upscale model
+                      <span class="req">required</span></label
+                    >
+                    <div class="field-row">
+                      <select id="gen-upscale-model"></select>
+                      <button
+                        id="btn-browse-upscale-model"
+                        class="btn btn-sm"
+                        type="button"
+                      >
+                        Browse
+                      </button>
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label class="form-label">Repeats</label>
+                      <input
+                        type="number"
+                        id="gen-upscale-repeats"
+                        min="1"
+                        value="1"
+                      />
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Tile size</label>
+                      <input
+                        type="number"
+                        id="gen-upscale-tile-size"
+                        min="32"
+                        value="128"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <!-- convert: source model comes from bundle picker; optional --convert-name -->
+                <div id="gen-convert-inputs" class="mode-inputs hidden">
+                  <p class="help-text">
+                    Source model is selected above. Convert mode writes the
+                    converted tensor file to <code>-o / --output</code>.
+                  </p>
+                  <div class="form-group">
+                    <label class="form-label"
+                      >Convert single tensor name (optional)</label
+                    >
+                    <input
+                      type="text"
+                      id="gen-convert-name"
+                      placeholder="model.diffusion_model."
+                    />
+                  </div>
+                </div>
+
+                <!-- metadata: image + format -->
+                <div id="gen-metadata-inputs" class="mode-inputs hidden">
+                  <div class="form-group">
+                    <label class="form-label"
+                      >Image <span class="req">required</span></label
+                    >
+                    <div class="field-row">
+                      <input type="text" id="gen-metadata-image" />
+                      <button
+                        id="btn-browse-metadata-image"
+                        class="btn btn-sm"
+                        type="button"
+                      >
+                        Browse
+                      </button>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Format</label>
+                    <select id="gen-metadata-format">
+                      <option value="text">text</option>
+                      <option value="json">json</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <!-- @section bundle -->
+              <div class="form-group">
+                <label class="form-label">Model type bundle</label>
+                <select id="gen-model-bundle">
+                  <option value="">Loading…</option>
+                </select>
+              </div>
+              <!-- @section model -->
+              <div id="gen-model-components" class="form-group">
+                <!-- bundle-driven file pickers rendered by generate-ui.js -->
+                <p class="help-text">
+                  Select a model type bundle to show its file pickers.
+                </p>
               </div>
             </div>
             <div class="card">

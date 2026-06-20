@@ -1875,14 +1875,33 @@ textarea {
 
 /* A8 — sticky generate action row so the primary button stays reachable. */
 .gen-actions {
-	position: sticky;
-	bottom: 0;
-	background: linear-gradient(to top, var(--bg-surface) 70%, transparent);
-	padding: var(--space-3) 0 var(--space-2);
+	padding: var(--space-2) 0 0;
 	margin-top: var(--space-3);
 	display: flex;
 	gap: var(--space-2);
-	z-index: 5;
+}
+/* Section break separating generation settings from the (set-once-per-session)
+   model/mode setup block now living below the Generate button. */
+.gen-section-break {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	margin: var(--space-4) 0 var(--space-3);
+	color: var(--fg-faint);
+	font-size: 10px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+}
+.gen-section-break::before,
+.gen-section-break::after {
+	content: "";
+	flex: 1;
+	height: 1px;
+	background: var(--border);
+}
+.gen-section-break span {
+	white-space: nowrap;
 }
 .gen-kbd-hint {
 	font-size: 11px;
