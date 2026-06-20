@@ -8,11 +8,6 @@ window.SDGui.generateUi = (() => {
 	var pollTimer = null;
 	var lastPreviewMtime = 0;
 	var generating = false;
-	var controls = {}; // flagId -> { id, kind }
-	// Secondary controls that share one flag with `controls` (e.g. init_img
-	// appears in both the img2img and upscale panels). The primary entry in
-	// `controls` is synced first, then each mirror id here.
-	var controlMirrors = {}; // flagId -> [ids]
 
 	var HISTORY_KEY = "sdgui.generate.history";
 	var HISTORY_STORE_CAP = 60; // max entries persisted to localStorage
@@ -28,6 +23,23 @@ window.SDGui.generateUi = (() => {
 	var dom = window.SDGui.generateDom;
 	var fmt = window.SDGui.generateFormatters;
 	var dims = window.SDGui.generateDimensions;
+	// Stage 3: control binding + the controls/controlMirrors registries live
+	// in window.SDGui.generateControls. Alias the bind/sync helpers so call
+	// sites stay short; alias the registries (shared by reference — never
+	// reassigned, only mutated in place) so model-field pickers, mode inputs,
+	// and LoRA controls keep registering into the single shared table.
+	var ctrl = window.SDGui.generateControls;
+	var bindText = ctrl.bindText;
+	var bindNumber = ctrl.bindNumber;
+	var bindEnum = ctrl.bindEnum;
+	var bindPathSelect = ctrl.bindPathSelect;
+	var bindBool = ctrl.bindBool;
+	var bindSliderNumber = ctrl.bindSliderNumber;
+	var syncControl = ctrl.syncControl;
+	var syncControlsFromState = ctrl.syncControlsFromState;
+	var syncAll = ctrl.syncAll;
+	var controls = ctrl.controls;
+	var controlMirrors = ctrl.controlMirrors;
 	var $ = dom.$;
 	var el = dom.el;
 	var setHidden = dom.setHidden;
@@ -117,8 +129,9 @@ window.SDGui.generateUi = (() => {
 	// variables. Mutable section state is exposed via *accessors* (never a
 	// captured value) so a helper can never hold a stale activeGenerateSection
 	// when the user switches between image/video/upscale/convert/metadata.
-	// `controls` and `controlMirrors` are shared by reference: they are mutated
-	// in place and never reassigned, so reference sharing stays correct.
+	// `controls` and `controlMirrors` are owned by window.SDGui.generateControls
+	// (Stage 3) and shared here by reference: they are mutated in place and
+	// never reassigned, so reference sharing stays correct.
 	var ctx = {
 		controls: controls,
 		controlMirrors: controlMirrors,
@@ -171,157 +184,11 @@ window.SDGui.generateUi = (() => {
 	}
 
 	// ── Control binding ────────────────────────────────────────────────────
-	function bindText(id, flagId) {
-		var existing = controls[flagId];
-		if (existing && existing.kind === "text" && existing.id !== id) {
-			// A setting may appear in more than one place (init_img lives in
-			// both the img2img and upscale panels). Keep the first binding as
-			// the primary control and register later ones as mirrors that read
-			// the same flagCore state (UI State Sync Rule).
-			if (!controlMirrors[flagId]) controlMirrors[flagId] = [];
-			if (!controlMirrors[flagId].includes(id)) controlMirrors[flagId].push(id);
-		} else {
-			controls[flagId] = { id: id, kind: "text" };
-		}
-		var node = $(id);
-		if (node)
-			node.addEventListener("input", () => {
-				window.SDGui.flagCore.setFlagValue(flagId, node.value);
-			});
-	}
-
-	function bindNumber(id, flagId, isFloat) {
-		controls[flagId] = { id: id, kind: isFloat ? "float" : "int" };
-		var node = $(id);
-		if (node)
-			node.addEventListener("change", () => {
-				var v = isFloat ? parseFloat(node.value) : parseInt(node.value, 10);
-				window.SDGui.flagCore.setFlagValue(flagId, Number.isNaN(v) ? 0 : v);
-			});
-	}
-
-	function bindEnum(id, flagId) {
-		controls[flagId] = { id: id, kind: "enum" };
-		var node = $(id);
-		if (node)
-			node.addEventListener("change", () => {
-				window.SDGui.flagCore.setFlagValue(flagId, node.value);
-			});
-	}
-
-	function bindPathSelect(id, flagId, purpose) {
-		var node = $(id);
-		if (!node) return;
-		controls[flagId] = {
-			id: null,
-			kind: "path",
-			select: node,
-			purpose: purpose,
-		};
-		node.addEventListener("change", () => {
-			window.SDGui.flagCore.setFlagValue(flagId, node.value);
-		});
-		populateModelSelect(node, purpose).then(() => syncControl(flagId));
-	}
-
-	function bindBool(id, flagId) {
-		controls[flagId] = { id: id, kind: "bool" };
-		var node = $(id);
-		if (node)
-			node.addEventListener("change", () => {
-				window.SDGui.flagCore.setFlagValue(flagId, node.checked);
-			});
-	}
-
-	// A7 - enhance a bare number input into a slider + number compound, both
-	// bound to flagCore. Keeps exact entry via the number field.
-	function bindSliderNumber(id, flagId, min, max, step, isFloat) {
-		var number = $(id);
-		if (!number) return;
-		var wrap = el("div", "slider-number");
-		var slider = el("input");
-		slider.type = "range";
-		slider.min = String(min);
-		slider.max = String(max);
-		slider.step = String(step);
-		slider.setAttribute(
-			"aria-label",
-			number.getAttribute("aria-label") || flagId + " slider",
-		);
-		if (number.parentNode) number.parentNode.replaceChild(wrap, number);
-		wrap.appendChild(slider);
-		wrap.appendChild(number);
-		var fmt = (v) =>
-			isFloat
-				? String(Math.round(Number(v) * 100) / 100)
-				: String(parseInt(v, 10) || 0);
-		slider.value = number.value;
-		slider.addEventListener("input", () => {
-			number.value = fmt(slider.value);
-			window.SDGui.flagCore.setFlagValue(
-				flagId,
-				isFloat ? parseFloat(slider.value) : parseInt(slider.value, 10),
-			);
-		});
-		number.addEventListener("change", () => {
-			var n = isFloat ? parseFloat(number.value) : parseInt(number.value, 10);
-			if (Number.isNaN(n)) n = 0;
-			slider.value = String(n);
-			window.SDGui.flagCore.setFlagValue(flagId, n);
-		});
-		controls[flagId] = {
-			id: id,
-			kind: "slider",
-			slider: slider,
-			number: number,
-		};
-	}
-
-	function syncControl(flagId) {
-		var entry = controls[flagId];
-		if (!entry) return;
-		var v = window.SDGui.flagCore.getFlagValues()[flagId];
-		if (v === undefined || v === null) return;
-		// Model-picker <select> (path kind).
-		if (entry.kind === "path" && entry.select) {
-			var sel = entry.select;
-			if (!sel.isConnected) return; // stale (bundle switched) - skip
-			if (v && !Array.from(sel.options).some((o) => o.value === v)) {
-				sel.appendChild(new Option(v, v));
-			}
-			sel.value = v || "";
-			return;
-		}
-		if (entry.kind === "range" && entry.slider) {
-			if (!entry.slider.isConnected) return;
-			entry.slider.value = String(v);
-			if (entry.valueLabel) entry.valueLabel.textContent = String(v);
-			return;
-		}
-		if (entry.kind === "slider" && entry.slider) {
-			if (!entry.slider.isConnected) return;
-			entry.slider.value = String(v);
-			if (entry.number && document.activeElement !== entry.number)
-				entry.number.value = String(v);
-			return;
-		}
-		var applyToNode = (node) => {
-			if (!node) return;
-			// Don't clobber the control the user is currently editing.
-			if (document.activeElement === node) return;
-			if (entry.kind === "bool") node.checked = v === true;
-			else node.value = String(v);
-		};
-		applyToNode($(entry.id));
-		// Mirror controls share one flag (e.g. init_img in img2img + upscale).
-		(controlMirrors[flagId] || []).forEach((mid) => {
-			applyToNode($(mid));
-		});
-	}
-
-	function syncControlsFromState() {
-		Object.keys(controls).forEach(syncControl);
-	}
+	// Stage 3: bindText / bindNumber / bindEnum / bindPathSelect / bindBool /
+	// bindSliderNumber / syncControl / syncControlsFromState / syncAll (and the
+	// controls + controlMirrors registries) now live in
+	// window.SDGui.generateControls, loaded before this file. They are aliased
+	// at the top of this IIFE so call sites are unchanged.
 
 	// ── Mode-aware section visibility (Phase 3) ────────────────────────────
 	function updateModeSections() {
@@ -602,11 +469,6 @@ window.SDGui.generateUi = (() => {
 			container.appendChild(wrap);
 		});
 		renderLoraControls(container);
-	}
-
-	// path-kind control sync (model picker selects)
-	function syncAll() {
-		Object.keys(controls).forEach(syncControl);
 	}
 
 	function syncSelectorsFromState() {
@@ -1266,6 +1128,13 @@ window.SDGui.generateUi = (() => {
 	}
 
 	function init() {
+		// Stage 3: hand the control-binding registry its flagCore + the model
+		// select populator (still owned here until Stage 4 moves it into
+		// generateModelFields). Must run before any bind*() call below.
+		ctrl.init({
+			flagCore: window.SDGui.flagCore,
+			populateModelSelect: populateModelSelect,
+		});
 		moveWorkbenchTo(ctx.getActiveSection());
 		// Generate defaults: enable live preview (sd-cli defaults to none).
 		var vals = window.SDGui.flagCore.getFlagValues();

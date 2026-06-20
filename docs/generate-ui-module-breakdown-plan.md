@@ -113,7 +113,36 @@ dimension bucket + manual-edit-returns-to-Custom checks and the full
 init_img mirror suite), and `python server.py` + `/api/status` all
 pass.
 
-### Stage 3: Extract Control Binding as a Shared Registry
+### Stage 3: Extract Control Binding as a Shared Registry — ✅ DONE (2026-06-20)
+
+Created `ui/js/generate/control-bindings.js`
+(`window.SDGui.generateControls`), loaded after `dimensions.js` and before
+`generate-ui.js` in `ui/index.html`. The new module **owns** the
+`controls` and `controlMirrors` registries (exposed for direct registration
+by model-field pickers, mode inputs, and LoRA controls) and hosts all the
+binding/sync functions moved out of the coordinator: `bindText`,
+`bindNumber`, `bindEnum`, `bindPathSelect`, `bindBool`, `bindSliderNumber`,
+`syncControl`, `syncControlsFromState`, `syncAll`.
+
+`generate-ui.js` now aliases the helpers and the two registries at the top
+of its IIFE (`var controls = ctrl.controls`, shared by reference), so every
+call site — including the bundle re-render that deletes stale `path`
+controls and the LoRA `controls.lora_*` assignments — works unchanged
+against the single shared table. `bindPathSelect` depends on
+`populateModelSelect` (still coordinator-owned until Stage 4), so it is
+injected via `ctrl.init({ flagCore, populateModelSelect })` at the top of
+`init()`, avoiding a circular dependency with the future model-fields
+module.
+
+Result: `generate-ui.js` dropped from 1467 to 1336 lines (~131 lines
+moved out, no behavior change). Verified: `node --check` (22 files, all
+ok), `npm run test:syntax`, `npm run test:frontend` (incl. the `init_img`
+primary+mirror sync suite, the upscale `bindPathSelect` dropdown listing
+the upscalers folder, LoRA slider + prompt-tag injection, and the
+wan→vid_gen bundle switch that exercises stale path-control cleanup),
+`ruff check .`, and `python server.py` + `/api/status` all pass.
+
+#### Original plan (kept for reference)
 
 Move the binding/sync functions together:
 
