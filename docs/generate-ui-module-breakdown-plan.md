@@ -159,7 +159,42 @@ This module should own the `controls` and `controlMirrors` registries, or receiv
 
 Pitfall: dynamic bundle fields currently delete stale `path` controls before re-rendering. That cleanup must remain correct or hidden model picker controls can continue to receive state updates.
 
-### Stage 4: Extract Model Fields and LoRA Controls
+### Stage 4: Extract Model Fields and LoRA Controls — ✅ DONE (2026-06-20)
+
+Created `ui/js/generate/model-fields.js` (`window.SDGui.generateModelFields`),
+loaded after `control-bindings.js` and before `generate-ui.js` in
+`ui/index.html`. The new module **owns** the bundle-driven model pickers
+and LoRA controls: `fieldLabel`, `populateModelSelect`,
+`populateLoraFileSelect`, `renderLoraControls`, `browseModel`, and
+`renderBundleFields`.
+
+`generate-ui.js` now aliases the helper at the top of its IIFE
+(`var mf = window.SDGui.generateModelFields`,
+`var renderBundleFields = mf.renderBundleFields`) so every call site —
+the bundle select change handler, `syncFromState`, `init`, and the public
+return — works unchanged. `mf.init({ flagCore, controls, syncControl })`
+runs first in `init()` so the module can register path-kind controls and
+prune stale entries on bundle re-renders. `populateModelSelect` is
+re-injected into `ctrl.init({ populateModelSelect: mf.populateModelSelect })`
+so `bindPathSelect("gen-upscale-model", ...)` still populates the
+upscaler dropdown from `/api/models?type=upscaler` (the test suite
+asserts the rendered option list).
+
+The LoRA prompt-tag injection (`<lora:name:strength>` +
+`--lora-model-dir`) intentionally stays in `generate()` (will move to
+the run controller in Stage 7) so the path-parsing helpers in
+`window.SDGui.generateFormatters` remain the single source of truth for
+LoRA-path → prompt-tag transformation.
+
+Result: `generate-ui.js` dropped from 1336 to 1034 lines (~302 lines
+moved out, no behavior change). Verified: `node --check` (23 files, all
+ok), `npm run test:syntax`, `npm run test:frontend` (incl. the LoRA
+strength slider render, the LoRA prompt-tag + `--lora-model-dir`
+injection at generate time, the `init_img` mirror suite, the wan→vid_gen
+bundle re-render, and the upscale-model dropdown listing the upscalers
+folder), and `python server.py` + `/api/status` all pass.
+
+#### Original plan (kept for reference)
 
 Move:
 
