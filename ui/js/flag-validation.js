@@ -26,8 +26,9 @@ window.SDGui.validateFlagDefinitions = () => {
 
 		if (VALID_TYPES.indexOf(f.type) === -1)
 			warnings.push("Flag " + f.id + " has unknown type: " + f.type);
-		if (VALID_MODES.indexOf(f.mode) === -1)
-			warnings.push("Flag " + f.id + " has unknown mode: " + f.mode);
+		var modes = Array.isArray(f.mode) ? f.mode : [f.mode];
+		if (!modes.length || modes.some((m) => VALID_MODES.indexOf(m) === -1))
+			warnings.push("Flag " + f.id + " has unknown mode: " + JSON.stringify(f.mode));
 		if (f.category && !catSet[f.category])
 			warnings.push("Flag " + f.id + " has unknown category: " + f.category);
 		if (f.default === undefined) warnings.push("Flag " + f.id + " missing default");

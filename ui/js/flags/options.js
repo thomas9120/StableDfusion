@@ -64,6 +64,26 @@ window.SDGui.PREVIEW_METHODS = ["none", "proj", "tae", "vae"];
 // RNG enum from `sd-cli -h` (--rng).
 window.SDGui.RNG_TYPES = ["cuda", "std_default", "cpu"];
 
+// VAE latent format override (--vae-format).
+window.SDGui.VAE_FORMATS = ["auto", "flux", "sd3", "flux2"];
+
+// Prediction type override (--prediction). "default" is GUI-only and skipped.
+window.SDGui.PREDICTION_TYPES = [
+	"default",
+	"eps",
+	"v",
+	"edm_v",
+	"sd3_flow",
+	"flux_flow",
+	"flux2_flow",
+];
+
+// LoRA application mode (--lora-apply-mode).
+window.SDGui.LORA_APPLY_MODES = ["auto", "immediately", "at_runtime"];
+
+// SCM cache policy (--scm-policy).
+window.SDGui.SCM_POLICIES = ["dynamic", "static"];
+
 // sd-cli run modes (modes_str[] in examples/common/common.cpp).
 window.SDGui.SD_MODES = ["img_gen", "vid_gen", "convert", "upscale", "metadata"];
 

@@ -10,7 +10,6 @@ Validates:
 """
 
 import sys
-import threading
 import time
 from pathlib import Path
 
@@ -102,7 +101,9 @@ def test_safe_destination_resolves_under_models(tmp_path):
 
 def test_safe_destination_allows_nested_subdirs(tmp_path):
     ctx = _ctx(tmp_path)
-    dest = hf_download_service._safe_destination(ctx.paths.models, "text_encoder/clip_l.safetensors")
+    dest = hf_download_service._safe_destination(
+        ctx.paths.models, "text_encoder/clip_l.safetensors"
+    )
     assert dest.parent == ctx.paths.models / "text_encoder"
 
 
@@ -259,7 +260,7 @@ def test_start_download_dedups_files(tmp_path, monkeypatch):
     monkeypatch.setattr(
         hf_download_service,
         "_safe_destination",
-        lambda d, f: (d / f),
+        lambda d, f: d / f,
     )
 
     hf_download_service.start_download(

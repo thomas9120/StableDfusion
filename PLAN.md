@@ -432,7 +432,7 @@ Directory structure, bootable `server.py` + `backend/app.py` serving a placehold
 - `hf_download.py` multi-format + multi-file; `hf-download-ui.js`.
 - **Verify:** download a FLUX gguf bundle from HF and generate with it.
 
-### Phase 4 — Configure parity + Presets
+### Phase 4 — Configure parity + Presets ✅
 
 - Expand `definitions.js` to the full `sd-cli` flag set (verify against `-h` / `common.cpp`).
 - `presets.py` + `presets.js` (CRUD, import/export, grouped by model type), custom launch args.

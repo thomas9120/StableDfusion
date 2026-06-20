@@ -123,7 +123,7 @@ window.SDGui.configFlagsUi = (() => {
 		ta.rows = 2;
 		ta.placeholder = '--my-flag value --another "quoted value"';
 		ta.value = window.SDGui.flagCore.getFlagValues().custom_args || "";
-		ta.addEventListener("change", () => {
+		ta.addEventListener("input", () => {
 			window.SDGui.flagCore.setFlagValue("custom_args", ta.value);
 		});
 		wrap.appendChild(lbl);

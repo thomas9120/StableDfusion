@@ -109,7 +109,7 @@ def get_repo_files(
     sizes: dict[str, int] = {}
     try:
         info = api.repo_info(repo_id, revision=revision or "main", files_metadata=True, token=token)
-        for sibling in (getattr(info, "siblings", None) or []):
+        for sibling in getattr(info, "siblings", None) or []:
             rfilename = getattr(sibling, "rfilename", None)
             if not rfilename:
                 continue
@@ -181,7 +181,10 @@ def _download_one(
     url = hf_hub_url(repo_id=repo_id, filename=filename)
     req = urllib.request.Request(
         url,
-        headers={"User-Agent": "stable-d-gui", **({"Authorization": f"Bearer {token}"} if token else {})},
+        headers={
+            "User-Agent": "stable-d-gui",
+            **({"Authorization": f"Bearer {token}"} if token else {}),
+        },
     )
 
     with ctx.services.urlopen_with_ssl(req, timeout=60) as resp:
@@ -198,7 +201,9 @@ def _download_one(
                         break
                     f.write(chunk)
                     downloaded += len(chunk)
-                    ctx.state.model_download.update(downloaded=downloaded, total=total or downloaded)
+                    ctx.state.model_download.update(
+                        downloaded=downloaded, total=total or downloaded
+                    )
         except _DownloadCanceled:
             # Cleanup partial file so the user can retry.
             try:
@@ -367,4 +372,3 @@ def cancel(ctx: AppContext) -> bool:
         ctx.state.model_download_cancel.set()
         ctx.state.model_download.update(message="Canceling…")
         return True
-

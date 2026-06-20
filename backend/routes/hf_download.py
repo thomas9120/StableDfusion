@@ -51,4 +51,3 @@ def get_download_status(request: Request, response: Response, ctx: AppContext) -
 def cancel_download(request: Request, response: Response, ctx: AppContext) -> None:
     canceled = hf_download_service.cancel(ctx)
     response.json({"canceled": canceled})
-

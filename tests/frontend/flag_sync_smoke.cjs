@@ -81,6 +81,7 @@ function findChromiumExecutable() {
 	let statusCalls = 0;
 	let generateStarted = false;
 	let generatePosted = null;
+	let presetStore = [];
 	const failures = [];
 
 	function check(name, cond) {
@@ -96,6 +97,52 @@ function findChromiumExecutable() {
 		await page.route("**/api/**", (route) => {
 			const url = route.request().url();
 			const method = route.request().method();
+			if (url.includes("/api/presets/shortcut") && method === "POST") {
+				let parsed = {};
+				try {
+					parsed = JSON.parse(route.request().postData() || "{}");
+				} catch (_e) {}
+				const preset = presetStore.find((p) => p.name === parsed.name);
+				return route.fulfill({
+					status: preset ? 200 : 404,
+					contentType: "application/json",
+					body: JSON.stringify(
+						preset
+							? { filename: `${preset.name}.json`, preset }
+							: { error: "Preset not found." },
+					),
+				});
+			}
+			if (url.endsWith("/api/presets") && method === "GET") {
+				return route.fulfill({
+					status: 200,
+					contentType: "application/json",
+					body: JSON.stringify({ presets: presetStore }),
+				});
+			}
+			if (url.endsWith("/api/presets") && method === "POST") {
+				let parsed = {};
+				try {
+					parsed = JSON.parse(route.request().postData() || "{}");
+				} catch (_e) {}
+				const preset = Object.assign(
+					{
+						schema: 1,
+						kind: "stable-d-gui.preset",
+						updated_at: new Date().toISOString(),
+					},
+					parsed,
+				);
+				preset.bundle = preset.bundle || preset.model_type || "custom";
+				preset.model_type = preset.bundle;
+				presetStore = presetStore.filter((p) => p.name !== preset.name);
+				presetStore.push(preset);
+				return route.fulfill({
+					status: 200,
+					contentType: "application/json",
+					body: JSON.stringify({ saved: true, preset }),
+				});
+			}
 			if (url.includes("/api/models")) {
 				return route.fulfill({
 					status: 200,
@@ -278,6 +325,40 @@ function findChromiumExecutable() {
 		// 9. History persisted to localStorage.
 		const stored = await page.evaluate(() => localStorage.getItem("sdgui.generate.history"));
 		check("history persisted to localStorage", !!stored && stored.includes("a cat"));
+
+		// ── Phase 4: preset save/load preserves flagCore state + custom args.
+		await page.evaluate(() => {
+			window.SDGui.flagCore.setMode("img_gen");
+			window.SDGui.flagCore.setBundle("sdxl", false);
+			window.SDGui.flagCore.setMultipleFlagValues({
+				model: "test.gguf",
+				prompt: "preset cat",
+				custom_args: "--eta 0.25",
+			});
+		});
+		await page.click('.nav-item[data-section="presets"]');
+		await page.fill("#preset-name", "Smoke Preset");
+		await page.fill("#preset-description", "saved by smoke");
+		await page.click("#btn-save-preset");
+		await page.waitForFunction(
+			() => document.querySelectorAll("#presets-list .preset-row").length > 0,
+			{ timeout: 3000 },
+		);
+		check("preset saved through UI", presetStore.length === 1);
+		await page.evaluate(() => {
+			window.SDGui.flagCore.setFlagValue("prompt", "changed");
+			window.SDGui.flagCore.setFlagValue("custom_args", "");
+		});
+		await page.click("#presets-list .preset-row .btn-primary");
+		const restoredPreset = await page.evaluate(() => ({
+			prompt: window.SDGui.flagCore.getFlagValues().prompt,
+			custom_args: window.SDGui.flagCore.getFlagValues().custom_args,
+			bundle: window.SDGui.flagCore.getBundle(),
+		}));
+		check("preset load restored prompt", restoredPreset.prompt === "preset cat");
+		check("preset load restored custom args", restoredPreset.custom_args === "--eta 0.25");
+		check("preset load restored bundle", restoredPreset.bundle === "sdxl");
+		await page.click('.nav-item[data-section="generate"]');
 
 		// ── Phase 3 ─────────────────────────────────────────────────────────
 		// Bundle change applies defaults + switches mode (wan → vid_gen).

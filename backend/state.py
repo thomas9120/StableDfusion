@@ -134,6 +134,9 @@ class ServerState:
     generation_lock: threading.Lock = field(default_factory=threading.Lock)
     generation_cancel: threading.Event = field(default_factory=threading.Event)
 
+    # Preset JSON CRUD (Phase 4).
+    preset_lock: threading.Lock = field(default_factory=threading.Lock)
+
     # Persistent sd-server process (Phase 5). Independent lock so a running
     # server does not block the one-shot generator.
     sd_server: AtomicDict = field(default_factory=lambda: AtomicDict(default_sd_server_state()))

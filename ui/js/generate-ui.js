@@ -137,10 +137,19 @@ window.SDGui.generateUi = (() => {
 			vae: "VAE",
 			clip_l: "CLIP-L",
 			clip_g: "CLIP-G",
+			clip_vision: "CLIP vision",
 			t5xxl: "T5XXL",
 			llm: "LLM text encoder",
+			llm_vision: "LLM vision",
 			taesd: "TAESD",
+			audio_vae: "Audio VAE",
+			high_noise_diffusion_model: "High-noise diffusion model",
+			uncond_diffusion_model: "Unconditional diffusion model",
 			control_net: "ControlNet",
+			embeddings_connectors: "Embeddings connectors",
+			embd_dir: "Embeddings directory",
+			photo_maker: "PhotoMaker",
+			pulid_weights: "PuLID weights",
 		};
 		return map[key] || key;
 	}
@@ -201,14 +210,27 @@ window.SDGui.generateUi = (() => {
 			fieldList = [
 				"model",
 				"diffusion_model",
+				"high_noise_diffusion_model",
+				"uncond_diffusion_model",
 				"vae",
+				"audio_vae",
 				"clip_l",
 				"clip_g",
+				"clip_vision",
 				"t5xxl",
 				"llm",
+				"llm_vision",
 				"taesd",
 				"control_net",
-			].map((key) => ({ key: key, purpose: key === "model" ? "model" : key, required: false }));
+				"embeddings_connectors",
+				"embd_dir",
+				"photo_maker",
+				"pulid_weights",
+			].map((key) => ({
+				key: key,
+				purpose: (window.SDGui.BUNDLE_FIELD_PURPOSES || {})[key] || key,
+				required: false,
+			}));
 		} else {
 			fieldList = (fields || []).map((f) => ({
 				key: f.key,
@@ -248,6 +270,20 @@ window.SDGui.generateUi = (() => {
 	// path-kind control sync (model picker selects)
 	function syncAll() {
 		Object.keys(controls).forEach(syncControl);
+	}
+
+	function syncSelectorsFromState() {
+		var modeSelect = $("gen-mode");
+		if (modeSelect) modeSelect.value = window.SDGui.flagCore.getMode();
+		var bundleSelect = $("gen-model-bundle");
+		if (bundleSelect) bundleSelect.value = window.SDGui.flagCore.getBundle();
+	}
+
+	function syncFromState(renderFields) {
+		syncSelectorsFromState();
+		updateModeSections();
+		if (renderFields) renderBundleFields();
+		syncAll();
 	}
 
 	// ── Phase 3: Browse for non-bundle file pickers (init_img / mask /
@@ -301,9 +337,7 @@ window.SDGui.generateUi = (() => {
 		window.SDGui.flagCore.setMultipleFlagValues(entry.params);
 		if (entry.bundle) window.SDGui.flagCore.setBundle(entry.bundle);
 		if (entry.mode) window.SDGui.flagCore.setMode(entry.mode);
-		updateModeSections();
-		syncAll();
-		renderBundleFields();
+		syncFromState(true);
 		window.SDGui.toast("Restored settings from history.", "info");
 	}
 
@@ -529,7 +563,7 @@ window.SDGui.generateUi = (() => {
 		populateEnum("gen-sampler", window.SDGui.SAMPLING_METHODS, vals.sampling_method);
 		populateEnum("gen-scheduler", window.SDGui.SCHEDULERS, vals.scheduler);
 		populateEnum("gen-type", window.SDGui.WEIGHT_TYPES, vals.type);
-		populateEnum("gen-preview", window.SDGui.PREVIEW_METHODS, vals.preview);
+		populateEnum("gen-preview-method", window.SDGui.PREVIEW_METHODS, vals.preview);
 
 		// Bundle dropdown.
 		var bundleSelect = $("gen-model-bundle");
@@ -574,7 +608,7 @@ window.SDGui.generateUi = (() => {
 		bindNumber("gen-batch", "batch_count");
 		bindNumber("gen-threads", "threads");
 		bindEnum("gen-type", "type");
-		bindEnum("gen-preview", "preview");
+		bindEnum("gen-preview-method", "preview");
 		bindNumber("gen-preview-interval", "preview_interval");
 		bindBool("gen-offload", "offload_to_cpu");
 		bindBool("gen-clip-cpu", "clip_on_cpu");
@@ -626,8 +660,7 @@ window.SDGui.generateUi = (() => {
 
 		// Cross-tab / cross-control sync: refresh non-focused controls on change.
 		window.SDGui.flagCore.onChange(() => {
-			syncAll();
-			updateModeSections();
+			syncFromState(false);
 		});
 
 		renderBundleFields();
@@ -652,5 +685,6 @@ window.SDGui.generateUi = (() => {
 		cancel: cancel,
 		renderHistory: renderHistory,
 		updateModeSections: updateModeSections,
+		syncFromState: syncFromState,
 	};
 })();

@@ -55,6 +55,7 @@ window.SDGui.flagCore = (() => {
 		var incoming = Object.assign({}, bundle.defaults);
 		if (typeof incoming.mode === "string" && incoming.mode) {
 			state.mode = incoming.mode;
+			state.flagValues.run_mode = incoming.mode;
 			delete incoming.mode;
 		}
 		state.flagValues = Object.assign({}, state.flagValues, incoming);
@@ -122,6 +123,9 @@ window.SDGui.flagCore = (() => {
 	}
 
 	function modeMatches(flag) {
+		if (window.SDGui.flagMatchesMode) {
+			return window.SDGui.flagMatchesMode(flag, state.mode);
+		}
 		return flag.mode === "all" || flag.mode === state.mode;
 	}
 
@@ -222,6 +226,7 @@ window.SDGui.flagCore = (() => {
 		getMode: () => state.mode,
 		setMode: (mode) => {
 			state.mode = mode;
+			state.flagValues.run_mode = mode;
 			notify();
 		},
 		getBundle: () => state.bundle,
@@ -238,6 +243,7 @@ window.SDGui.flagCore = (() => {
 		},
 		setMultipleFlagValues: (vals) => {
 			Object.assign(state.flagValues, vals || {});
+			state.flagValues.run_mode = state.mode;
 			notify();
 		},
 		// Reset every flag back to its definition default (keeps mode/bundle).
