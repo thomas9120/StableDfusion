@@ -12,6 +12,13 @@
 //   - metadata is embedded by default; the opt-out flag is
 //     `--disable-image-metadata` (NOT `--embed-metadata`).
 //   - img2img init image is `-i, --init-img` (NOT `--init-image`).
+//
+// Phase 3 additions:
+//   - upscale mode: --upscale-model, --upscale-repeats, --upscale-tile-size
+//   - convert mode: --convert-name
+//   - metadata mode: --image, --metadata-format
+//   - flf2v support: --end-img
+//   - hires-fix model dir: --hires-upscalers-dir (img_gen/advanced)
 window.SDGui = window.SDGui || {};
 
 // Each entry:
@@ -253,6 +260,28 @@ window.SDGui.SD_CLI_FLAGS = [
 		default: "",
 		mode: "all",
 	},
+	{
+		// upscale mode: ESRGAN model (REALesrgan / 4x-UltraSharp / etc.).
+		id: "upscale_model",
+		flag: "--upscale-model",
+		type: "path",
+		category: "model_components",
+		label: "Upscale (ESRGAN) model",
+		desc: "Path to ESRGAN upscaler model (used by upscale mode).",
+		default: "",
+		mode: "upscale",
+	},
+	{
+		// hires-fix (img_gen, advanced): separate upscaler model directory.
+		id: "hires_upscalers_dir",
+		flag: "--hires-upscalers-dir",
+		type: "path",
+		category: "model_components",
+		label: "Hires upscalers dir",
+		desc: "Highres fix upscaler model directory.",
+		default: "",
+		mode: "all",
+	},
 
 	// ── Image-to-Image inputs (img_gen) ─────────────────────────────────────
 	{
@@ -295,6 +324,74 @@ window.SDGui.SD_CLI_FLAGS = [
 		desc: "Strength to apply Control Net (default: 0.9).",
 		default: 0.9,
 		mode: "img_gen",
+	},
+	{
+		// Phase 3: end-img is required by flf2v (Wan first-last-frame).
+		id: "end_img",
+		flag: "--end-img",
+		type: "path",
+		category: "img2img",
+		label: "End image",
+		desc: "Path to the end image (required by flf2v).",
+		default: "",
+		mode: "img_gen",
+	},
+
+	// ── Upscale mode ───────────────────────────────────────────────────────
+	{
+		id: "upscale_repeats",
+		flag: "--upscale-repeats",
+		type: "int",
+		category: "img2img",
+		label: "Upscale repeats",
+		desc: "Run the ESRGAN upscaler this many times (default: 1).",
+		default: 1,
+		mode: "upscale",
+	},
+	{
+		id: "upscale_tile_size",
+		flag: "--upscale-tile-size",
+		type: "int",
+		category: "img2img",
+		label: "Upscale tile size",
+		desc: "Tile size for ESRGAN upscaling (default: 128).",
+		default: 128,
+		mode: "upscale",
+	},
+
+	// ── Convert mode ───────────────────────────────────────────────────────
+	{
+		id: "convert_name",
+		flag: "--convert-name",
+		type: "text",
+		category: "img2img",
+		label: "Convert tensor name",
+		desc: "Convert a single tensor name (convert mode).",
+		default: "",
+		mode: "convert",
+	},
+
+	// ── Metadata mode ──────────────────────────────────────────────────────
+	{
+		id: "image",
+		flag: "--image",
+		type: "path",
+		category: "img2img",
+		label: "Image",
+		desc: "Path to the image to inspect (metadata mode).",
+		default: "",
+		mode: "metadata",
+	},
+	{
+		id: "metadata_format",
+		flag: "--metadata-format",
+		type: "enum",
+		category: "img2img",
+		label: "Metadata format",
+		desc: "Metadata output format, one of [text, json] (default: text).",
+		default: "text",
+		mode: "metadata",
+		options: ["text", "json"],
 	},
 
 	// ── Backend & GPU (all) ─────────────────────────────────────────────────

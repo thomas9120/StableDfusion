@@ -1,4 +1,4 @@
-"""Hugging Face download routes. TODO(Phase 3).
+"""Hugging Face download routes (Phase 3).
 
 - POST /api/hf/repo-files
 - POST /api/hf/download
@@ -13,31 +13,42 @@ from backend.services import hf_download_service
 
 def list_repo_files(request: Request, response: Response, ctx: AppContext) -> None:
     body = request.body or {}
-    repo_id = body.get("repo_id", "")
+    repo_id = (body.get("repo_id") or "").strip()
+    revision = (body.get("revision") or "main").strip() or "main"
+    token = (body.get("token") or "").strip() or None
+
     if not hf_download_service.validate_hf_repo_id(repo_id):
-        response.error("Invalid repo id", 400)
+        response.error("Invalid repo id (expected 'owner/name').", 400)
+        return
+    if not hf_download_service.validate_hf_revision(revision):
+        response.error("Invalid revision.", 400)
         return
     try:
-        response.json(
-            hf_download_service.get_repo_files(
-                ctx, repo_id, body.get("revision", "main"), body.get("token")
-            )
-        )
-    except NotImplementedError:
-        response.error("HF listing not implemented yet (Phase 3)", 501)
+        response.json(hf_download_service.get_repo_files(ctx, repo_id, revision, token))
+    except hf_download_service._RepoListingError as exc:
+        # 502: we reached HuggingFace but it rejected the request (not found,
+        # unauthorized, rate-limited, etc.).
+        response.error(f"Hugging Face: {exc}", 502)
+    except Exception as exc:
+        # Network/SSL/unexpected — surface a clean message, full trace to stderr.
+        print(f"[hf/repo-files] {exc}", flush=True)
+        response.error("Could not reach Hugging Face. Check your network and try again.", 502)
 
 
 def start_download(request: Request, response: Response, ctx: AppContext) -> None:
-    try:
-        response.json(hf_download_service.start_download(ctx, request.body or {}))
-    except NotImplementedError:
-        response.error("HF download not implemented yet (Phase 3)", 501)
+    body = request.body or {}
+    result = hf_download_service.start_download(ctx, body)
+    if "error" in result:
+        response.error(result["error"], 400)
+        return
+    response.json(result)
 
 
 def get_download_status(request: Request, response: Response, ctx: AppContext) -> None:
-    response.json(ctx.state.model_download.snapshot())
+    response.json(hf_download_service.get_status(ctx))
 
 
 def cancel_download(request: Request, response: Response, ctx: AppContext) -> None:
-    ctx.state.model_download_cancel.set()
-    response.json({"canceled": True})
+    canceled = hf_download_service.cancel(ctx)
+    response.json({"canceled": canceled})
+

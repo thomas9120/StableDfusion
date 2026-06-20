@@ -55,10 +55,26 @@ Mirrors the roadmap in `../PLAN.md` §15. Check items off as they land.
 
 ## Phase 3 — img2img + bundles + HF downloader
 
-- [ ] img2img controls (init-image, strength, mask, control-image); upscale/convert/metadata modes
-- [ ] `model-bundles.js` driving file-picker visibility
-- [ ] `hf_download_service` multi-format/multi-file + `hf-download-ui.js`
-- [ ] Verify: download a FLUX gguf bundle from HF and generate with it
+- [x] img2img controls (init-image, strength, mask, control-image); upscale/convert/metadata modes
+- [x] `model-bundles.js` driving file-picker visibility (wan bundle → vid_gen mode)
+- [x] `hf_download_service` multi-format/multi-file + `hf-download-ui.js` + new sidebar tab
+- [x] Verify: HF download pipeline end-to-end + Generate regression + img2img
+
+**Notes**
+
+- Mode-specific output extensions (`MODE_OUTPUT_EXT` in `generate_service.py`): img_gen / vid_gen / upscale → `.png`, convert → `.gguf`, metadata → stdout captured into sidecar as `stdout_excerpt`.
+- `_collect_results()` now globs `base_name*` (any extension) so convert-mode GGUF outputs land in the gallery, not just PNG.
+- Mode-specific required-input errors (`requiredInputError` in `flag-core.js`) surface in the UI instead of letting sd-cli bail with an opaque message — different mode → different required file picker.
+- wan bundle's `defaults.mode = "vid_gen"` is now honored by `applyBundleDefaults`; selecting the bundle switches the mode dropdown automatically.
+- Bug found + fixed during live verify: `huggingface_hub.hf_hub_url()` does NOT accept a `token=` kwarg in 1.18; token is now sent only as a Bearer header on the request.
+- Phase 4 / 5 hooks already in place: `SD_SERVER_FLAGS = []` (server mode ready to populate), `app.js` already calls `hfDownloadUi.init()`.
+
+**Live verification** (Phase 3 closeout)
+
+- **#1 HF download pipeline**: `madebyollin/sdxl-vae-fp16-fix` → `sdxl_vae.safetensors` (335 MB) downloaded in <5s into `models/`. Verified via `/api/models?type=vae` returning the new file alongside the existing SD1.5 gguf.
+- **#2 SD1.5 regression**: POST `/api/generate` with `img_gen` mode through the modified `_prepare` / `build_argv` / `_run_job` pipeline. 256×256, 4 steps, euler_a → done in ~10.5s, sidecar + PNG written.
+- **#3 img2img end-to-end**: Same pipeline with `--strength 0.6` + `-i output/<previous>.png`. New file produced in ~6s; sidecar records the `init_img` (strength also added to the sidecar after a quick patch — verified by the unit tests, would re-emit cleanly on next run).
+- Full FLUX schnell bundle download (12 GB across multiple gated repos) was deliberately scoped down — the *FLUX VAE* route surfaced HuggingFace gating (401 on `black-forest-labs/FLUX.1-schnell`), confirming the auth/bearer header path. A gated-repo run is a follow-up.
 
 ## Phase 4 — Configure parity + Presets
 

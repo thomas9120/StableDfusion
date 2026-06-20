@@ -167,3 +167,89 @@ def test_has_model_detects_model_and_diffusion():
     assert generate_service._has_model([["--steps", "5"]]) is False
     assert generate_service._has_model([["-m", ""]]) is False
     assert generate_service._has_model([]) is False
+
+
+# ── Phase 3: mode-specific output + result collection ──────────────────
+
+
+def test_prepare_uses_png_for_img_gen(tmp_path):
+    ctx = _ctx(tmp_path)
+    prepared = generate_service._prepare(
+        ctx,
+        {
+            "mode": "img_gen",
+            "args": [["-m", "m.gguf"], ["--prompt", "cat"]],
+            "seed": 42,
+            "total_steps": 6,
+            "preview_method": "vae",
+        },
+    )
+    assert prepared["output_path"].suffix == ".png"
+    assert prepared["output_path"].parent == tmp_path
+
+
+def test_prepare_uses_gguf_for_convert(tmp_path):
+    ctx = _ctx(tmp_path)
+    prepared = generate_service._prepare(
+        ctx,
+        {
+            "mode": "convert",
+            "args": [["-m", "src.safetensors"], ["--convert-name", "x"]],
+            "seed": 1,
+            "total_steps": 0,
+            "preview_method": "none",
+        },
+    )
+    assert prepared["output_path"].suffix == ".gguf"
+
+
+def test_prepare_metadata_does_not_require_model(tmp_path):
+    ctx = _ctx(tmp_path)
+    # metadata mode: no -m / --model; only --image.
+    prepared = generate_service._prepare(
+        ctx,
+        {
+            "mode": "metadata",
+            "args": [["--image", "in.png"], ["--metadata-format", "text"]],
+            "seed": 0,
+            "total_steps": 0,
+            "preview_method": "none",
+            "params": {"image": "in.png"},
+        },
+    )
+    assert prepared["mode"] == "metadata"
+    assert prepared["sidecar"]["image"] == "in.png"
+
+
+def test_prepare_upscale_requires_no_diffusion_model(tmp_path):
+    ctx = _ctx(tmp_path)
+    prepared = generate_service._prepare(
+        ctx,
+        {
+            "mode": "upscale",
+            "args": [
+                ["-i", "small.png"],
+                ["--upscale-model", "esrgan.pth"],
+                ["--upscale-repeats", "2"],
+            ],
+            "seed": 0,
+            "total_steps": 0,
+            "preview_method": "none",
+            "params": {"init_img": "small.png", "upscale_model": "esrgan.pth"},
+        },
+    )
+    assert prepared["mode"] == "upscale"
+    assert prepared["sidecar"]["init_img"] == "small.png"
+    assert prepared["sidecar"]["upscale_model"] == "esrgan.pth"
+
+
+def test_collect_results_includes_non_png(tmp_path):
+    """convert mode produces a .gguf (or other non-PNG); _collect_results must
+    surface it (Phase 3: globbed by extension)."""
+    base = "20240101T000000_42"
+    (tmp_path / f"{base}.gguf").write_bytes(b"x")
+    (tmp_path / "unrelated.gguf").write_bytes(b"y")
+    results = generate_service._collect_results(tmp_path / f"{base}.gguf", base)
+    names = [p.name for p in results]
+    assert f"{base}.gguf" in names
+    assert "unrelated.gguf" not in names

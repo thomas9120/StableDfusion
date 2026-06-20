@@ -24,10 +24,13 @@ window.SDGui.getFlagById = (id) =>
 	(window.SDGui.SD_CLI_FLAGS || []).find((f) => f.id === id) || null;
 
 // Ordered option list for an enum flag, or null if the flag is not an enum.
+// Resolution order: ENUM_OPTIONS central map → flag.options inline → null.
 window.SDGui.optionsForFlag = (flag) => {
 	if (!flag || flag.type !== "enum") return null;
 	var resolver = window.SDGui.ENUM_OPTIONS[flag.id];
-	return resolver ? resolver() : null;
+	if (resolver) return resolver();
+	if (Array.isArray(flag.options) && flag.options.length) return flag.options.slice();
+	return null;
 };
 
 window.SDGui.getBundleFields = (bundleValue) => {

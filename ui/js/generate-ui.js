@@ -1,5 +1,6 @@
-// PRIMARY Generate tab: prompt UI, bundle-driven model pickers, generate action,
-// live preview polling, gallery + history. All state reads/writes go through
+// PRIMARY Generate tab: prompt UI, bundle-driven model pickers, mode-specific
+// inputs (img2img / upscale / convert / metadata), generate action, live
+// preview polling, gallery + history. All state reads/writes go through
 // window.SDGui.flagCore (PLAN.md §8 sync rule). Safe DOM only (no innerHTML).
 window.SDGui = window.SDGui || {};
 
@@ -7,9 +8,20 @@ window.SDGui.generateUi = (() => {
 	var pollTimer = null;
 	var lastPreviewMtime = 0;
 	var generating = false;
-	var controls = {}; // flagId -> { el, kind, id }
+	var controls = {}; // flagId -> { id, kind }
 
 	var HISTORY_KEY = "sdgui.generate.history";
+
+	// Mode → mode-inputs container id (which sub-section is visible). Each
+	// mode-inputs container holds the file pickers + numeric controls specific
+	// to that mode (Phase 3: img2img, upscale, convert, metadata).
+	var MODE_INPUT_PANELS = {
+		img_gen: "gen-img2img-inputs",
+		vid_gen: "gen-img2img-inputs", // vid_gen reuses img2img layout (init-img/end-img)
+		upscale: "gen-upscale-inputs",
+		convert: "gen-convert-inputs",
+		metadata: "gen-metadata-inputs",
+	};
 
 	function $(id) {
 		return document.getElementById(id);
@@ -95,6 +107,28 @@ window.SDGui.generateUi = (() => {
 		Object.keys(controls).forEach(syncControl);
 	}
 
+	// ── Mode-aware section visibility (Phase 3) ────────────────────────────
+	function setHidden(node, hidden) {
+		if (node) node.classList.toggle("hidden", !!hidden);
+	}
+
+	function updateModeSections() {
+		var mode = window.SDGui.flagCore.getMode();
+		var activePanelId = MODE_INPUT_PANELS[mode];
+
+		// Toggle which mode-inputs panel is visible.
+		Object.keys(MODE_INPUT_PANELS).forEach(function (m) {
+			setHidden($(MODE_INPUT_PANELS[m]), MODE_INPUT_PANELS[m] !== activePanelId);
+		});
+
+		// Prompt + negative prompt + dimensions/steps/seed are only relevant
+		// for img_gen / vid_gen (and not for upscale/convert/metadata).
+		var usePrompt = mode === "img_gen" || mode === "vid_gen";
+		setHidden($("gen-prompt-section"), !usePrompt);
+		setHidden($("gen-sampling-section"), !usePrompt);
+		setHidden($("gen-advanced-section"), !usePrompt);
+	}
+
 	// ── Model-component pickers (bundle-driven) ───────────────────────────
 	function fieldLabel(key) {
 		var map = {
@@ -124,7 +158,7 @@ window.SDGui.generateUi = (() => {
 						m.name + " (" + Math.round(m.size / 1048576) + " MB)",
 						"models/" + m.relative,
 					),
-			),
+				),
 			);
 		} catch (e) {
 			select.replaceChildren();
@@ -216,6 +250,29 @@ window.SDGui.generateUi = (() => {
 		Object.keys(controls).forEach(syncControl);
 	}
 
+	// ── Phase 3: Browse for non-bundle file pickers (init_img / mask /
+	// control_image / upscale-init / upscale-model / metadata image).
+	async function browsePath(flagId, purpose, title) {
+		try {
+			var res = await window.SDGui.fetchJson("/api/select-file", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ purpose: purpose, title: title }),
+			});
+			if (res && res.selected && res.path) {
+				window.SDGui.flagCore.setFlagValue(flagId, res.path);
+				syncControl(flagId);
+			}
+		} catch (e) {
+			window.SDGui.toast(e.message, "error");
+		}
+	}
+
+	function bindBrowse(buttonId, handler) {
+		var btn = $(buttonId);
+		if (btn) btn.addEventListener("click", handler);
+	}
+
 	// ── History (localStorage) ────────────────────────────────────────────
 	function loadHistory() {
 		try {
@@ -243,6 +300,8 @@ window.SDGui.generateUi = (() => {
 		if (!entry || !entry.params) return;
 		window.SDGui.flagCore.setMultipleFlagValues(entry.params);
 		if (entry.bundle) window.SDGui.flagCore.setBundle(entry.bundle);
+		if (entry.mode) window.SDGui.flagCore.setMode(entry.mode);
+		updateModeSections();
 		syncAll();
 		renderBundleFields();
 		window.SDGui.toast("Restored settings from history.", "info");
@@ -283,6 +342,31 @@ window.SDGui.generateUi = (() => {
 		if (!box) return;
 		box.replaceChildren();
 		var files = snap.result_files || [];
+		var mode = snap.mode || window.SDGui.flagCore.getMode();
+
+		// Metadata mode: no image file is produced — sd-cli prints the metadata
+		// to stdout. The backend captures the tail into the sidecar (and may
+		// expose it via the status payload). Render the text into the result box.
+		if (mode === "metadata") {
+			var text = (snap.stdout_excerpt || "").toString();
+			if (!text) {
+				box.appendChild(
+					el(
+						"div",
+						"help-text",
+						"No metadata output captured (the image may have no embedded metadata).",
+					),
+				);
+			} else {
+				var pre = el("pre", "result-text");
+				pre.textContent = text;
+				box.appendChild(pre);
+			}
+			if (actions) actions.classList.add("hidden");
+			addHistoryEntry(snap, files[0] || "metadata");
+			return;
+		}
+
 		if (!files.length) {
 			if (actions) actions.classList.add("hidden");
 			return;
@@ -312,8 +396,13 @@ window.SDGui.generateUi = (() => {
 
 	function sendToImg2img(name) {
 		window.SDGui.flagCore.setFlagValue("init_img", name);
-		window.SDGui.toast("Set as init image. Switch mode / add a model to img2img.", "info");
-		syncControl("init_img");
+		// Switch to img_gen if not already (img2img is an img_gen-only feature).
+		if (window.SDGui.flagCore.getMode() !== "img_gen") {
+			window.SDGui.flagCore.setMode("img_gen");
+		}
+		updateModeSections();
+		syncAll();
+		window.SDGui.toast("Set as init image. Adjust strength then Generate.", "info");
 	}
 
 	function addHistoryEntry(snap, file) {
@@ -324,6 +413,7 @@ window.SDGui.generateUi = (() => {
 			thumb: "/api/image/" + encodeURIComponent(file),
 			timestamp: Date.now(),
 			bundle: window.SDGui.flagCore.getBundle(),
+			mode: window.SDGui.flagCore.getMode(),
 			params: vals,
 		};
 		var entries = loadHistory();
@@ -392,7 +482,7 @@ window.SDGui.generateUi = (() => {
 			params: vals,
 		};
 
-		// Reset preview area.
+		// Reset preview area (only relevant for img_gen/vid_gen, harmless for others).
 		lastPreviewMtime = 0;
 		var img = $("gen-preview");
 		if (img) {
@@ -451,6 +541,11 @@ window.SDGui.generateUi = (() => {
 			bundleSelect.value = window.SDGui.flagCore.getBundle();
 			bundleSelect.addEventListener("change", () => {
 				window.SDGui.flagCore.setBundle(bundleSelect.value, true);
+				// applyBundleDefaults may switch the mode (e.g. wan → vid_gen);
+				// reflect that in the mode dropdown + mode-specific UI.
+				var modeSelect = $("gen-mode");
+				if (modeSelect) modeSelect.value = window.SDGui.flagCore.getMode();
+				updateModeSections();
 				renderBundleFields();
 				syncAll();
 			});
@@ -462,6 +557,7 @@ window.SDGui.generateUi = (() => {
 			modeSelect.value = window.SDGui.flagCore.getMode();
 			modeSelect.addEventListener("change", () => {
 				window.SDGui.flagCore.setMode(modeSelect.value);
+				updateModeSections();
 			});
 		}
 
@@ -485,7 +581,42 @@ window.SDGui.generateUi = (() => {
 		bindBool("gen-flash", "flash_attn");
 		bindBool("gen-vae-tiling", "vae_tiling");
 
+		// img2img / vid_gen mode inputs.
+		bindText("gen-init-img", "init_img");
+		bindBrowse("btn-browse-init-img", () => browsePath("init_img", "image", "Select init image"));
+		bindNumber("gen-strength", "strength", true);
+		bindNumber("gen-control-strength", "control_strength", true);
+		bindText("gen-mask", "mask");
+		bindBrowse("btn-browse-mask", () => browsePath("mask", "image", "Select mask image"));
+		bindText("gen-control-image", "control_image");
+		bindBrowse("btn-browse-control-image", () =>
+			browsePath("control_image", "image", "Select control image"),
+		);
+
+		// Upscale mode inputs (init_img shares state with img2img init_img).
+		bindText("gen-upscale-init-img", "init_img");
+		bindBrowse("btn-browse-upscale-init-img", () =>
+			browsePath("init_img", "image", "Select init image"),
+		);
+		bindText("gen-upscale-model", "upscale_model");
+		bindBrowse("btn-browse-upscale-model", () =>
+			browsePath("upscale_model", "esrgan", "Select ESRGAN upscale model"),
+		);
+		bindNumber("gen-upscale-repeats", "upscale_repeats");
+		bindNumber("gen-upscale-tile-size", "upscale_tile_size");
+
+		// Convert mode inputs.
+		bindText("gen-convert-name", "convert_name");
+
+		// Metadata mode inputs.
+		bindText("gen-metadata-image", "image");
+		bindBrowse("btn-browse-metadata-image", () =>
+			browsePath("image", "image", "Select image"),
+		);
+		bindEnum("gen-metadata-format", "metadata_format");
+
 		syncControlsFromState();
+		updateModeSections();
 
 		// Buttons.
 		var genBtn = $("btn-generate");
@@ -494,7 +625,10 @@ window.SDGui.generateUi = (() => {
 		if (cancelBtn) cancelBtn.addEventListener("click", cancel);
 
 		// Cross-tab / cross-control sync: refresh non-focused controls on change.
-		window.SDGui.flagCore.onChange(() => syncAll());
+		window.SDGui.flagCore.onChange(() => {
+			syncAll();
+			updateModeSections();
+		});
 
 		renderBundleFields();
 		renderHistory();
@@ -517,5 +651,6 @@ window.SDGui.generateUi = (() => {
 		generate: generate,
 		cancel: cancel,
 		renderHistory: renderHistory,
+		updateModeSections: updateModeSections,
 	};
 })();

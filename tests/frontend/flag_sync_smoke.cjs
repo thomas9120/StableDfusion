@@ -1,4 +1,4 @@
-// Playwright frontend smoke test for Phase 2 (PLAN.md §17).
+// Playwright frontend smoke test (Phase 2 + Phase 3, PLAN.md §17).
 // Serves ui/ as the web root, stubs the backend /api/* endpoints, and verifies:
 //   - flag definitions validate cleanly at startup
 //   - Generate builds launch args from shared flagCore state
@@ -6,6 +6,10 @@
 //   - Generate click -> POST /api/generate -> poll status -> preview <img>
 //     refreshes on mtime change -> on done, result lands in gallery + a history
 //     entry is written (localStorage)
+//   - Phase 3: bundle change applies defaults + switches mode (wan → vid_gen)
+//   - Phase 3: mode-specific sections hide/show correctly per active mode
+//   - Phase 3: HF download UI initializes without errors and lists files from
+//     a stubbed /api/hf/repo-files response
 //
 // Run: npx playwright test or `node tests/frontend/flag_sync_smoke.cjs`
 "use strict";
@@ -274,6 +278,141 @@ function findChromiumExecutable() {
 		// 9. History persisted to localStorage.
 		const stored = await page.evaluate(() => localStorage.getItem("sdgui.generate.history"));
 		check("history persisted to localStorage", !!stored && stored.includes("a cat"));
+
+		// ── Phase 3 ─────────────────────────────────────────────────────────
+		// Bundle change applies defaults + switches mode (wan → vid_gen).
+		await page.selectOption("#gen-model-bundle", "wan");
+		await page.waitForTimeout(150);
+		const afterWan = await page.evaluate(() => ({
+			mode: window.SDGui.flagCore.getMode(),
+			video_frames: window.SDGui.flagCore.getFlagValues().video_frames,
+			fps: window.SDGui.flagCore.getFlagValues().fps,
+		}));
+		check("wan bundle switches mode to vid_gen", afterWan.mode === "vid_gen");
+		check(
+			"wan bundle defaults include video_frames=25",
+			afterWan.video_frames === 25,
+		);
+		check("wan bundle defaults include fps=16", afterWan.fps === 16);
+
+		// Mode-specific sections hide/show correctly per active mode.
+		const sectionVisibility = async (mode) => {
+			await page.selectOption("#gen-mode", mode);
+			await page.waitForTimeout(80);
+			return await page.evaluate(() => {
+				const isHidden = (id) => {
+					const n = document.getElementById(id);
+					return !n || n.classList.contains("hidden");
+				};
+				return {
+					img2img: isHidden("gen-img2img-inputs"),
+					upscale: isHidden("gen-upscale-inputs"),
+					convert: isHidden("gen-convert-inputs"),
+					metadata: isHidden("gen-metadata-inputs"),
+					prompt: isHidden("gen-prompt-section"),
+					sampling: isHidden("gen-sampling-section"),
+				};
+			});
+		};
+
+		const imgGen = await sectionVisibility("img_gen");
+		check("img_gen shows img2img inputs", !imgGen.img2img);
+		check("img_gen hides upscale/convert/metadata", imgGen.upscale && imgGen.convert && imgGen.metadata);
+		check("img_gen shows prompt section", !imgGen.prompt);
+
+		const upscaleVis = await sectionVisibility("upscale");
+		check("upscale shows upscale inputs", !upscaleVis.upscale);
+		check("upscale hides img2img inputs", upscaleVis.img2img);
+		check("upscale hides prompt section", upscaleVis.prompt);
+
+		const convertVis = await sectionVisibility("convert");
+		check("convert shows convert inputs", !convertVis.convert);
+		check("convert hides prompt section", convertVis.prompt);
+
+		const metadataVis = await sectionVisibility("metadata");
+		check("metadata shows metadata inputs", !metadataVis.metadata);
+		check("metadata hides sampling section", metadataVis.sampling);
+		check("metadata hides prompt section", metadataVis.prompt);
+
+		// Mode-specific required-input errors surface correctly.
+		const upscaleErr = await page.evaluate(() => {
+			window.SDGui.flagCore.setMode("upscale");
+			window.SDGui.flagCore.setFlagValue("init_img", "");
+			window.SDGui.flagCore.setFlagValue("upscale_model", "");
+			return window.SDGui.flagCore.getLaunchArgs().error || "";
+		});
+		check("upscale error mentions init_img", upscaleErr.includes("init image"));
+		const metadataErr = await page.evaluate(() => {
+			window.SDGui.flagCore.setMode("metadata");
+			window.SDGui.flagCore.setFlagValue("image", "");
+			return window.SDGui.flagCore.getLaunchArgs().error || "";
+		});
+		check("metadata error mentions image", metadataErr.includes("image"));
+
+		// Reset to img_gen so the rest of the page is in a sane state.
+		await page.evaluate(() => window.SDGui.flagCore.setMode("img_gen"));
+
+		// HF download tab initializes without errors + lists files from stub.
+		const repoFilesBody = JSON.stringify({
+			files: [
+				{ name: "flux1-schnell-q4_0.gguf", size: 4_500_000_000 },
+				{ name: "ae.safetensors", size: 320_000_000 },
+				{ name: "clip_l.safetensors", size: 250_000_000 },
+				{ name: "README.md", size: 1000 },
+			],
+			revision: "main",
+			count: 4,
+			total_size: 5_070_001_000,
+		});
+		// Stub HF repo-files endpoint specifically; other endpoints already stubbed.
+		await page.unroute("**/api/**");
+		await page.route("**/api/**", (route) => {
+			const url = route.request().url();
+			if (url.includes("/api/hf/repo-files")) {
+				return route.fulfill({
+					status: 200,
+					contentType: "application/json",
+					body: repoFilesBody,
+				});
+			}
+			if (url.includes("/api/hf/download")) {
+				return route.fulfill({
+					status: 200,
+					contentType: "application/json",
+					body: JSON.stringify({ job_id: "smoke_hf", file_count: 1 }),
+				});
+			}
+			if (url.includes("/api/hf/download-status")) {
+				return route.fulfill({
+					status: 200,
+					contentType: "application/json",
+					body: JSON.stringify({ status: "idle" }),
+				});
+			}
+			return route.fulfill({
+				status: 200,
+				contentType: "application/json",
+				body: JSON.stringify({ ok: true }),
+			});
+		});
+
+		await page.click('.nav-item[data-section="hf-download"]');
+		await page.fill("#hf-repo-id", "city96/FLUX.1-schnell-gguf");
+		await page.click("#btn-hf-fetch");
+		await page.waitForFunction(
+			() => document.querySelectorAll("#hf-file-list .hf-file-row").length > 0,
+			{ timeout: 3000 },
+		);
+		const hfRowCount = await page.evaluate(
+			() => document.querySelectorAll("#hf-file-list .hf-file-row").length,
+		);
+		check("HF file list rendered after Find Files", hfRowCount === 4);
+		const hfStatus = await page.evaluate(() => document.getElementById("hf-status").textContent);
+		check("HF status reports file count", /Found 4 file/.test(hfStatus));
+		const hfDownloadEnabled = await page.evaluate(
+			() => !document.getElementById("btn-hf-download").disabled,
+		);
+		check("HF Download button enabled after auto-selection", hfDownloadEnabled);
 	} finally {
 		await browser.close();
 		server.close();

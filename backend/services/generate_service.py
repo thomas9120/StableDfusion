@@ -34,7 +34,25 @@ from . import process_manager
 SD_MODES = ("img_gen", "vid_gen", "convert", "upscale", "metadata")
 
 # Modes that require a model path (model or diffusion-model) to run.
+# upscale requires --upscale-model + --init-img (not a generation model);
+# metadata requires --image only (no model at all). The frontend surfaces
+# mode-specific required-input errors before reaching the backend, so we only
+# re-check the model requirement here as a defensive guard.
 MODEL_REQUIRED_MODES = ("img_gen", "vid_gen", "convert")
+
+# Per-mode default output extension. The backend owns -o / --output naming so
+# gallery sidecars can locate results; the extension must match what sd-cli
+# will actually write for that mode.
+MODE_OUTPUT_EXT = {
+    "img_gen": ".png",
+    "vid_gen": ".png",
+    "upscale": ".png",
+    "convert": ".gguf",  # sd-cli's convert target; user can override via custom args
+    "metadata": ".txt",  # never written (stdout-only); sentinel for pathing
+}
+
+# Modes that produce a file under output/ (vs. writing to stdout).
+FILE_PRODUCING_MODES = ("img_gen", "vid_gen", "upscale", "convert")
 
 # Flags the backend owns — strip any user-supplied occurrences so the backend's
 # own -M / -o / --preview-path naming for gallery sidecars always wins.
@@ -57,6 +75,7 @@ _SAVED_RE = re.compile(r"(\d+)\s*/\s*(\d+)\s+images?\s+saved", re.IGNORECASE)
 _TOKEN_RE = re.compile(r"^[^\x00-\x1f\x7f]*$")
 
 _POLL_INTERVAL = 0.25
+_METADATA_STDOUT_LIMIT = 4000  # last N bytes of stdout to keep in the sidecar
 
 
 def parse_step_progress(output: str) -> tuple[int, int] | None:
@@ -199,7 +218,8 @@ def _prepare(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
     ts = _utc_timestamp()
     seed_label = _safe_label(seed if seed >= 0 else "rnd", "rnd")
     base_name = f"{ts}_{seed_label}"
-    output_path = ctx.paths.output / f"{base_name}.png"
+    ext = MODE_OUTPUT_EXT.get(mode, ".png")
+    output_path = ctx.paths.output / f"{base_name}{ext}"
     preview_path = ctx.paths.output_preview / f"{base_name}.png"
 
     argv = build_argv(user_args, mode, output_path, preview_path, preview_method)
@@ -223,6 +243,14 @@ def _prepare(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
         "scheduler": params.get("scheduler"),
         "model": params.get("model", ""),
         "diffusion_model": params.get("diffusion_model", ""),
+        "image": params.get("image", ""),  # metadata mode input
+        "init_img": params.get("init_img", ""),  # img2img / upscale input
+        "strength": params.get("strength"),  # img2img denoising strength
+        "mask": params.get("mask", ""),  # inpaint mask
+        "control_image": params.get("control_image", ""),  # controlnet
+        "upscale_model": params.get("upscale_model", ""),
+        "convert_name": params.get("convert_name", ""),
+        "metadata_format": params.get("metadata_format", ""),
         "timestamp": ts,
         "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
     }
@@ -258,13 +286,18 @@ def read_sidecar(path: Path) -> dict[str, Any] | None:
 
 
 def _collect_results(output_path: Path, base_name: str) -> list[Path]:
-    """Collect result files written by sd-cli for this job's base name."""
+    """Collect result files written by sd-cli for this job's base name.
+
+    Matches ``<base_name>*`` (any extension) so convert mode can surface
+    ``.gguf`` / ``.safetensors`` results, not just ``.png``. Excludes the
+    preview subdirectory so we don't accidentally pick up preview files.
+    """
     out_dir = output_path.parent
     if not out_dir.exists():
         return []
-    matches = sorted(p for p in out_dir.glob(f"{base_name}*.png") if p.is_file())
+    matches = [p for p in out_dir.glob(f"{base_name}*") if p.is_file()]
     # Most recent first (gallery shows newest first).
-    matches.reverse()
+    matches.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     return matches
 
 
@@ -389,17 +422,40 @@ def _run_job(
     sidecar["files"] = rel_files
     sidecar["result_count"] = len(rel_files)
     sidecar["finished_at"] = datetime.datetime.now(datetime.UTC).isoformat()
+
+    # Metadata mode: sd-cli prints to stdout (no output file). Capture the tail
+    # so the sidecar carries the result the user actually wanted (the metadata
+    # text), and the frontend can render it as text.
+    if mode == "metadata":
+        full_stdout = "\n".join(process_manager.get_output_snapshot(ctx).get("output", []))
+        if len(full_stdout) > _METADATA_STDOUT_LIMIT:
+            sidecar["stdout_excerpt"] = (
+                "...[truncated]...\n" + full_stdout[-_METADATA_STDOUT_LIMIT:]
+            )
+        else:
+            sidecar["stdout_excerpt"] = full_stdout
+
     write_sidecar(ctx, sidecar)
 
-    ctx.state.generation.update(
-        state="done",
-        step=total_steps or step_estimate,
-        total_steps=total_steps or step_estimate,
-        percent=100,
-        message=f"Done — {len(rel_files)} image(s) saved.",
-        result_files=rel_files,
-        finished_at=time.time(),
+    done_message = (
+        f"Done — metadata saved ({len(sidecar.get('stdout_excerpt', ''))} chars)."
+        if mode == "metadata"
+        else f"Done — {len(rel_files)} file(s) saved."
     )
+    update_kwargs: dict[str, Any] = {
+        "state": "done",
+        "step": total_steps or step_estimate,
+        "total_steps": total_steps or step_estimate,
+        "percent": 100,
+        "message": done_message,
+        "result_files": rel_files,
+        "finished_at": time.time(),
+    }
+    if mode == "metadata" and sidecar.get("stdout_excerpt"):
+        # Surface the metadata text in the live status payload so the frontend
+        # can render it without an extra sidecar fetch.
+        update_kwargs["stdout_excerpt"] = sidecar["stdout_excerpt"]
+    ctx.state.generation.update(**update_kwargs)
 
 
 def run(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:

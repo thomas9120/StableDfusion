@@ -48,11 +48,16 @@ window.SDGui.flagCore = (() => {
 
 	// Apply a model-type bundle's suggested defaults (width/height/steps/cfg/...)
 	// on top of the existing flag state. Missing keys are left untouched.
+	// A `mode` default switches the active mode (used by the wan bundle → vid_gen).
 	function applyBundleDefaults(bundleValue) {
 		var bundle = window.SDGui.getBundle(bundleValue);
 		if (!bundle || !bundle.defaults) return;
-		var merged = Object.assign({}, state.flagValues, bundle.defaults);
-		state.flagValues = merged;
+		var incoming = Object.assign({}, bundle.defaults);
+		if (typeof incoming.mode === "string" && incoming.mode) {
+			state.mode = incoming.mode;
+			delete incoming.mode;
+		}
+		state.flagValues = Object.assign({}, state.flagValues, incoming);
 	}
 
 	// Shell-like tokenizer for the custom-args string. Honors single/double
@@ -120,6 +125,40 @@ window.SDGui.flagCore = (() => {
 		return flag.mode === "all" || flag.mode === state.mode;
 	}
 
+	// Mode-specific required inputs (Phase 3). Different modes need different
+	// file-pickers populated before sd-cli will run; surface that as a clear
+	// error rather than letting sd-cli bail with an opaque message.
+	function requiredInputError(vals) {
+		switch (state.mode) {
+			case "img_gen":
+			case "vid_gen":
+				if (!vals.model && !vals.diffusion_model) {
+					return "No model selected. Choose a model (or diffusion-model) for this mode.";
+				}
+				return null;
+			case "convert":
+				if (!vals.model) {
+					return "No source model selected. Convert mode needs a --model to read.";
+				}
+				return null;
+			case "upscale":
+				if (!vals.init_img) {
+					return "No input image selected. Upscale mode needs an init image.";
+				}
+				if (!vals.upscale_model) {
+					return "No ESRGAN upscale model selected. Choose an --upscale-model.";
+				}
+				return null;
+			case "metadata":
+				if (!vals.image) {
+					return "No image selected. Metadata mode needs an image path.";
+				}
+				return null;
+			default:
+				return null;
+		}
+	}
+
 	// Build the sd-cli argv from shared state.
 	//   1. iterate flags filtered by mode
 	//   2. skip backendOwned args + inert defaults
@@ -165,17 +204,14 @@ window.SDGui.flagCore = (() => {
 			tokenizeCustomArgs(customRaw).forEach((tok) => args.push([tok]));
 		}
 
-		// Required-input check: img_gen/vid_gen/convert need a model.
-		var needsModel =
-			state.mode === "img_gen" || state.mode === "vid_gen" || state.mode === "convert";
-		if (needsModel) {
-			if (!vals.model && !vals.diffusion_model) {
-				return {
-					args: args,
-					error: "No model selected. Choose a model file (or diffusion-model) for this mode.",
-					warnings: warnings,
-				};
-			}
+		// Mode-specific required-input check (Phase 3).
+		var requiredError = requiredInputError(vals);
+		if (requiredError) {
+			return {
+				args: args,
+				error: requiredError,
+				warnings: warnings,
+			};
 		}
 
 		return { args: args, error: null, warnings: warnings };
