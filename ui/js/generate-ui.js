@@ -246,7 +246,9 @@ window.SDGui.generateUi = (() => {
 	}
 
 	function activeConfig() {
-		return SECTION_CONFIG[activeGenerateSection] || SECTION_CONFIG["generate-image"];
+		return (
+			SECTION_CONFIG[activeGenerateSection] || SECTION_CONFIG["generate-image"]
+		);
 	}
 
 	function moveWorkbenchTo(section) {
@@ -894,13 +896,17 @@ window.SDGui.generateUi = (() => {
 			Date.now(),
 		);
 		var actions = $("gen-result-actions");
+		var entryIsVideo = window.SDGui.gallery.isVideoFile(historyFileName(entry));
 		if (actions) {
 			actions.classList.remove("hidden");
 			var openBtn = $("btn-open-result");
 			var sendBtn = $("btn-send-img2img");
 			var dlBtn = $("btn-download-result");
 			if (openBtn) openBtn.onclick = () => openResultFile();
-			if (sendBtn) sendBtn.onclick = () => sendToImg2img(name);
+			if (sendBtn) {
+				sendBtn.classList.toggle("hidden", entryIsVideo);
+				if (!entryIsVideo) sendBtn.onclick = () => sendToImg2img(name);
+			}
 			if (dlBtn) dlBtn.onclick = () => downloadResult(name);
 		}
 		if (entry.prompt) {
@@ -956,12 +962,64 @@ window.SDGui.generateUi = (() => {
 		if (fill) fill.style.width = Math.max(0, Math.min(100, percent)) + "%";
 	}
 
-	function refreshPreview(mtime) {
+	// vid_gen previews are multi-frame .webm files (sd-cli writes
+	// .avi/.webm/.webp previews), so render them in a <video> instead of the
+	// shared <img>. The <video> is created lazily inside the preview frame and
+	// only used on the Generate Video tab; image modes keep using <img>.
+	function ensurePreviewVideo() {
+		var frame = $("gen-preview-frame");
+		if (!frame) return null;
+		var v = $("gen-preview-video");
+		if (!v) {
+			v = el("video", "preview-video");
+			v.id = "gen-preview-video";
+			v.controls = true;
+			v.muted = true;
+			v.playsInline = true;
+			v.hidden = true;
+			frame.insertBefore(v, $("gen-preview-empty") || null);
+		}
+		return v;
+	}
+
+	// Returns the active preview media element for the current mode, hiding the
+	// inactive one so only one of <img>/<video> is visible at a time.
+	function activePreviewMedia() {
+		if (window.SDGui.flagCore.getMode() === "vid_gen") {
+			var img = $("gen-preview");
+			if (img) img.hidden = true;
+			return ensurePreviewVideo();
+		}
+		var v = $("gen-preview-video");
+		if (v) v.hidden = true;
+		return $("gen-preview");
+	}
+
+	function resetPreview() {
 		var img = $("gen-preview");
+		if (img) {
+			img.hidden = true;
+			img.removeAttribute("src");
+		}
+		var v = $("gen-preview-video");
+		if (v) {
+			v.hidden = true;
+			v.removeAttribute("src");
+		}
+		var previewEmpty = $("gen-preview-empty");
+		if (previewEmpty) previewEmpty.style.display = "";
+	}
+
+	function refreshPreview(mtime) {
+		var media = activePreviewMedia();
 		var empty = $("gen-preview-empty");
-		if (!img) return;
-		img.src = "/api/generate/preview?t=" + mtime;
-		img.hidden = false;
+		if (!media) return;
+		media.src = "/api/generate/preview?t=" + mtime;
+		media.hidden = false;
+		// Live video preview: muted autoplay so the denoising preview animates.
+		if (media.tagName === "VIDEO" && typeof media.play === "function") {
+			media.play().catch(() => {});
+		}
 		if (empty) empty.style.display = "none";
 	}
 
@@ -1096,13 +1154,18 @@ window.SDGui.generateUi = (() => {
 			);
 		}
 		var first = files[0];
+		var firstIsVideo = window.SDGui.gallery.isVideoFile(first);
 		if (actions) {
 			actions.classList.remove("hidden");
 			var openBtn = $("btn-open-result");
 			var sendBtn = $("btn-send-img2img");
 			var dlBtn = $("btn-download-result");
 			if (openBtn) openBtn.onclick = () => openResultFile();
-			if (sendBtn) sendBtn.onclick = () => sendToImg2img(first);
+			// "Send to img2img" only applies to images; hide it for video results.
+			if (sendBtn) {
+				sendBtn.classList.toggle("hidden", firstIsVideo);
+				if (!firstIsVideo) sendBtn.onclick = () => sendToImg2img(first);
+			}
 			if (dlBtn) dlBtn.onclick = () => downloadResult(first);
 		}
 		// Add to history (one entry per result file for batch).
@@ -1293,13 +1356,7 @@ window.SDGui.generateUi = (() => {
 
 		// Reset preview area (only relevant for img_gen/vid_gen, harmless for others).
 		lastPreviewMtime = 0;
-		var img = $("gen-preview");
-		var previewEmpty = $("gen-preview-empty");
-		if (img) {
-			img.hidden = true;
-			img.removeAttribute("src");
-		}
-		if (previewEmpty) previewEmpty.style.display = "";
+		resetPreview();
 		// A9 — reset result frame to its empty state on a fresh run.
 		showResultEmpty(activeConfig().running);
 		setGenerating(true);
@@ -1333,7 +1390,9 @@ window.SDGui.generateUi = (() => {
 		var restoreMode = window.SDGui.flagCore.getMode();
 		window.SDGui.flagCore.setMode("metadata");
 		updateModeSections();
-		generate({ restoreMode: restoreMode === "metadata" ? "img_gen" : restoreMode });
+		generate({
+			restoreMode: restoreMode === "metadata" ? "img_gen" : restoreMode,
+		});
 	}
 
 	async function cancel() {
@@ -1445,6 +1504,17 @@ window.SDGui.generateUi = (() => {
 		bindNumber("gen-fps", "fps");
 		bindNumber("gen-vace-strength", "vace_strength", true);
 		bindBool("gen-temporal-tiling", "temporal_tiling");
+		// Video start/end frames (image-to-video first frame; flf2v last frame).
+		// init_img shares state with the img2img panel (registered there first, so
+		// this binding becomes a mirror — both inputs read the same flagCore state).
+		bindText("gen-video-init-img", "init_img");
+		bindBrowse("btn-browse-video-init-img", () =>
+			browsePath("init_img", "image", "Select start frame"),
+		);
+		bindText("gen-video-end-img", "end_img");
+		bindBrowse("btn-browse-video-end-img", () =>
+			browsePath("end_img", "image", "Select end frame"),
+		);
 
 		// Upscale mode inputs (init_img shares state with img2img init_img).
 		bindText("gen-upscale-init-img", "init_img");

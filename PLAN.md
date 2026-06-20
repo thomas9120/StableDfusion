@@ -453,9 +453,51 @@ Directory structure, bootable `server.py` + `backend/app.py` serving a placehold
   `--diffusion-fa`, `--offload-to-cpu`, `--mmap`), plus an "extra server args"
   escape hatch for rare flags.
 
-### Phase 6 — Expansion - deferred for now
+### Phase 6 — Expansion (partially done; remainder deferred)
 
-- Video mode (`vid_gen`), LoRA/ControlNet/PhotoMaker/PuLID panels, advanced backend tuning (`--backend`/`--params-backend`/`--max-vram`), optional `sd-server` `/metrics` proxy, install-packaged launchers (.bat/.sh/.command), Pinokio launcher companion.
+**Video mode (`vid_gen`) — core pipeline ✅ (done this pass):**
+
+- `.webm` output + preview extension wiring (browser-playable in the in-GUI
+  `<video>` element; `.avi`/animated `.webp` documented as the other sd-cli
+  options but not defaulted — `.avi` won't play in a browser and animated
+  `.webp` has no playback controls). See `MODE_OUTPUT_EXT` /
+  `MODE_PREVIEW_EXT` / `PREVIEW_CONTENT_TYPES` in `generate_service.py`.
+- `get_preview` serves `video/webm` for vid_gen vs `image/png` for image modes
+  (extension + content type resolved from the running job's mode).
+- Gallery/preview/history render `<video controls>` for video files and `<img>`
+  for images via extension-driven `createMedia()` — image rendering is
+  unchanged; only video files (only the video tab produces them) take the new
+  branch.
+- Start/end-frame inputs (`--init-img` first frame, `--end-img` last frame /
+  flf2v) surfaced on the `gen-video-inputs` panel; `init_img` mirrors the
+  img2img field via the existing flagCore sync rule.
+- "Send to img2img" auto-hides for video results (result + history).
+- Sidecar records `video_frames`/`fps`/`vace_strength`/`end_img`/
+  `control_video` for history restore.
+- Flag **definitions** + the **Wan2.1/2.2 bundle** (`mode: vid_gen`) were
+  already in place from earlier phases; verified against `sd-cli -h` (commit
+  92a3b73).
+- Backend unit tests + route test cover the new extension/content-type paths.
+
+**Deferred to a later pass:**
+
+- **Video UI controls** (flags are already defined in `definitions.js` but
+  have no UI surface on the video panel): `control_video` directory picker,
+  `moe_boundary` (Wan2.2 MoE), `extra_tiling_args` (LTX VAE tiling),
+  `flow-shift`, and a dedicated **LTX bundle** (only Wan exists today).
+- **Per-tab history filtering** — filter the history grid by `entry.mode`
+  (entries already carry `mode`) so the video tab shows only video results.
+  ~3-line change, no folder split (single `output/` dir confirmed sufficient:
+  no all-outputs gallery view exists to clutter).
+- **Real Wan2.x end-to-end run** — needs a video model on disk; pipeline is
+  wired and unit-tested but not exercised live yet.
+- **LoRA / ControlNet / PhotoMaker / PuLID panels** (beyond the single-LoRA
+  slider already on Generate).
+- **Advanced backend tuning** (`--backend` / `--params-backend` / `--max-vram`)
+  surfaced as first-class Generate controls.
+- Optional `sd-server` `/metrics` proxy.
+- **Install-packaged launchers** (`.bat` / `.sh` / `.command`) + **Pinokio**
+  launcher companion.
 
 ---
 

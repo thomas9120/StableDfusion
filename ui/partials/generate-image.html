@@ -3,335 +3,466 @@
     <div>
       <div class="page-title">Generate Image</div>
       <div class="page-title-sub">
-        Turn a prompt into an image, use an image reference, or inspect
-        metadata from an existing output.
+        Turn a prompt into an image, use an image reference, or inspect metadata
+        from an existing output.
       </div>
     </div>
   </div>
   <div class="generate-tab-host" data-generate-host="generate-image">
-  <div class="generate-grid" id="generate-workbench">
-    <div class="card">
-      <!-- @section prompt -->
-      <div id="gen-prompt-section">
-        <div class="form-group">
-          <label class="form-label">Prompt</label>
-          <textarea
-            id="gen-prompt"
-            rows="3"
-            placeholder="a lovely cat"
-          ></textarea>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Negative prompt</label>
-          <textarea id="gen-negative" rows="2"></textarea>
-        </div>
-      </div>
-      <!-- @section sampling -->
-      <div id="gen-sampling-section">
-        <div class="dim-widget">
-          <!-- Step 1: shape (aspect ratio) -->
-          <p class="dim-step-label">
-            Shape <span class="dim-hint">aspect ratio</span>
-          </p>
-          <div
-            class="dim-shapes"
-            id="gen-dim-shapes"
-            role="group"
-            aria-label="Aspect ratio"
-          >
-            <button type="button" class="dim-shape" data-shape="1:1">
-              <span class="dim-glyph"
-                ><i style="width: 18px; height: 18px"></i
-              ></span>
-              <span class="dim-shape-label">1:1</span>
-            </button>
-            <button type="button" class="dim-shape" data-shape="3:2">
-              <span class="dim-glyph"
-                ><i style="width: 22px; height: 15px"></i
-              ></span>
-              <span class="dim-shape-label">3:2</span>
-            </button>
-            <button type="button" class="dim-shape" data-shape="2:3">
-              <span class="dim-glyph"
-                ><i style="width: 15px; height: 22px"></i
-              ></span>
-              <span class="dim-shape-label">2:3</span>
-            </button>
-            <button type="button" class="dim-shape" data-shape="4:3">
-              <span class="dim-glyph"
-                ><i style="width: 22px; height: 17px"></i
-              ></span>
-              <span class="dim-shape-label">4:3</span>
-            </button>
-            <button type="button" class="dim-shape" data-shape="3:4">
-              <span class="dim-glyph"
-                ><i style="width: 17px; height: 22px"></i
-              ></span>
-              <span class="dim-shape-label">3:4</span>
-            </button>
-            <button type="button" class="dim-shape" data-shape="16:9">
-              <span class="dim-glyph"
-                ><i style="width: 22px; height: 13px"></i
-              ></span>
-              <span class="dim-shape-label">16:9</span>
-            </button>
-            <button type="button" class="dim-shape" data-shape="9:16">
-              <span class="dim-glyph"
-                ><i style="width: 13px; height: 22px"></i
-              ></span>
-              <span class="dim-shape-label">9:16</span>
-            </button>
+    <div class="generate-grid" id="generate-workbench">
+      <div class="card">
+        <!-- @section prompt -->
+        <div id="gen-prompt-section">
+          <div class="form-group">
+            <label class="form-label">Prompt</label>
+            <textarea
+              id="gen-prompt"
+              rows="3"
+              placeholder="a lovely cat"
+            ></textarea>
           </div>
-
-          <!-- Step 2: size (longer edge) — buttons injected by JS -->
-          <p class="dim-step-label">
-            Size <span class="dim-hint">longer edge, px</span>
-          </p>
-          <div
-            class="dim-sizes"
-            id="gen-dim-sizes"
-            role="group"
-            aria-label="Size"
-          ></div>
-
-          <!-- Live readout: exact pixels + cost -->
-          <div class="dim-result">
-            <div class="dim-preview">
-              <i id="gen-dim-preview-box"></i>
-            </div>
-            <div class="dim-result-text">
-              <span class="dim-xy" id="gen-dim-xy">512 × 512</span>
-              <span class="dim-meta">
-                <span id="gen-dim-mp">0.26 MP</span> ·
-                <span id="gen-dim-ratio">1:1</span> ·
-                <span id="gen-dim-base">512 long edge</span>
-                <span class="dim-budget ok" id="gen-dim-budget"
-                  >on budget</span
-                >
-              </span>
-            </div>
+          <div class="form-group">
+            <label class="form-label">Negative prompt</label>
+            <textarea id="gen-negative" rows="2"></textarea>
           </div>
-
-          <!-- Step 3 (advanced): exact dimensions -->
-          <details class="dim-advanced" id="gen-dim-advanced">
-            <summary>Exact dimensions (advanced)</summary>
-            <div class="dim-row">
-              <div class="form-group">
-                <label class="form-label" for="gen-width">Width</label>
-                <input
-                  type="number"
-                  id="gen-width"
-                  min="64"
-                  max="4096"
-                  step="8"
-                  value="512"
-                />
-              </div>
-              <button
-                type="button"
-                id="btn-swap-dims"
-                class="icon-btn"
-                title="Swap width and height"
-                aria-label="Swap width and height"
-              >
-                <svg
-                  class="nav-icon"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M7 4v12m0 0l-3-3m3 3l3-3M17 20V8m0 0l-3 3m3-3l3 3"
-                  />
-                </svg>
-              </button>
-              <div class="form-group">
-                <label class="form-label" for="gen-height"
-                  >Height</label
-                >
-                <input
-                  type="number"
-                  id="gen-height"
-                  min="64"
-                  max="4096"
-                  step="8"
-                  value="512"
-                />
-              </div>
-            </div>
-            <p class="dim-exact-hint">
-              Multiples of 8 · range 64–4096. Editing here switches the
-              size to <b>Custom</b>.
+        </div>
+        <!-- @section sampling -->
+        <div id="gen-sampling-section">
+          <div class="dim-widget">
+            <!-- Step 1: shape (aspect ratio) -->
+            <p class="dim-step-label">
+              Shape <span class="dim-hint">aspect ratio</span>
             </p>
-          </details>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label" for="gen-steps">Steps</label>
-            <input
-              type="number"
-              id="gen-steps"
-              min="1"
-              step="1"
-              value="20"
-            />
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="gen-cfg">CFG scale</label>
-            <input
-              type="number"
-              id="gen-cfg"
-              min="0"
-              step="0.1"
-              value="7.0"
-            />
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label" for="gen-sampler">Sampler</label>
-            <select id="gen-sampler">
-              <option>euler_a</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="gen-scheduler"
-              >Scheduler</label
+            <div
+              class="dim-shapes"
+              id="gen-dim-shapes"
+              role="group"
+              aria-label="Aspect ratio"
             >
-            <select id="gen-scheduler">
-              <option>default</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label" for="gen-seed">Seed</label>
-            <div class="field-row">
-              <input type="number" id="gen-seed" value="42" />
-              <button
-                type="button"
-                id="btn-random-seed"
-                class="icon-btn"
-                title="Randomize seed"
-                aria-label="Randomize seed"
-              >
-                <svg
-                  class="nav-icon"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"
-                  />
-                </svg>
+              <button type="button" class="dim-shape" data-shape="1:1">
+                <span class="dim-glyph"
+                  ><i style="width: 18px; height: 18px"></i
+                ></span>
+                <span class="dim-shape-label">1:1</span>
+              </button>
+              <button type="button" class="dim-shape" data-shape="3:2">
+                <span class="dim-glyph"
+                  ><i style="width: 22px; height: 15px"></i
+                ></span>
+                <span class="dim-shape-label">3:2</span>
+              </button>
+              <button type="button" class="dim-shape" data-shape="2:3">
+                <span class="dim-glyph"
+                  ><i style="width: 15px; height: 22px"></i
+                ></span>
+                <span class="dim-shape-label">2:3</span>
+              </button>
+              <button type="button" class="dim-shape" data-shape="4:3">
+                <span class="dim-glyph"
+                  ><i style="width: 22px; height: 17px"></i
+                ></span>
+                <span class="dim-shape-label">4:3</span>
+              </button>
+              <button type="button" class="dim-shape" data-shape="3:4">
+                <span class="dim-glyph"
+                  ><i style="width: 17px; height: 22px"></i
+                ></span>
+                <span class="dim-shape-label">3:4</span>
+              </button>
+              <button type="button" class="dim-shape" data-shape="16:9">
+                <span class="dim-glyph"
+                  ><i style="width: 22px; height: 13px"></i
+                ></span>
+                <span class="dim-shape-label">16:9</span>
+              </button>
+              <button type="button" class="dim-shape" data-shape="9:16">
+                <span class="dim-glyph"
+                  ><i style="width: 13px; height: 22px"></i
+                ></span>
+                <span class="dim-shape-label">9:16</span>
               </button>
             </div>
+
+            <!-- Step 2: size (longer edge) — buttons injected by JS -->
+            <p class="dim-step-label">
+              Size <span class="dim-hint">longer edge, px</span>
+            </p>
+            <div
+              class="dim-sizes"
+              id="gen-dim-sizes"
+              role="group"
+              aria-label="Size"
+            ></div>
+
+            <!-- Live readout: exact pixels + cost -->
+            <div class="dim-result">
+              <div class="dim-preview">
+                <i id="gen-dim-preview-box"></i>
+              </div>
+              <div class="dim-result-text">
+                <span class="dim-xy" id="gen-dim-xy">512 × 512</span>
+                <span class="dim-meta">
+                  <span id="gen-dim-mp">0.26 MP</span> ·
+                  <span id="gen-dim-ratio">1:1</span> ·
+                  <span id="gen-dim-base">512 long edge</span>
+                  <span class="dim-budget ok" id="gen-dim-budget"
+                    >on budget</span
+                  >
+                </span>
+              </div>
+            </div>
+
+            <!-- Step 3 (advanced): exact dimensions -->
+            <details class="dim-advanced" id="gen-dim-advanced">
+              <summary>Exact dimensions (advanced)</summary>
+              <div class="dim-row">
+                <div class="form-group">
+                  <label class="form-label" for="gen-width">Width</label>
+                  <input
+                    type="number"
+                    id="gen-width"
+                    min="64"
+                    max="4096"
+                    step="8"
+                    value="512"
+                  />
+                </div>
+                <button
+                  type="button"
+                  id="btn-swap-dims"
+                  class="icon-btn"
+                  title="Swap width and height"
+                  aria-label="Swap width and height"
+                >
+                  <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      d="M7 4v12m0 0l-3-3m3 3l3-3M17 20V8m0 0l-3 3m3-3l3 3"
+                    />
+                  </svg>
+                </button>
+                <div class="form-group">
+                  <label class="form-label" for="gen-height">Height</label>
+                  <input
+                    type="number"
+                    id="gen-height"
+                    min="64"
+                    max="4096"
+                    step="8"
+                    value="512"
+                  />
+                </div>
+              </div>
+              <p class="dim-exact-hint">
+                Multiples of 8 · range 64–4096. Editing here switches the size
+                to <b>Custom</b>.
+              </p>
+            </details>
           </div>
-          <div class="form-group">
-            <label class="form-label" for="gen-batch"
-              >Batch count</label
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="gen-steps">Steps</label>
+              <input type="number" id="gen-steps" min="1" step="1" value="20" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="gen-cfg">CFG scale</label>
+              <input
+                type="number"
+                id="gen-cfg"
+                min="0"
+                step="0.1"
+                value="7.0"
+              />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="gen-sampler">Sampler</label>
+              <select id="gen-sampler">
+                <option>euler_a</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="gen-scheduler">Scheduler</label>
+              <select id="gen-scheduler">
+                <option>default</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="gen-seed">Seed</label>
+              <div class="field-row">
+                <input type="number" id="gen-seed" value="42" />
+                <button
+                  type="button"
+                  id="btn-random-seed"
+                  class="icon-btn"
+                  title="Randomize seed"
+                  aria-label="Randomize seed"
+                >
+                  <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="gen-batch">Batch count</label>
+              <input type="number" id="gen-batch" min="1" value="1" />
+            </div>
+          </div>
+        </div>
+
+        <!-- @section advanced -->
+        <details id="gen-advanced-section" class="gen-advanced">
+          <summary>Advanced</summary>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Threads</label>
+              <input type="number" id="gen-threads" value="-1" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Weight type</label>
+              <select id="gen-type"></select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Preview method</label>
+              <select id="gen-preview-method"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Preview interval</label>
+              <input
+                type="number"
+                id="gen-preview-interval"
+                min="1"
+                value="1"
+              />
+            </div>
+          </div>
+          <div class="form-row gen-toggles">
+            <label class="toggle"
+              ><input type="checkbox" id="gen-offload" /> Offload to CPU</label
             >
-            <input type="number" id="gen-batch" min="1" value="1" />
+            <label class="toggle"
+              ><input type="checkbox" id="gen-clip-cpu" /> CLIP on CPU</label
+            >
+            <label class="toggle"
+              ><input type="checkbox" id="gen-flash" /> Flash attention</label
+            >
+            <label class="toggle"
+              ><input type="checkbox" id="gen-vae-tiling" /> VAE tiling</label
+            >
           </div>
-        </div>
-      </div>
+        </details>
 
-      <!-- @section advanced -->
-      <details id="gen-advanced-section" class="gen-advanced">
-        <summary>Advanced</summary>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">Threads</label>
-            <input type="number" id="gen-threads" value="-1" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">Weight type</label>
-            <select id="gen-type"></select>
-          </div>
+        <!-- @section actions -->
+        <div class="gen-actions">
+          <button
+            id="btn-generate"
+            class="btn btn-primary"
+            title="Generate (Ctrl/Cmd+Enter)"
+          >
+            Generate
+          </button>
+          <button id="btn-generate-cancel" class="btn btn-danger hidden">
+            Cancel
+          </button>
+          <span class="gen-kbd-hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span>
         </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">Preview method</label>
-            <select id="gen-preview-method"></select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Preview interval</label>
-            <input
-              type="number"
-              id="gen-preview-interval"
-              min="1"
-              value="1"
-            />
-          </div>
+        <div class="gen-section-break" aria-hidden="true">
+          <span>Model setup</span>
         </div>
-        <div class="form-row gen-toggles">
-          <label class="toggle"
-            ><input type="checkbox" id="gen-offload" /> Offload to
-            CPU</label
+        <!-- @section mode-inputs -->
+        <!-- Mode-specific inputs: shown/hidden per mode by generate-ui.js -->
+        <div id="gen-mode-inputs" class="form-group">
+          <span id="gen-mode-label" class="form-label"
+            >Image references (optional)</span
           >
-          <label class="toggle"
-            ><input type="checkbox" id="gen-clip-cpu" /> CLIP on
-            CPU</label
-          >
-          <label class="toggle"
-            ><input type="checkbox" id="gen-flash" /> Flash
-            attention</label
-          >
-          <label class="toggle"
-            ><input type="checkbox" id="gen-vae-tiling" /> VAE
-            tiling</label
-          >
-        </div>
-      </details>
+          <p id="gen-mode-help" class="gen-mode-help">
+            Add a reference image for image-to-image, inpainting, or ControlNet.
+          </p>
 
-      <!-- @section actions -->
-      <div class="gen-actions">
-        <button
-          id="btn-generate"
-          class="btn btn-primary"
-          title="Generate (Ctrl/Cmd+Enter)"
-        >
-          Generate
-        </button>
-        <button id="btn-generate-cancel" class="btn btn-danger hidden">
-          Cancel
-        </button>
-        <span class="gen-kbd-hint"
-          ><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span
-        >
-      </div>
-      <div class="gen-section-break" aria-hidden="true">
-        <span>Model setup</span>
-      </div>
-      <!-- @section mode-inputs -->
-      <!-- Mode-specific inputs: shown/hidden per mode by generate-ui.js -->
-      <div id="gen-mode-inputs" class="form-group">
-        <span id="gen-mode-label" class="form-label"
-          >Image references (optional)</span
-        >
-        <p id="gen-mode-help" class="gen-mode-help">
-          Add a reference image for image-to-image, inpainting, or
-          ControlNet.
-        </p>
+          <!-- img_gen / vid_gen: img2img (init-image / mask / control) -->
+          <div id="gen-img2img-inputs" class="mode-inputs">
+            <details class="mode-details">
+              <summary>Image references (optional)</summary>
+              <div class="form-group">
+                <label class="form-label"
+                  >Init image
+                  <span class="help-text"
+                    >(optional, enables img2img)</span
+                  ></label
+                >
+                <div class="field-row">
+                  <input
+                    type="text"
+                    id="gen-init-img"
+                    placeholder="output/cat.png"
+                  />
+                  <button
+                    id="btn-browse-init-img"
+                    class="btn btn-sm"
+                    type="button"
+                  >
+                    Browse
+                  </button>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Strength</label>
+                  <input
+                    type="number"
+                    id="gen-strength"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value="0.75"
+                  />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Control strength</label>
+                  <input
+                    type="number"
+                    id="gen-control-strength"
+                    min="0"
+                    max="2"
+                    step="0.05"
+                    value="0.9"
+                  />
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Mask (inpaint)</label>
+                <div class="field-row">
+                  <input type="text" id="gen-mask" />
+                  <button id="btn-browse-mask" class="btn btn-sm" type="button">
+                    Browse
+                  </button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Control image (ControlNet)</label>
+                <div class="field-row">
+                  <input type="text" id="gen-control-image" />
+                  <button
+                    id="btn-browse-control-image"
+                    class="btn btn-sm"
+                    type="button"
+                  >
+                    Browse
+                  </button>
+                </div>
+              </div>
+            </details>
+          </div>
 
-        <!-- img_gen / vid_gen: img2img (init-image / mask / control) -->
-        <div id="gen-img2img-inputs" class="mode-inputs">
-          <details class="mode-details">
-            <summary>Image references (optional)</summary>
+          <div id="gen-video-inputs" class="mode-inputs hidden">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="gen-video-frames">Frames</label>
+                <input
+                  type="number"
+                  id="gen-video-frames"
+                  min="1"
+                  step="1"
+                  value="25"
+                />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="gen-fps">FPS</label>
+                <input type="number" id="gen-fps" min="1" step="1" value="16" />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="gen-vace-strength"
+                  >VACE strength</label
+                >
+                <input
+                  type="number"
+                  id="gen-vace-strength"
+                  min="0"
+                  max="2"
+                  step="0.05"
+                />
+              </div>
+              <label class="toggle"
+                ><input type="checkbox" id="gen-temporal-tiling" /> Temporal
+                tiling</label
+              >
+            </div>
             <div class="form-group">
               <label class="form-label"
-                >Init image
+                >Start frame
                 <span class="help-text"
-                  >(optional, enables img2img)</span
+                  >(optional, image-to-video first frame)</span
                 ></label
               >
               <div class="field-row">
                 <input
                   type="text"
-                  id="gen-init-img"
-                  placeholder="output/cat.png"
+                  id="gen-video-init-img"
+                  placeholder="output/frame.png"
                 />
                 <button
-                  id="btn-browse-init-img"
+                  id="btn-browse-video-init-img"
+                  class="btn btn-sm"
+                  type="button"
+                >
+                  Browse
+                </button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label"
+                >End frame
+                <span class="help-text"
+                  >(optional, last frame / flf2v)</span
+                ></label
+              >
+              <div class="field-row">
+                <input type="text" id="gen-video-end-img" />
+                <button
+                  id="btn-browse-video-end-img"
+                  class="btn btn-sm"
+                  type="button"
+                >
+                  Browse
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- upscale: required init image + ESRGAN model -->
+          <div id="gen-upscale-inputs" class="mode-inputs hidden">
+            <div class="form-group">
+              <label class="form-label"
+                >Init image <span class="req">required</span></label
+              >
+              <div class="field-row">
+                <input type="text" id="gen-upscale-init-img" />
+                <button
+                  id="btn-browse-upscale-init-img"
+                  class="btn btn-sm"
+                  type="button"
+                >
+                  Browse
+                </button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label"
+                >ESRGAN upscale model <span class="req">required</span></label
+              >
+              <div class="field-row">
+                <select id="gen-upscale-model"></select>
+                <button
+                  id="btn-browse-upscale-model"
                   class="btn btn-sm"
                   type="button"
                 >
@@ -341,49 +472,57 @@
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label">Strength</label>
+                <label class="form-label">Repeats</label>
                 <input
                   type="number"
-                  id="gen-strength"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value="0.75"
+                  id="gen-upscale-repeats"
+                  min="1"
+                  value="1"
                 />
               </div>
               <div class="form-group">
-                <label class="form-label">Control strength</label>
+                <label class="form-label">Tile size</label>
                 <input
                   type="number"
-                  id="gen-control-strength"
-                  min="0"
-                  max="2"
-                  step="0.05"
-                  value="0.9"
+                  id="gen-upscale-tile-size"
+                  min="32"
+                  value="128"
                 />
               </div>
             </div>
+          </div>
+
+          <!-- convert: source model comes from bundle picker; optional --convert-name -->
+          <div id="gen-convert-inputs" class="mode-inputs hidden">
+            <p class="help-text">
+              Source model is selected above. Convert mode writes the converted
+              tensor file to <code>-o / --output</code>.
+            </p>
             <div class="form-group">
-              <label class="form-label">Mask (inpaint)</label>
-              <div class="field-row">
-                <input type="text" id="gen-mask" />
-                <button
-                  id="btn-browse-mask"
-                  class="btn btn-sm"
-                  type="button"
-                >
-                  Browse
-                </button>
-              </div>
+              <label class="form-label"
+                >Convert single tensor name (optional)</label
+              >
+              <input
+                type="text"
+                id="gen-convert-name"
+                placeholder="model.diffusion_model."
+              />
+            </div>
+          </div>
+
+          <!-- metadata: image + format -->
+          <div id="gen-metadata-inputs" class="mode-inputs">
+            <div class="gen-section-break" aria-hidden="true">
+              <span>Inspect metadata</span>
             </div>
             <div class="form-group">
               <label class="form-label"
-                >Control image (ControlNet)</label
+                >Image <span class="req">required</span></label
               >
               <div class="field-row">
-                <input type="text" id="gen-control-image" />
+                <input type="text" id="gen-metadata-image" />
                 <button
-                  id="btn-browse-control-image"
+                  id="btn-browse-metadata-image"
                   class="btn btn-sm"
                   type="button"
                 >
@@ -391,261 +530,105 @@
                 </button>
               </div>
             </div>
-          </details>
-        </div>
-
-        <div id="gen-video-inputs" class="mode-inputs hidden">
-          <div class="form-row">
             <div class="form-group">
-              <label class="form-label" for="gen-video-frames"
-                >Frames</label
-              >
-              <input
-                type="number"
-                id="gen-video-frames"
-                min="1"
-                step="1"
-                value="25"
-              />
+              <label class="form-label">Format</label>
+              <select id="gen-metadata-format">
+                <option value="text">text</option>
+                <option value="json">json</option>
+              </select>
             </div>
-            <div class="form-group">
-              <label class="form-label" for="gen-fps">FPS</label>
-              <input
-                type="number"
-                id="gen-fps"
-                min="1"
-                step="1"
-                value="16"
-              />
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label" for="gen-vace-strength"
-                >VACE strength</label
-              >
-              <input
-                type="number"
-                id="gen-vace-strength"
-                min="0"
-                max="2"
-                step="0.05"
-              />
-            </div>
-            <label class="toggle"
-              ><input type="checkbox" id="gen-temporal-tiling" />
-              Temporal tiling</label
-            >
+            <button id="btn-inspect-metadata" class="btn btn-sm" type="button">
+              Inspect metadata
+            </button>
           </div>
         </div>
-
-        <!-- upscale: required init image + ESRGAN model -->
-        <div id="gen-upscale-inputs" class="mode-inputs hidden">
-          <div class="form-group">
-            <label class="form-label"
-              >Init image <span class="req">required</span></label
-            >
-            <div class="field-row">
-              <input type="text" id="gen-upscale-init-img" />
-              <button
-                id="btn-browse-upscale-init-img"
-                class="btn btn-sm"
-                type="button"
-              >
-                Browse
-              </button>
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label"
-              >ESRGAN upscale model
-              <span class="req">required</span></label
-            >
-            <div class="field-row">
-              <select id="gen-upscale-model"></select>
-              <button
-                id="btn-browse-upscale-model"
-                class="btn btn-sm"
-                type="button"
-              >
-                Browse
-              </button>
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Repeats</label>
-              <input
-                type="number"
-                id="gen-upscale-repeats"
-                min="1"
-                value="1"
-              />
-            </div>
-            <div class="form-group">
-              <label class="form-label">Tile size</label>
-              <input
-                type="number"
-                id="gen-upscale-tile-size"
-                min="32"
-                value="128"
-              />
-            </div>
-          </div>
+        <!-- @section bundle -->
+        <div class="form-group">
+          <label class="form-label">Model type bundle</label>
+          <select id="gen-model-bundle">
+            <option value="">Loading…</option>
+          </select>
         </div>
-
-        <!-- convert: source model comes from bundle picker; optional --convert-name -->
-        <div id="gen-convert-inputs" class="mode-inputs hidden">
+        <!-- @section model -->
+        <div id="gen-model-components" class="form-group">
+          <!-- bundle-driven file pickers rendered by generate-ui.js -->
           <p class="help-text">
-            Source model is selected above. Convert mode writes the
-            converted tensor file to <code>-o / --output</code>.
+            Select a model type bundle to show its file pickers.
           </p>
-          <div class="form-group">
-            <label class="form-label"
-              >Convert single tensor name (optional)</label
-            >
-            <input
-              type="text"
-              id="gen-convert-name"
-              placeholder="model.diffusion_model."
-            />
-          </div>
         </div>
-
-        <!-- metadata: image + format -->
-        <div id="gen-metadata-inputs" class="mode-inputs">
-          <div class="gen-section-break" aria-hidden="true">
-            <span>Inspect metadata</span>
-          </div>
-          <div class="form-group">
-            <label class="form-label"
-              >Image <span class="req">required</span></label
-            >
-            <div class="field-row">
-              <input type="text" id="gen-metadata-image" />
-              <button
-                id="btn-browse-metadata-image"
-                class="btn btn-sm"
-                type="button"
-              >
-                Browse
-              </button>
+      </div>
+      <div class="card">
+        <div class="form-group" role="group" aria-label="Live preview">
+          <span class="form-label" aria-hidden="true">Live preview</span>
+          <div class="preview-frame" id="gen-preview-frame">
+            <img id="gen-preview" alt="preview" hidden />
+            <div id="gen-preview-empty" class="frame-empty">
+              Live preview appears here while generating.
             </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Format</label>
-            <select id="gen-metadata-format">
-              <option value="text">text</option>
-              <option value="json">json</option>
-            </select>
+          <div id="gen-progress" class="progress-container gen-progress hidden">
+            <div class="progress-bar">
+              <div id="gen-progress-fill" class="progress-fill"></div>
+            </div>
+            <div class="gen-progress-meta">
+              <span id="gen-progress-text">Idle.</span>
+              <span id="gen-progress-pct"></span>
+            </div>
           </div>
-          <button
-            id="btn-inspect-metadata"
-            class="btn btn-sm"
-            type="button"
-          >
-            Inspect metadata
-          </button>
         </div>
-      </div>
-      <!-- @section bundle -->
-      <div class="form-group">
-        <label class="form-label">Model type bundle</label>
-        <select id="gen-model-bundle">
-          <option value="">Loading…</option>
-        </select>
-      </div>
-      <!-- @section model -->
-      <div id="gen-model-components" class="form-group">
-        <!-- bundle-driven file pickers rendered by generate-ui.js -->
-        <p class="help-text">
-          Select a model type bundle to show its file pickers.
-        </p>
-      </div>
-    </div>
-    <div class="card">
-      <div class="form-group" role="group" aria-label="Live preview">
-        <span class="form-label" aria-hidden="true">Live preview</span>
-        <div class="preview-frame" id="gen-preview-frame">
-          <img id="gen-preview" alt="preview" hidden />
-          <div id="gen-preview-empty" class="frame-empty">
-            Live preview appears here while generating.
+        <div class="form-group" role="group" aria-label="Result">
+          <span class="form-label" aria-hidden="true">Result</span>
+          <div id="gen-result" class="result-frame">
+            <div id="gen-result-empty" class="frame-empty">
+              Your generated image will appear here.
+            </div>
+          </div>
+          <div id="gen-result-actions" class="form-row hidden">
+            <button id="btn-open-result" class="btn btn-sm" type="button">
+              Show in folder
+            </button>
+            <button id="btn-download-result" class="btn btn-sm" type="button">
+              Download
+            </button>
+            <button id="btn-send-img2img" class="btn btn-sm" type="button">
+              Send to img2img
+            </button>
           </div>
         </div>
         <div
-          id="gen-progress"
-          class="progress-container gen-progress hidden"
+          class="form-group history-section"
+          role="group"
+          aria-label="History"
         >
-          <div class="progress-bar">
-            <div id="gen-progress-fill" class="progress-fill"></div>
+          <div class="history-header">
+            <span class="form-label history-label" aria-hidden="true">
+              History
+              <span class="history-count" id="gen-history-count">0</span>
+            </span>
+            <button
+              type="button"
+              id="btn-clear-history"
+              class="history-clear-btn hidden"
+              title="Clear the history list (output images are not deleted)"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M6 7h12M9 7V5h6v2m-7 0v12h8V7" />
+              </svg>
+              Clear
+            </button>
           </div>
-          <div class="gen-progress-meta">
-            <span id="gen-progress-text">Idle.</span>
-            <span id="gen-progress-pct"></span>
+          <div class="history-scroll">
+            <div id="gen-history" class="history-grid"></div>
           </div>
-        </div>
-      </div>
-      <div class="form-group" role="group" aria-label="Result">
-        <span class="form-label" aria-hidden="true">Result</span>
-        <div id="gen-result" class="result-frame">
-          <div id="gen-result-empty" class="frame-empty">
-            Your generated image will appear here.
-          </div>
-        </div>
-        <div id="gen-result-actions" class="form-row hidden">
-          <button id="btn-open-result" class="btn btn-sm" type="button">
-            Show in folder
-          </button>
-          <button
-            id="btn-download-result"
-            class="btn btn-sm"
-            type="button"
-          >
-            Download
-          </button>
-          <button
-            id="btn-send-img2img"
-            class="btn btn-sm"
-            type="button"
-          >
-            Send to img2img
-          </button>
-        </div>
-      </div>
-      <div
-        class="form-group history-section"
-        role="group"
-        aria-label="History"
-      >
-        <div class="history-header">
-          <span class="form-label history-label" aria-hidden="true">
-            History
-            <span class="history-count" id="gen-history-count">0</span>
-          </span>
           <button
             type="button"
-            id="btn-clear-history"
-            class="history-clear-btn hidden"
-            title="Clear the history list (output images are not deleted)"
+            id="btn-history-more"
+            class="history-more-btn hidden"
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M6 7h12M9 7V5h6v2m-7 0v12h8V7" />
-            </svg>
-            Clear
+            Show all
           </button>
         </div>
-        <div class="history-scroll">
-          <div id="gen-history" class="history-grid"></div>
-        </div>
-        <button
-          type="button"
-          id="btn-history-more"
-          class="history-more-btn hidden"
-        >
-          Show all
-        </button>
       </div>
     </div>
-  </div>
   </div>
 </div>

@@ -25,8 +25,12 @@ def get_status(request: Request, response: Response, ctx: AppContext) -> None:
 
 def get_preview(request: Request, response: Response, ctx: AppContext) -> None:
     snap = generate_service.status(ctx)
-    preview_path = ctx.paths.output_preview / f"{snap.get('job_id', '')}.png"
-    if not snap.get("job_id") or not preview_path.is_file():
+    job_id = snap.get("job_id", "")
+    mode = snap.get("mode", "img_gen")
+    preview_ext = generate_service.preview_ext_for_mode(mode)
+    content_type = generate_service.preview_content_type_for_mode(mode)
+    preview_path = ctx.paths.output_preview / f"{job_id}{preview_ext}"
+    if not job_id or not preview_path.is_file():
         response.error("No preview available yet.", 404)
         return
     try:
@@ -38,7 +42,7 @@ def get_preview(request: Request, response: Response, ctx: AppContext) -> None:
     # Cache-busting handled client-side via mtime query param.
     response.bytes(
         data,
-        content_type="image/png",
+        content_type=content_type,
         headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
     )
 
