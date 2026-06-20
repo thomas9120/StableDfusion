@@ -1,4 +1,4 @@
-"""Stable-D GUI backend: HTTP server, route registry, main().
+"""StableDfusion backend: HTTP server, route registry, main().
 
 Adapted from LLama-GUI's backend/app.py. Serves static ``ui/`` and dispatches
 ``/api/*`` routes. Most routes return 501 TODOs during the scaffold phase —
@@ -406,7 +406,7 @@ def main() -> None:
         print(f"ERROR: Could not start server on port {port}: {exc}")
         sys.exit(1)
 
-    print(f"Stable-D GUI running at http://{config.GUI_HOST}:{port}")
+    print(f"StableDfusion running at http://{config.GUI_HOST}:{port}")
     print("Press Ctrl+C to stop the server.")
     try:
         STATE.gui_server.serve_forever()

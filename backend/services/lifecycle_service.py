@@ -107,7 +107,7 @@ def restart_gui_server(ctx: AppContext) -> bool:
                 if sys.platform == "win32"
                 else 0,
             )
-            print("Restarting Stable-D GUI...", file=sys.stderr)
+            print("Restarting StableDfusion...", file=sys.stderr)
         except Exception as exc:
             print(f"ERROR: Failed to restart server: {exc}", file=sys.stderr)
             import traceback

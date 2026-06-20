@@ -1,1 +1,1 @@
-"""Stable-D GUI backend package."""
+"""StableDfusion backend package."""

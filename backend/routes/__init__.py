@@ -1,1 +1,1 @@
-"""Backend API routes for Stable-D GUI."""
+"""Backend API routes for StableDfusion."""

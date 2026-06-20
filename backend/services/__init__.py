@@ -1,1 +1,1 @@
-"""Backend services for Stable-D GUI."""
+"""Backend services for StableDfusion."""
