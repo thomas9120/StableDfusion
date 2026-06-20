@@ -40,6 +40,16 @@ window.SDGui.generateUi = (() => {
 	var syncAll = ctrl.syncAll;
 	var controls = ctrl.controls;
 	var controlMirrors = ctrl.controlMirrors;
+	// Stage 4: bundle-driven model pickers and LoRA controls live in
+	// window.SDGui.generateModelFields. We only need renderBundleFields here
+	// (called from the bundle select handler, syncFromState, and init). The
+	// populateModelSelect export is passed to ctrl.init() below so
+	// bindPathSelect can list model folders for path-kind selects (e.g. the
+	// upscale-model dropdown). Field labels, the LoRA file select, and the
+	// strength slider are owned by the module and re-registered into the
+	// shared `controls` table on every renderBundleFields call.
+	var mf = window.SDGui.generateModelFields;
+	var renderBundleFields = mf.renderBundleFields;
 	var $ = dom.$;
 	var el = dom.el;
 	var setHidden = dom.setHidden;
@@ -229,247 +239,11 @@ window.SDGui.generateUi = (() => {
 	}
 
 	// ── Model-component pickers (bundle-driven) ───────────────────────────
-	function fieldLabel(key) {
-		var map = {
-			model: "Model",
-			diffusion_model: "Diffusion model",
-			vae: "VAE",
-			clip_l: "CLIP-L",
-			clip_g: "CLIP-G",
-			clip_vision: "CLIP vision",
-			t5xxl: "T5XXL",
-			llm: "LLM text encoder",
-			llm_vision: "LLM vision",
-			taesd: "TAESD",
-			audio_vae: "Audio VAE",
-			high_noise_diffusion_model: "High-noise diffusion model",
-			uncond_diffusion_model: "Unconditional diffusion model",
-			control_net: "ControlNet",
-			embeddings_connectors: "Embeddings connectors",
-			embd_dir: "Embeddings directory",
-			lora_model_dir: "LoRA folder",
-			photo_maker: "PhotoMaker",
-			pulid_weights: "PuLID weights",
-			upscale_model: "Upscale model",
-			hires_upscalers_dir: "Hires upscalers folder",
-		};
-		return map[key] || key;
-	}
-
-	async function populateModelSelect(select, purpose) {
-		try {
-			var data = await window.SDGui.fetchJson(
-				"/api/models?type=" + encodeURIComponent(purpose),
-			);
-			select.replaceChildren();
-			select.appendChild(new Option("-- select from component folder --", ""));
-			// sd-cli runs with cwd = project root, so prefix model-relative paths so
-			// they resolve (Browse returns absolute paths which also resolve).
-			(data.models || []).forEach((m) =>
-				select.appendChild(
-					new Option(
-						(m.folder ? m.folder + "/" : "") +
-							m.name +
-							" (" +
-							Math.round(m.size / 1048576) +
-							" MB)",
-						"models/" + m.relative,
-					),
-				),
-			);
-		} catch (e) {
-			select.replaceChildren();
-			select.appendChild(new Option("(could not list models)", ""));
-		}
-	}
-
-	async function populateLoraFileSelect(select) {
-		try {
-			var data = await window.SDGui.fetchJson("/api/models?type=lora");
-			select.replaceChildren();
-			select.appendChild(new Option("-- no active LoRA --", ""));
-			(data.models || []).forEach((m) =>
-				select.appendChild(
-					new Option(
-						(m.folder ? m.folder + "/" : "") +
-							m.name +
-							" (" +
-							Math.round(m.size / 1048576) +
-							" MB)",
-						"models/" + m.relative,
-					),
-				),
-			);
-		} catch (e) {
-			select.replaceChildren();
-			select.appendChild(new Option("(could not list LoRAs)", ""));
-		}
-	}
-
-	function renderLoraControls(container) {
-		var wrap = el("div", "gen-model-field");
-		var head = el("div", "field-head");
-		head.appendChild(el("span", "form-label", "Active LoRA"));
-		wrap.appendChild(head);
-
-		var row = el("div", "field-row");
-		var select = el("select");
-		select.appendChild(new Option("Loading...", ""));
-		controls.lora_file = {
-			id: null,
-			kind: "path",
-			select: select,
-			purpose: "lora",
-		};
-		select.addEventListener("change", () => {
-			window.SDGui.flagCore.setFlagValue("lora_file", select.value);
-			if (select.value) {
-				window.SDGui.flagCore.setFlagValue(
-					"lora_model_dir",
-					loraFolderFromPath(select.value),
-				);
-			}
-		});
-		populateLoraFileSelect(select).then(() => syncControl("lora_file"));
-		row.appendChild(select);
-		wrap.appendChild(row);
-
-		var sliderRow = el("div", "field-row");
-		var slider = el("input");
-		slider.type = "range";
-		slider.min = "-1";
-		slider.max = "2";
-		slider.step = "0.05";
-		var current = window.SDGui.flagCore.getFlagValues().lora_strength;
-		slider.value =
-			current === undefined || current === "" ? "1" : String(current);
-		var valueLabel = el("span", "help-text", formatLoraStrength(slider.value));
-		controls.lora_strength = {
-			id: null,
-			kind: "range",
-			slider: slider,
-			valueLabel: valueLabel,
-		};
-		slider.addEventListener("input", () => {
-			var value = formatLoraStrength(slider.value);
-			valueLabel.textContent = value;
-			window.SDGui.flagCore.setFlagValue("lora_strength", Number(value));
-		});
-		sliderRow.appendChild(slider);
-		sliderRow.appendChild(valueLabel);
-		wrap.appendChild(sliderRow);
-
-		var hint = el(
-			"p",
-			"help-text",
-			"Adds <lora:name:strength> to the prompt at generation time.",
-		);
-		wrap.appendChild(hint);
-		container.appendChild(wrap);
-	}
-
-	async function browseModel(field) {
-		try {
-			var res = await window.SDGui.fetchJson("/api/select-file", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					purpose: field.purpose,
-					title: fieldLabel(field.key),
-				}),
-			});
-			if (res && res.selected && res.path) {
-				window.SDGui.flagCore.setFlagValue(field.key, res.path);
-				syncControl(field.key);
-			}
-		} catch (e) {
-			window.SDGui.toast(e.message, "error");
-		}
-	}
-
-	function renderBundleFields() {
-		var container = $("gen-model-components");
-		if (!container) return;
-		container.replaceChildren();
-
-		// Drop stale model-picker controls from a previous bundle.
-		Object.keys(controls).forEach((k) => {
-			if (controls[k] && controls[k].kind === "path") delete controls[k];
-		});
-
-		var bundleValue = window.SDGui.flagCore.getBundle();
-		var bundle = window.SDGui.getBundle(bundleValue);
-		var fields = bundle ? bundle.fields : null;
-
-		var fieldList;
-		if (fields && fields.length) {
-			fieldList = fields.map((f) => ({
-				key: f.key,
-				purpose: f.purpose || f.key,
-				required: !!f.required,
-			}));
-		} else {
-			// Custom / empty bundle: show all model-component field pickers.
-			fieldList = [
-				"model",
-				"diffusion_model",
-				"high_noise_diffusion_model",
-				"uncond_diffusion_model",
-				"vae",
-				"audio_vae",
-				"clip_l",
-				"clip_g",
-				"clip_vision",
-				"t5xxl",
-				"llm",
-				"llm_vision",
-				"taesd",
-				"control_net",
-				"embeddings_connectors",
-				"embd_dir",
-				"photo_maker",
-				"pulid_weights",
-			].map((key) => ({
-				key: key,
-				purpose: (window.SDGui.BUNDLE_FIELD_PURPOSES || {})[key] || key,
-				required: false,
-			}));
-		}
-		fieldList.forEach((field) => {
-			var wrap = el("div", "gen-model-field");
-			var head = el("div", "field-head");
-			head.appendChild(el("span", "form-label", fieldLabel(field.key)));
-			if (field.required) head.appendChild(el("span", "req", "required"));
-			wrap.appendChild(head);
-
-			var row = el("div", "field-row");
-			var select = el("select");
-			select.appendChild(new Option("Loading...", ""));
-			// Track this select for syncControl via a synthetic controls entry.
-			controls[field.key] = {
-				id: null,
-				kind: "path",
-				select: select,
-				purpose: field.purpose,
-			};
-			select.addEventListener("change", () => {
-				window.SDGui.flagCore.setFlagValue(field.key, select.value);
-			});
-			populateModelSelect(select, field.purpose).then(() =>
-				syncControl(field.key),
-			);
-
-			var browse = el("button", "btn btn-sm", "Browse");
-			browse.type = "button";
-			browse.addEventListener("click", () => browseModel(field));
-
-			row.appendChild(select);
-			row.appendChild(browse);
-			wrap.appendChild(row);
-			container.appendChild(wrap);
-		});
-		renderLoraControls(container);
-	}
+	// Stage 4: fieldLabel, populateModelSelect, populateLoraFileSelect,
+	// renderLoraControls, browseModel, and renderBundleFields now live in
+	// window.SDGui.generateModelFields. renderBundleFields is aliased at the
+	// top of this IIFE so call sites below (bundle select handler,
+	// syncFromState, init, and the public return) are unchanged.
 
 	function syncSelectorsFromState() {
 		var bundleSelect = $("gen-model-bundle");
@@ -1128,12 +902,23 @@ window.SDGui.generateUi = (() => {
 	}
 
 	function init() {
+		// Stage 4: hand the model-fields module its shared dependencies
+		// (flagCore + the controls registry + syncControl) so it can register
+		// path-kind controls and prune stale ones on bundle re-renders. Must
+		// run before any renderBundleFields() call below.
+		mf.init({
+			flagCore: window.SDGui.flagCore,
+			controls: controls,
+			syncControl: syncControl,
+		});
 		// Stage 3: hand the control-binding registry its flagCore + the model
-		// select populator (still owned here until Stage 4 moves it into
-		// generateModelFields). Must run before any bind*() call below.
+		// select populator (now exported by window.SDGui.generateModelFields
+		// since Stage 4). bindPathSelect uses this to fill the upscale-model
+		// dropdown from /api/models?type=upscaler. Must run before any
+		// bind*() call below.
 		ctrl.init({
 			flagCore: window.SDGui.flagCore,
-			populateModelSelect: populateModelSelect,
+			populateModelSelect: mf.populateModelSelect,
 		});
 		moveWorkbenchTo(ctx.getActiveSection());
 		// Generate defaults: enable live preview (sd-cli defaults to none).
