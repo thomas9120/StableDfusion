@@ -55,11 +55,23 @@ window.SDGui.generateUi = (() => {
 	// live result frame to hist.addHistoryEntry until Stage 7 moves the
 	// run controller out.
 	var hist = window.SDGui.generateHistory;
+	// Stage 6: preview/progress and result-frame rendering are extracted.
+	// The coordinator still owns generation polling and injects the few
+	// cross-module actions they need.
+	var preview = window.SDGui.generatePreviewProgress;
+	var results = window.SDGui.generateResults;
+	var resetPreview = preview.resetPreview;
+	var refreshPreview = preview.refreshPreview;
+	var updateProgress = preview.updateProgress;
+	var showProgressBar = preview.showProgressBar;
+	var showResultEmpty = preview.showResultEmpty;
+	var renderResult = results.renderResult;
+	var renderResultError = results.renderResultError;
+	var downloadResult = results.downloadResult;
+	var openResultFile = results.openResultFile;
 	var $ = dom.$;
-	var el = dom.el;
 	var setHidden = dom.setHidden;
 	var populateEnum = dom.populateEnum;
-	var formatElapsed = fmt.formatElapsed;
 	var loraNameFromPath = fmt.loraNameFromPath;
 	var loraFolderFromPath = fmt.loraFolderFromPath;
 	var formatLoraStrength = fmt.formatLoraStrength;
@@ -133,9 +145,6 @@ window.SDGui.generateUi = (() => {
 			help: "Select an image to read its embedded generation metadata.",
 		},
 	};
-
-	// A11 - run start time (epoch ms) for elapsed/ETA display.
-	var runStartTime = 0;
 
 	// ── Stage 1: internal dependency context ───────────────────────────
 	// Centralizes the pieces future extracted helper modules (Stage 2+) will
@@ -301,273 +310,6 @@ window.SDGui.generateUi = (() => {
 		if (cancelBtn) cancelBtn.classList.toggle("hidden", !on);
 	}
 
-	function showProgressBar(visible, indeterminate) {
-		var bar = $("gen-progress");
-		if (!bar) return;
-		bar.classList.toggle("hidden", !visible);
-		bar.classList.toggle("indeterminate", !!indeterminate);
-	}
-
-	function setProgressFill(percent) {
-		var fill = $("gen-progress-fill");
-		if (fill) fill.style.width = Math.max(0, Math.min(100, percent)) + "%";
-	}
-
-	// vid_gen previews are multi-frame .webm files (sd-cli writes
-	// .avi/.webm/.webp previews), so render them in a <video> instead of the
-	// shared <img>. The <video> is created lazily inside the preview frame and
-	// only used on the Generate Video tab; image modes keep using <img>.
-	function ensurePreviewVideo() {
-		var frame = $("gen-preview-frame");
-		if (!frame) return null;
-		var v = $("gen-preview-video");
-		if (!v) {
-			v = el("video", "preview-video");
-			v.id = "gen-preview-video";
-			v.controls = true;
-			v.muted = true;
-			v.playsInline = true;
-			v.hidden = true;
-			frame.insertBefore(v, $("gen-preview-empty") || null);
-		}
-		return v;
-	}
-
-	// Returns the active preview media element for the current mode, hiding the
-	// inactive one so only one of <img>/<video> is visible at a time.
-	function activePreviewMedia() {
-		if (window.SDGui.flagCore.getMode() === "vid_gen") {
-			var img = $("gen-preview");
-			if (img) img.hidden = true;
-			return ensurePreviewVideo();
-		}
-		var v = $("gen-preview-video");
-		if (v) v.hidden = true;
-		return $("gen-preview");
-	}
-
-	function resetPreview() {
-		var img = $("gen-preview");
-		if (img) {
-			img.hidden = true;
-			img.removeAttribute("src");
-		}
-		var v = $("gen-preview-video");
-		if (v) {
-			v.hidden = true;
-			v.removeAttribute("src");
-		}
-		var previewEmpty = $("gen-preview-empty");
-		if (previewEmpty) previewEmpty.style.display = "";
-	}
-
-	function refreshPreview(mtime) {
-		var media = activePreviewMedia();
-		var empty = $("gen-preview-empty");
-		if (!media) return;
-		media.src = "/api/generate/preview?t=" + mtime;
-		media.hidden = false;
-		// Live video preview: muted autoplay so the denoising preview animates.
-		if (media.tagName === "VIDEO" && typeof media.play === "function") {
-			media.play().catch(() => {});
-		}
-		if (empty) empty.style.display = "none";
-	}
-
-	function updateProgress(snap) {
-		var text = $("gen-progress-text");
-		var pct = $("gen-progress-pct");
-		var running = snap.state === "running";
-		showProgressBar(running || snap.state === "queued", !snap.total_steps);
-
-		if (running && snap.total_steps) {
-			setProgressFill(snap.percent || 0);
-			// A11 - elapsed since run start (server started_at if present, else client).
-			var started = snap.started_at ? snap.started_at * 1000 : runStartTime;
-			var elapsed = started ? formatElapsed(Date.now() - started) : "";
-			var eta = "";
-			if (started && snap.percent > 0) {
-				var ms = Date.now() - started;
-				var etaMs = (ms / snap.percent) * (100 - snap.percent);
-				eta = " · ETA " + formatElapsed(etaMs);
-			}
-			if (text)
-				text.textContent =
-					(snap.message || "Generating...") +
-					"  " +
-					snap.step +
-					"/" +
-					snap.total_steps +
-					(elapsed ? "  ·  " + elapsed : "");
-			if (pct) pct.textContent = (snap.percent || 0) + "%" + eta;
-		} else if (running) {
-			if (text) text.textContent = snap.message || "Starting...";
-			if (pct) pct.textContent = "";
-		} else {
-			if (text) text.textContent = snap.message || snap.state;
-			if (pct) pct.textContent = "";
-		}
-	}
-
-	function showResultEmpty(message) {
-		var box = $("gen-result");
-		if (!box) return;
-		box.replaceChildren();
-		box.classList.remove("is-error");
-		var cap = el(
-			"div",
-			"frame-empty",
-			message || "Your generated image will appear here.",
-		);
-		cap.id = "gen-result-empty";
-		box.appendChild(cap);
-	}
-
-	// A10 - copy-to-clipboard was REMOVED: the Web Clipboard API only
-	// carries image *pixel data*, never a file reference, so pasting into a
-	// folder (the obvious intent) is impossible by browser design — and
-	// Download + Show-in-folder cover every file-management case. Do not
-	// re-add without a different mechanism.
-
-	function renderResult(snap) {
-		var box = $("gen-result");
-		var actions = $("gen-result-actions");
-		if (!box) return;
-		box.replaceChildren();
-		box.classList.remove("is-error");
-
-		// Show any generation warnings (small output, suspicious files, etc.).
-		var wrn = snap.warnings || [];
-		if (wrn.length) {
-			var warnDiv = el("div", "gen-warnings");
-			wrn.forEach((w) => {
-				warnDiv.appendChild(el("div", "gen-warning-msg", "⚠ " + w));
-			});
-			box.appendChild(warnDiv);
-		}
-
-		// Show stderr tail (sd-cli diagnostics) when available.
-		var stderrTail = (snap.stderr_tail || "").toString().trim();
-		if (stderrTail) {
-			var details = el("details", "gen-stderr");
-			var summary = el("summary", "", "sd-cli diagnostic output (stderr)");
-			details.appendChild(summary);
-			var pre = el("pre", "gen-stderr-text");
-			pre.textContent = stderrTail;
-			details.appendChild(pre);
-			box.appendChild(details);
-		}
-
-		var files = snap.result_files || [];
-		var mode = snap.mode || window.SDGui.flagCore.getMode();
-
-		// Metadata mode: no image file is produced - sd-cli prints the metadata
-		// to stdout. Render the text into the result box.
-		if (mode === "metadata") {
-			var text = (snap.stdout_excerpt || "").toString();
-			if (!text) {
-				box.appendChild(
-					el(
-						"div",
-						"help-text",
-						"No metadata output captured (the image may have no embedded metadata).",
-					),
-				);
-			} else {
-				var pre = el("pre", "result-text");
-				pre.textContent = text;
-				box.appendChild(pre);
-			}
-			if (actions) actions.classList.add("hidden");
-			hist.addHistoryEntry(snap, files[0] || "metadata");
-			return;
-		}
-
-		if (!files.length) {
-			showResultEmpty("No image was produced.");
-			if (actions) actions.classList.add("hidden");
-			return;
-		}
-		// A2 - batch results: show a gallery when more than one file.
-		if (files.length > 1) {
-			window.SDGui.gallery.renderResultGallery(
-				box,
-				files,
-				snap.prompt || "result",
-				Date.now(),
-			);
-		} else {
-			window.SDGui.gallery.renderResultImage(
-				box,
-				files[0],
-				snap.prompt || "result",
-				Date.now(),
-			);
-		}
-		var first = files[0];
-		var firstIsVideo = window.SDGui.gallery.isVideoFile(first);
-		if (actions) {
-			actions.classList.remove("hidden");
-			var openBtn = $("btn-open-result");
-			var sendBtn = $("btn-send-img2img");
-			var dlBtn = $("btn-download-result");
-			if (openBtn) openBtn.onclick = () => openResultFile();
-			// "Send to img2img" only applies to images; hide it for video results.
-			if (sendBtn) {
-				sendBtn.classList.toggle("hidden", firstIsVideo);
-				if (!firstIsVideo) sendBtn.onclick = () => sendToImg2img(first);
-			}
-			if (dlBtn) dlBtn.onclick = () => downloadResult(first);
-		}
-		// Add to history (one entry per result file for batch).
-		files.forEach((f) => hist.addHistoryEntry(snap, f));
-	}
-
-	// A9 - render an inline error in the result frame (instead of toast-only).
-	function renderResultError(snap) {
-		var box = $("gen-result");
-		var actions = $("gen-result-actions");
-		if (actions) actions.classList.add("hidden");
-		if (!box) return;
-		box.replaceChildren();
-		box.classList.add("is-error");
-		var msg = el(
-			"div",
-			"gen-error",
-			"✗ " + (snap.error || "Generation failed."),
-		);
-		box.appendChild(msg);
-		var stderrTail = (snap.stderr_tail || "").toString().trim();
-		if (stderrTail) {
-			var details = el("details", "gen-stderr");
-			details.appendChild(
-				el("summary", "", "sd-cli diagnostic output (stderr)"),
-			);
-			var pre = el("pre", "gen-stderr-text");
-			pre.textContent = stderrTail;
-			details.appendChild(pre);
-			box.appendChild(details);
-		}
-	}
-
-	function downloadResult(name) {
-		if (!name) return;
-		var a = el("a");
-		a.href = "/api/image/" + encodeURIComponent(name) + "?download=1";
-		a.download = String(name).split("/").pop() || "result";
-		document.body.appendChild(a);
-		a.click();
-		a.remove();
-	}
-
-	function openResultFile() {
-		window.SDGui.fetchJson("/api/open-folder", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ folder: "output" }),
-		}).catch((e) => window.SDGui.toast(e.message, "error"));
-	}
-
 	function sendToImg2img(name) {
 		if (!name) return;
 		// Result files live under output/ (sd-cli runs with cwd = project root),
@@ -608,17 +350,17 @@ window.SDGui.generateUi = (() => {
 			stopPolling();
 			setGenerating(false);
 			if (snap.state === "done") {
-				runStartTime = 0;
+				preview.setRunStartTime(0);
 				showProgressBar(false);
 				renderResult(snap);
 				window.SDGui.toast("Generation complete.", "success");
 			} else if (snap.state === "error") {
-				runStartTime = 0;
+				preview.setRunStartTime(0);
 				showProgressBar(false);
 				renderResultError(snap);
 				window.SDGui.toast(snap.error || "Generation failed.", "error");
 			} else if (snap.state === "canceled") {
-				runStartTime = 0;
+				preview.setRunStartTime(0);
 				showProgressBar(false);
 				window.SDGui.toast("Generation canceled.", "warning");
 			}
@@ -691,7 +433,7 @@ window.SDGui.generateUi = (() => {
 		// A9 — reset result frame to its empty state on a fresh run.
 		showResultEmpty(activeConfig().running);
 		setGenerating(true);
-		runStartTime = Date.now();
+		preview.setRunStartTime(Date.now());
 		showProgressBar(true, true);
 		var prog = $("gen-progress-text");
 		if (prog) prog.textContent = "Starting…";
@@ -769,6 +511,16 @@ window.SDGui.generateUi = (() => {
 		ctrl.init({
 			flagCore: window.SDGui.flagCore,
 			populateModelSelect: mf.populateModelSelect,
+		});
+		// Stage 6: preview/progress and result-frame rendering are pure UI
+		// modules. The run lifecycle stays here until Stage 7, but delegates
+		// visible preview/result effects through these exports.
+		preview.init({ flagCore: window.SDGui.flagCore });
+		results.init({
+			flagCore: window.SDGui.flagCore,
+			history: hist,
+			previewProgress: preview,
+			sendToImg2img: sendToImg2img,
 		});
 		// Stage 5: hand the history module its flagCore + the cross-module
 		// actions it needs (sendToImg2img / downloadResult / openResultFile

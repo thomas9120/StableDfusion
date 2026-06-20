@@ -286,7 +286,47 @@ The history module should accept callbacks for actions that belong elsewhere:
 
 Pitfall: history entries are persisted in localStorage. Preserve the current schema (`id`, `name`, `file`, `prompt`, `thumb`, `timestamp`, `bundle`, `mode`, `params`) and keep backward compatibility for older entries that only have `name`.
 
-### Stage 6: Extract Preview, Progress, and Results
+### Stage 6: Extract Preview, Progress, and Results — ✅ DONE (2026-06-20)
+
+Created two new modules under `ui/js/generate/`, loaded after
+`history.js` and before `generate-ui.js` in `ui/index.html`:
+
+- `ui/js/generate/preview-progress.js`
+  (`window.SDGui.generatePreviewProgress`) — owns preview media switching,
+  image/video preview reset + refresh, progress bar visibility/fill/text,
+  elapsed/ETA display, and the empty result-frame placeholder.
+- `ui/js/generate/results.js` (`window.SDGui.generateResults`) — owns
+  `renderResult`, `renderResultError`, `downloadResult`, `openResultFile`,
+  and live result action wiring.
+
+`generate-ui.js` now aliases those module exports and keeps the run lifecycle
+in place for Stage 7. It still owns `generate`, `poll`, `startPolling`,
+`stopPolling`, `cancel`, `inspectMetadata`, and `setGenerating`, but delegates
+all visible preview/progress/result effects through the extracted modules.
+
+Cross-module dependencies are explicit:
+
+- `preview-progress` receives `flagCore` so it can choose `<img>` vs `<video>`
+  based on the active mode.
+- `results` receives `flagCore`, `history`, `previewProgress`, and
+  `sendToImg2img`.
+- `history` continues to receive `downloadResult` and `openResultFile` through
+  its existing `init()` contract, now backed by the results module.
+
+The behavior boundaries were preserved:
+
+- `vid_gen` preview still uses the lazily-created `<video>` element.
+- Image previews still use the existing `<img>`.
+- Result rendering still uses `window.SDGui.gallery` for image/video output.
+- "Send to img2img" still hides for video files.
+- Metadata mode still renders stdout text instead of requiring an output file.
+- Batch results still create one history entry per result file.
+
+Result: `generate-ui.js` dropped from 909 to 735 lines (~174 lines moved out,
+no behavior change). Verified: `node --check` on the touched JS files,
+`npm run test:syntax`, and `npm run test:frontend` all pass.
+
+#### Original plan (kept for reference)
 
 Move preview/progress first:
 
