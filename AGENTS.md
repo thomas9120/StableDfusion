@@ -2,11 +2,7 @@
 
 ## Project Reference
 
-The full design lives in **`PLAN.md`** (architecture, directory map, tab design,
-backend/frontend module reference, the Generate flow, install/release
-management, model bundles, phased roadmap, open decisions, testing).
-
-Read `PLAN.md` before starting any task.
+/docs/directory.md is a good place to start.
 
 ## Relationship to LLama-GUI
 
