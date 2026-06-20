@@ -21,6 +21,23 @@ window.SDGui.generateUi = (() => {
 	var activeGenerateSection = "generate-image";
 	var routingSection = false;
 
+	// Stage 2: low-risk pure UI utilities live in dedicated modules under
+	// ui/js/generate/. Alias the helpers we use heavily so the call sites
+	// stay short. The dimension module is invoked by namespace since its
+	// init/setup is wired up explicitly in init() below.
+	var dom = window.SDGui.generateDom;
+	var fmt = window.SDGui.generateFormatters;
+	var dims = window.SDGui.generateDimensions;
+	var $ = dom.$;
+	var el = dom.el;
+	var setHidden = dom.setHidden;
+	var populateEnum = dom.populateEnum;
+	var formatElapsed = fmt.formatElapsed;
+	var relativeTime = fmt.relativeTime;
+	var loraNameFromPath = fmt.loraNameFromPath;
+	var loraFolderFromPath = fmt.loraFolderFromPath;
+	var formatLoraStrength = fmt.formatLoraStrength;
+
 	var SECTION_CONFIG = {
 		"generate-image": {
 			mode: "img_gen",
@@ -94,9 +111,6 @@ window.SDGui.generateUi = (() => {
 	// A11 - run start time (epoch ms) for elapsed/ETA display.
 	var runStartTime = 0;
 
-	// A6 - dimension alignment multiple. SD needs mult of 8; many models 64.
-	var DIM_MULTIPLE = 8;
-
 	// ── Stage 1: internal dependency context ───────────────────────────
 	// Centralizes the pieces future extracted helper modules (Stage 2+) will
 	// receive explicitly, so they never reach back into these closure
@@ -117,150 +131,6 @@ window.SDGui.generateUi = (() => {
 		syncFromState: syncFromState,
 		sendToImg2img: sendToImg2img,
 	};
-
-	function formatElapsed(ms) {
-		var s = Math.max(0, Math.floor(ms / 1000));
-		if (s < 60) return s + "s";
-		return Math.floor(s / 60) + "m " + (s % 60) + "s";
-	}
-
-	// A6 - snap a value to the dimension multiple.
-	function snapDim(v) {
-		var n = parseInt(v, 10);
-		if (Number.isNaN(n)) n = DIM_MULTIPLE;
-		if (n < DIM_MULTIPLE) n = DIM_MULTIPLE;
-		return Math.round(n / DIM_MULTIPLE) * DIM_MULTIPLE;
-	}
-
-	// ── Dimensions widget (Generate): "Aspect → Size" redesign ─────────
-	// Last shape the user engaged with, so the size row stays stable when the
-	// current ratio is custom (no bucket highlight).
-	var lastShape = "1:1";
-
-	// Returns the canonical bucket {long,width,height} for the exact pixels,
-	// or null when the size is custom (no preset matches).
-	function findDimensionBucket(w, h) {
-		var shape = window.SDGui.shapeFromRatio(w / h);
-		var buckets = (window.SDGui.DIMENSION_BUCKETS || {})[shape] || [];
-		return buckets.find((b) => b.width === w && b.height === h) || null;
-	}
-
-	function sizeTagForLong(long) {
-		if (long <= 640) return "SD 1.x";
-		if (long <= 800) return "SD 1.5";
-		return "SDXL";
-	}
-
-	function budgetFor(mp) {
-		if (mp <= 1.05) return { cls: "ok", text: "on budget" };
-		if (mp <= 1.3) return { cls: "warn", text: "large" };
-		return { cls: "over", text: "slow / OOM risk" };
-	}
-
-	// (Re)build the size buttons for the given shape, ascending longer edge,
-	// plus a Custom escape hatch. Recommended = the SDXL-class bucket.
-	function renderDimensionSizes(activeShape) {
-		var wrap = $("gen-dim-sizes");
-		if (!wrap) return;
-		wrap.replaceChildren();
-		var buckets = (window.SDGui.DIMENSION_BUCKETS || {})[activeShape] || [];
-		var recommended =
-			buckets
-				.filter((b) => b.long >= 1024)
-				.sort((a, b) => a.long - b.long)[0] || buckets[buckets.length - 1];
-		buckets.forEach((b) => {
-			var btn = el("button", "dim-size");
-			btn.type = "button";
-			btn.setAttribute("data-long", String(b.long));
-			btn.setAttribute("data-w", String(b.width));
-			btn.setAttribute("data-h", String(b.height));
-			var num = el("span", "num");
-			num.textContent = String(b.long);
-			btn.appendChild(num);
-			var tag = el("span", "tag");
-			tag.textContent = sizeTagForLong(b.long);
-			btn.appendChild(tag);
-			if (recommended && b.long === recommended.long)
-				btn.classList.add("recommended");
-			wrap.appendChild(btn);
-		});
-		var custom = el("button", "dim-size");
-		custom.type = "button";
-		custom.setAttribute("data-long", "custom");
-		var cNum = el("span", "num");
-		cNum.textContent = "Custom";
-		custom.appendChild(cNum);
-		var cTag = el("span", "tag");
-		cTag.textContent = "manual";
-		custom.appendChild(cTag);
-		wrap.appendChild(custom);
-	}
-
-	// Refresh shape/size highlights + the live readout from shared flag state.
-	function updateDimensionAffordances() {
-		var vals = window.SDGui.flagCore.getFlagValues();
-		var w = Number(vals.width) || 0;
-		var h = Number(vals.height) || 0;
-		var shape = window.SDGui.shapeFromRatio(h > 0 ? w / h : 0);
-		if (shape) lastShape = shape;
-		var bucket = findDimensionBucket(w, h);
-
-		// Shape highlight (cleared if the ratio is custom).
-		document.querySelectorAll("#gen-dim-shapes .dim-shape").forEach((chip) => {
-			chip.classList.toggle(
-				"active",
-				!!shape && chip.getAttribute("data-shape") === shape,
-			);
-		});
-
-		// Size buttons for the active shape, then highlight the matching bucket
-		// — or Custom when the size is off-bucket.
-		renderDimensionSizes(lastShape);
-		document.querySelectorAll("#gen-dim-sizes .dim-size").forEach((btn) => {
-			var on = bucket
-				? Number(btn.getAttribute("data-w")) === w &&
-					Number(btn.getAttribute("data-h")) === h
-				: btn.getAttribute("data-long") === "custom";
-			btn.classList.toggle("active", on);
-		});
-
-		// Live readout.
-		if (w && h) {
-			var xy = $("gen-dim-xy");
-			if (xy) xy.textContent = w + " × " + h;
-			var mp = $("gen-dim-mp");
-			if (mp) mp.textContent = ((w * h) / 1e6).toFixed(2) + " MP";
-			var rLbl = $("gen-dim-ratio");
-			if (rLbl) rLbl.textContent = shape || "custom";
-			var bLbl = $("gen-dim-base");
-			if (bLbl)
-				bLbl.textContent = bucket ? bucket.long + " long edge" : "custom";
-			var bud = $("gen-dim-budget");
-			if (bud) {
-				var b = budgetFor((w * h) / 1e6);
-				bud.className = "dim-budget " + b.cls;
-				bud.textContent = b.text;
-			}
-			// Proportional preview swatch (long side capped at 80px).
-			var box = $("gen-dim-preview-box");
-			if (box) {
-				var scale = 80 / Math.max(w, h);
-				box.style.width = Math.round(w * scale) + "px";
-				box.style.height = Math.round(h * scale) + "px";
-			}
-		}
-	}
-
-	function $(id) {
-		return document.getElementById(id);
-	}
-
-	function el(tag, cls, text) {
-		var n = document.createElement(tag);
-		if (cls) n.className = cls;
-		if (text !== undefined) n.textContent = text;
-		return n;
-	}
 
 	function sectionForMode(mode) {
 		return MODE_SECTION[mode] || "generate-image";
@@ -407,14 +277,6 @@ window.SDGui.generateUi = (() => {
 		};
 	}
 
-	function populateEnum(id, options, current) {
-		var node = $(id);
-		if (!node) return;
-		node.replaceChildren();
-		options.forEach((opt) => node.appendChild(new Option(opt, opt)));
-		if (current !== undefined && current !== null) node.value = String(current);
-	}
-
 	function syncControl(flagId) {
 		var entry = controls[flagId];
 		if (!entry) return;
@@ -462,10 +324,6 @@ window.SDGui.generateUi = (() => {
 	}
 
 	// ── Mode-aware section visibility (Phase 3) ────────────────────────────
-	function setHidden(node, hidden) {
-		if (node) node.classList.toggle("hidden", !!hidden);
-	}
-
 	function updateModeSections() {
 		var mode = window.SDGui.flagCore.getMode();
 		var activePanelId = MODE_INPUT_PANELS[mode];
@@ -499,7 +357,7 @@ window.SDGui.generateUi = (() => {
 		setHidden($("gen-advanced-section"), !usePrompt);
 
 		// Refresh shape/size highlights + live readout for the current size (A6).
-		updateDimensionAffordances();
+		dims.updateAffordances();
 		updateActionCopy();
 	}
 
@@ -556,25 +414,6 @@ window.SDGui.generateUi = (() => {
 			select.replaceChildren();
 			select.appendChild(new Option("(could not list models)", ""));
 		}
-	}
-
-	function loraNameFromPath(value) {
-		var text = String(value || "").replace(/\\/g, "/");
-		var name = text.split("/").pop() || "";
-		return name.replace(/\.(safetensors|ckpt|gguf|sft|bin)$/i, "");
-	}
-
-	function loraFolderFromPath(value) {
-		var text = String(value || "").replace(/\\/g, "/");
-		var idx = text.lastIndexOf("/");
-		if (idx <= 0) return "models/loras";
-		return text.slice(0, idx);
-	}
-
-	function formatLoraStrength(value) {
-		var n = Number(value);
-		if (!Number.isFinite(n)) n = 1;
-		return String(Math.round(n * 100) / 100);
 	}
 
 	async function populateLoraFileSelect(select) {
@@ -826,21 +665,6 @@ window.SDGui.generateUi = (() => {
 		} catch (e) {
 			/* quota - ignore */
 		}
-	}
-
-	// Relative "2h ago" label for a timestamp (ms). Returns '' when unknown.
-	function relativeTime(ts) {
-		if (!ts) return "";
-		var s = Math.max(0, Math.round((Date.now() - ts) / 1000));
-		if (s < 45) return "just now";
-		if (s < 90) return "1m ago";
-		var m = Math.round(s / 60);
-		if (m < 60) return m + "m ago";
-		var h = Math.round(m / 60);
-		if (h < 24) return h + "h ago";
-		var d = Math.round(h / 24);
-		if (d < 7) return d + "d ago";
-		return new Date(ts).toLocaleDateString();
 	}
 
 	// Resolve the on-disk filename for a history entry. Newer entries store
@@ -1465,7 +1289,6 @@ window.SDGui.generateUi = (() => {
 			window.SDGui.PREVIEW_METHODS,
 			vals.preview,
 		);
-		updateDimensionAffordances();
 
 		// Bundle dropdown.
 		var bundleSelect = $("gen-model-bundle");
@@ -1570,95 +1393,12 @@ window.SDGui.generateUi = (() => {
 		var metadataBtn = $("btn-inspect-metadata");
 		if (metadataBtn) metadataBtn.addEventListener("click", inspectMetadata);
 
-		// A6 — dimension W/H swap + ratio chips + snap-to-multiple on blur.
-		// Swap W/H (exact row); the shape/size highlights re-derive from ratio.
-		var swapBtn = $("btn-swap-dims");
-		if (swapBtn) {
-			swapBtn.addEventListener("click", () => {
-				var vals = window.SDGui.flagCore.getFlagValues();
-				window.SDGui.flagCore.setMultipleFlagValues({
-					width: vals.height,
-					height: vals.width,
-				});
-				syncAll();
-				updateDimensionAffordances();
-			});
-		}
-
-		// Shape chips: switch ratio, preserving the current longer edge by
-		// snapping to the nearest quality-correct bucket for that shape.
-		document.querySelectorAll("#gen-dim-shapes .dim-shape").forEach((chip) => {
-			chip.addEventListener("click", () => {
-				var shape = chip.getAttribute("data-shape");
-				lastShape = shape;
-				var vals = window.SDGui.flagCore.getFlagValues();
-				var longEdge = Math.max(
-					Number(vals.width) || 1024,
-					Number(vals.height) || 1024,
-				);
-				var buckets = (window.SDGui.DIMENSION_BUCKETS || {})[shape] || [];
-				var best = null;
-				var bestD = Infinity;
-				buckets.forEach((b) => {
-					var d = Math.abs(b.long - longEdge);
-					if (d < bestD) {
-						bestD = d;
-						best = b;
-					}
-				});
-				if (best) {
-					window.SDGui.flagCore.setMultipleFlagValues({
-						width: best.width,
-						height: best.height,
-					});
-					syncAll();
-				}
-				updateDimensionAffordances();
-			});
-		});
-
-		// Size buttons (delegated — they're rebuilt on every render). A bucket
-		// click sets the exact W/H; Custom opens the exact <details>.
-		var sizesWrap = $("gen-dim-sizes");
-		if (sizesWrap) {
-			sizesWrap.addEventListener("click", (ev) => {
-				var btn = ev.target.closest(".dim-size");
-				if (!btn) return;
-				if (btn.getAttribute("data-long") === "custom") {
-					var adv = $("gen-dim-advanced");
-					if (adv) adv.open = true;
-					var wNode = $("gen-width");
-					if (wNode) wNode.focus();
-					return;
-				}
-				window.SDGui.flagCore.setMultipleFlagValues({
-					width: Number(btn.getAttribute("data-w")),
-					height: Number(btn.getAttribute("data-h")),
-				});
-				syncAll();
-				updateDimensionAffordances();
-			});
-		}
-
-		// Exact dimension inputs: snap to multiples of 8 on blur, and refresh
-		// the shape/size highlights (Custom when off-bucket) on change.
-		["gen-width", "gen-height"].forEach((id) => {
-			var node = $(id);
-			if (node) {
-				node.addEventListener("blur", () => {
-					var snapped = snapDim(node.value);
-					if (snapped !== parseInt(node.value, 10)) {
-						node.value = String(snapped);
-						window.SDGui.flagCore.setFlagValue(
-							id === "gen-width" ? "width" : "height",
-							snapped,
-						);
-					}
-					updateDimensionAffordances();
-				});
-				node.addEventListener("change", updateDimensionAffordances);
-			}
-		});
+		// A6 — dimension widget (shape/size chips + W/H swap + snap-to-multiple).
+		// Stage 2: the entire widget lives in window.SDGui.generateDimensions.
+		// We pass flagCore + syncAll so the widget can write shared state
+		// (Configure tab sync) and refresh non-focused controls after a
+		// local mutation. The widget also paints the initial readout.
+		dims.init({ flagCore: window.SDGui.flagCore, onSyncAll: syncAll });
 
 		// A5 — randomize seed button.
 		var seedBtn = $("btn-random-seed");

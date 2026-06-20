@@ -78,21 +78,40 @@ This avoids extracted modules reaching back into private closure variables throu
 
 Pitfall: if helpers capture stale copies of `activeGenerateSection` or mode values, section changes between image/video/upscale/convert can desynchronize the workbench and controls.
 
-### Stage 2: Extract Low-Risk Pure UI Utilities
+### Stage 2: Extract Low-Risk Pure UI Utilities — ✅ DONE (2026-06-20)
 
-Start with the least coupled code:
+Created three new modules under `ui/js/generate/`, loaded before
+`generate-ui.js` in `ui/index.html`:
 
-- DOM helpers.
-- Formatting helpers (`formatElapsed`, `relativeTime`, LoRA name/strength helpers).
-- Dimension UI.
+- `ui/js/generate/dom.js` (`window.SDGui.generateDom`) — `$`, `el`,
+  `setHidden`, `populateEnum`. Pure DOM utilities, no state.
+- `ui/js/generate/formatters.js` (`window.SDGui.generateFormatters`) —
+  `formatElapsed`, `relativeTime`, `loraNameFromPath`,
+  `loraFolderFromPath`, `formatLoraStrength`. Pure functions, no DOM,
+  no flagCore.
+- `ui/js/generate/dimensions.js` (`window.SDGui.generateDimensions`) —
+  the full "Aspect → Size" widget: shape chips, size buttons, live
+  readout, proportional preview swatch, exact W/H snap-to-multiple, and
+  the W/H swap button. Exposes `init({ flagCore, onSyncAll })`,
+  `updateAffordances()`, and `snapInputs()`. Module-private state
+  (`lastShape`, `DIM_MULTIPLE`) is encapsulated; all state mutations
+  route through the injected `flagCore` so Configure tab sync is
+  preserved.
 
-`generateDimensions` should expose something like:
+`generate-ui.js` now aliases the small helpers (`$`, `el`, `setHidden`,
+`populateEnum`, `formatElapsed`, `relativeTime`, `loraNameFromPath`,
+`loraFolderFromPath`, `formatLoraStrength`) onto the new module exports
+so the call sites stayed short, and the dimension widget is wired up via
+`dims.init({ flagCore, onSyncAll: syncAll })` in `init()`. The
+`updateModeSections` mode-routing path now calls
+`dims.updateAffordances()` to refresh the readout.
 
-- `init({ flagCore, onSyncAll })`.
-- `updateAffordances()`.
-- `snapInputs()`.
-
-Pitfall: dimension controls are linked to `flagCore` and `syncAll()`. If the extracted module updates DOM without going through `flagCore.setFlagValue` or `setMultipleFlagValues`, Configure tab sync will regress.
+Result: `generate-ui.js` dropped from 1727 to 1467 lines (~260 lines
+moved out, no behavior change). Verified: `node --check` (21 files,
+all ok), `npm run test:syntax`, `npm run test:frontend` (incl. the
+dimension bucket + manual-edit-returns-to-Custom checks and the full
+init_img mirror suite), and `python server.py` + `/api/status` all
+pass.
 
 ### Stage 3: Extract Control Binding as a Shared Registry
 
