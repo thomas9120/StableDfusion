@@ -15,7 +15,13 @@ window.SDGui.MODEL_TYPE_BUNDLES = [
 		value: "sd1",
 		label: "SD 1.x / 2.x",
 		fields: [{ key: "model", purpose: "model", required: true }],
-		defaults: { mode: "img_gen", width: 512, height: 512, steps: 20, cfg_scale: 7.0 },
+		defaults: {
+			mode: "img_gen",
+			width: 512,
+			height: 512,
+			steps: 20,
+			cfg_scale: 7.0,
+		},
 	},
 	{
 		value: "sdxl",
@@ -24,7 +30,13 @@ window.SDGui.MODEL_TYPE_BUNDLES = [
 			{ key: "model", purpose: "model", required: true },
 			{ key: "vae", purpose: "vae", required: false },
 		],
-		defaults: { mode: "img_gen", width: 1024, height: 1024, steps: 20, cfg_scale: 7.0 },
+		defaults: {
+			mode: "img_gen",
+			width: 1024,
+			height: 1024,
+			steps: 20,
+			cfg_scale: 7.0,
+		},
 	},
 	{
 		value: "sd3",
@@ -91,6 +103,32 @@ window.SDGui.MODEL_TYPE_BUNDLES = [
 			{ key: "llm", purpose: "llm", required: true },
 		],
 		defaults: { mode: "vid_gen", video_frames: 25, fps: 16, cfg_scale: 5.0 },
+	},
+	{
+		// LTX-2.3 video: diffusion model + video VAE + Gemma-3 text encoder
+		// (--llm) + an embeddings connector that bridges the encoder output to
+		// the diffusion model. Verified against sd-cli -h / upstream examples.
+		value: "ltx",
+		label: "LTX-Video (2.3)",
+		fields: [
+			{ key: "diffusion_model", purpose: "diffusion_model", required: true },
+			{ key: "vae", purpose: "vae", required: true },
+			{ key: "llm", purpose: "llm", required: true },
+			{
+				key: "embeddings_connectors",
+				purpose: "embeddings_connectors",
+				required: true,
+			},
+		],
+		defaults: {
+			mode: "vid_gen",
+			video_frames: 33,
+			fps: 24,
+			cfg_scale: 6.0,
+			temporal_tiling: true,
+			diffusion_fa: true,
+			offload_to_cpu: true,
+		},
 	},
 	{
 		value: "z_image",
