@@ -1,0 +1,117 @@
+<div
+  class="section-panel"
+  id="section-hf-download"
+  style="display: none"
+>
+  <div class="page-header">
+    <div>
+      <div class="page-title">Hugging Face Download</div>
+      <div class="page-title-sub">
+        Pull multi-file model components (diffusion + vae + encoders)
+        from a Hugging Face repo into organized model folders.
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div id="hf-status" class="status-box"></div>
+
+    <div class="form-group">
+      <label class="form-label" for="hf-repo-id">Repository</label>
+      <div class="input-row">
+        <input
+          type="text"
+          id="hf-repo-id"
+          placeholder="city96/FLUX.1-schnell-gguf"
+        />
+        <button id="btn-hf-fetch" class="btn btn-primary" type="button">
+          Find Files
+        </button>
+      </div>
+      <p class="help-text">
+        Public repo id in <code>owner/name</code> form. Optionally pin a
+        revision (branch/tag/commit); default is <code>main</code>.
+      </p>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label" for="hf-revision"
+          >Revision (optional)</label
+        >
+        <input type="text" id="hf-revision" placeholder="main" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="hf-token"
+          >Token (optional, private repos)</label
+        >
+        <input
+          type="password"
+          id="hf-token"
+          placeholder="hf_…"
+          autocomplete="off"
+        />
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Files</label>
+      <div class="form-row">
+        <button id="btn-hf-select-all" class="btn btn-sm" type="button">
+          Select all
+        </button>
+        <button
+          id="btn-hf-select-none"
+          class="btn btn-sm"
+          type="button"
+        >
+          Clear
+        </button>
+        <span id="hf-selection-summary" class="help-text"
+          >0 files selected</span
+        >
+      </div>
+      <div id="hf-file-list" class="hf-file-list">
+        <p class="help-text">
+          No files loaded. Enter a repo and click Find Files.
+        </p>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <button
+        id="btn-hf-download"
+        class="btn btn-primary"
+        type="button"
+        disabled
+      >
+        Download to model folders
+      </button>
+      <button
+        id="btn-hf-cancel"
+        class="btn btn-danger hidden"
+        type="button"
+      >
+        Cancel
+      </button>
+    </div>
+
+    <div id="hf-progress" class="progress-container hidden">
+      <div class="progress-bar">
+        <div id="hf-progress-fill" class="progress-fill"></div>
+      </div>
+      <span id="hf-progress-text">0%</span>
+    </div>
+
+    <div class="section">
+      <h3>What's downloaded</h3>
+      <p class="help-text">
+        Downloaded files land under <code>models/diffusion/</code>,
+        <code>models/vae/</code>, <code>models/text-encoders/</code>, or
+        <code>models/loras/</code>. After completion, use
+        <em>Refresh</em> in the Generate tab to populate the model
+        pickers — or just open the Generate tab and the new files will
+        appear automatically on next open.
+      </p>
+    </div>
+  </div>
+</div>

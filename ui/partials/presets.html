@@ -1,0 +1,55 @@
+<div class="section-panel" id="section-presets" style="display: none">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Presets</div>
+      <div class="page-title-sub">
+        Save / load / import / export generation configs.
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div id="presets-status" class="status-box"></div>
+    <div class="preset-toolbar">
+      <div class="form-group preset-name-field">
+        <label class="form-label" for="preset-name">Name</label>
+        <input type="text" id="preset-name" placeholder="SDXL draft" />
+      </div>
+      <div class="form-group preset-desc-field">
+        <label class="form-label" for="preset-description">Notes</label>
+        <input
+          type="text"
+          id="preset-description"
+          placeholder="1024 square, DPM++"
+        />
+      </div>
+      <button
+        id="btn-save-preset"
+        class="btn btn-primary"
+        type="button"
+      >
+        Save Current
+      </button>
+    </div>
+    <div class="preset-toolbar">
+      <div class="form-group preset-filter-field">
+        <label class="form-label" for="preset-filter">Model type</label>
+        <select id="preset-filter"></select>
+      </div>
+      <button id="btn-import-presets" class="btn" type="button">
+        Import
+      </button>
+      <button id="btn-export-presets" class="btn" type="button">
+        Export All
+      </button>
+      <input
+        type="file"
+        id="preset-import-file"
+        class="hidden"
+        accept="application/json,.json"
+      />
+    </div>
+    <div id="presets-list" class="preset-list">
+      <p class="help-text">No presets saved.</p>
+    </div>
+  </div>
+</div>

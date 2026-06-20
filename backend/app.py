@@ -11,6 +11,7 @@ static analysis resolves them regardless of workspace root configuration.
 import http.server
 import json
 import platform
+import re
 import socket
 import ssl
 import sys
@@ -72,6 +73,22 @@ CURRENT_PLATFORM = sys.platform
 BINARY_SUFFIX = ".exe" if CURRENT_PLATFORM == "win32" else ""
 
 SDCPP_TOOLS = ["sd-cli", "sd-server"]
+
+_PARTIAL_RE = re.compile(r"<!--\s*@partial\s+([\w-]+)\s*-->")
+
+
+def _assemble_index() -> bytes:
+    shell = (config.UI_DIR / "index.html").read_text(encoding="utf-8")
+
+    def _load_partial(match: re.Match) -> str:
+        name = match.group(1)
+        partial_path = config.UI_DIR / "partials" / f"{name}.html"
+        if partial_path.exists():
+            return partial_path.read_text(encoding="utf-8")
+        print(f"[warn] partial not found: {partial_path}", file=sys.stderr)
+        return match.group(0)
+
+    return _PARTIAL_RE.sub(_load_partial, shell).encode("utf-8")
 
 
 def _create_ssl_context():
@@ -248,7 +265,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if parsed.path in ("/", "/index.html"):
             index = config.UI_DIR / "index.html"
             if index.exists():
-                Response(self).bytes(index.read_bytes(), content_type="text/html; charset=utf-8")
+                Response(self).bytes(_assemble_index(), content_type="text/html; charset=utf-8")
                 return
             self.send_error(404, "index.html not found")
             return

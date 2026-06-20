@@ -1,0 +1,98 @@
+<div class="section-panel" id="section-install" style="display: none">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Install stable-diffusion.cpp</div>
+      <div class="page-title-sub">
+        Download releases, select a backend, and manage your
+        stable-diffusion.cpp binaries.
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div id="install-status" class="status-box"></div>
+
+    <div class="form-group">
+      <label class="form-label" for="release-select">Version</label>
+      <div class="input-row">
+        <select id="release-select">
+          <option value="">Loading…</option>
+        </select>
+        <button id="refresh-releases" class="btn btn-sm" type="button">
+          Refresh
+        </button>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="backend-select">Backend</label>
+      <select id="backend-select">
+        <option value="">Loading available backends…</option>
+      </select>
+    </div>
+
+    <div class="form-row">
+      <button id="btn-install" class="btn btn-primary">Install</button>
+      <button id="btn-update" class="btn">Check for Updates</button>
+      <button id="btn-repair" class="btn hidden">Repair Install</button>
+    </div>
+
+    <div id="download-progress" class="progress-container hidden">
+      <div class="progress-bar">
+        <div id="progress-fill" class="progress-fill"></div>
+      </div>
+      <span id="progress-text">0%</span>
+    </div>
+
+    <div class="section">
+      <h3>Installed</h3>
+      <div id="installed-info"></div>
+    </div>
+
+    <div class="section">
+      <h3>Folders</h3>
+      <div class="form-row">
+        <button id="btn-open-models" class="btn" type="button">
+          Open Models
+        </button>
+        <button id="btn-open-sdcpp" class="btn" type="button">
+          Open Binaries
+        </button>
+        <button id="btn-open-output" class="btn" type="button">
+          Open Output
+        </button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Maintenance</h3>
+      <div class="form-row">
+        <button id="btn-remove-sdcpp" class="btn btn-danger">
+          Remove Binaries
+        </button>
+        <button id="btn-restart-app" class="btn" type="button">
+          Restart GUI Server
+        </button>
+        <button id="btn-stop-app" class="btn btn-danger" type="button">
+          Stop GUI Server
+        </button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Stable-D GUI App Updates</h3>
+      <div id="app-update-status" class="status-box"></div>
+      <div class="form-row">
+        <button id="btn-check-app-update" class="btn" type="button">
+          Check App Updates
+        </button>
+        <button
+          id="btn-update-app"
+          class="btn btn-primary"
+          type="button"
+        >
+          Update App from GitHub
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
