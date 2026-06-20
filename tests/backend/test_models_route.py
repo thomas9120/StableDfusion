@@ -70,3 +70,29 @@ def test_text_encoder_listing_does_not_leak_diffusion_folder(tmp_path):
     rels = [m["relative"] for m in out["models"]]
 
     assert rels == ["text-encoders/qwen.gguf"]
+
+
+def test_vae_listing_uses_component_folder(tmp_path):
+    ctx = _ctx(tmp_path)
+    (ctx.paths.models / "vae").mkdir(parents=True)
+    (ctx.paths.models / "text-encoders").mkdir()
+    (ctx.paths.models / "vae" / "ae.safetensors").write_bytes(b"x")
+    (ctx.paths.models / "text-encoders" / "qwen.gguf").write_bytes(b"x")
+
+    out = _list(ctx, "type=vae")
+    rels = [m["relative"] for m in out["models"]]
+
+    assert rels == ["vae/ae.safetensors"]
+
+
+def test_lora_model_dir_alias_lists_loras_folder(tmp_path):
+    ctx = _ctx(tmp_path)
+    (ctx.paths.models / "loras").mkdir(parents=True)
+    (ctx.paths.models / "vae").mkdir()
+    (ctx.paths.models / "loras" / "style.safetensors").write_bytes(b"x")
+    (ctx.paths.models / "vae" / "ae.safetensors").write_bytes(b"x")
+
+    out = _list(ctx, "type=lora-model-dir")
+    rels = [m["relative"] for m in out["models"]]
+
+    assert rels == ["loras/style.safetensors"]

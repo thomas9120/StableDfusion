@@ -65,8 +65,12 @@ def ensure_model_subdirs(ctx: AppContext) -> None:
         (ctx.paths.models / subdir).mkdir(parents=True, exist_ok=True)
 
 
+def normalize_purpose(purpose: Any) -> str:
+    return str(purpose or "").strip().lower().replace("-", "_")
+
+
 def subdir_for_purpose(purpose: Any) -> str | None:
-    normalized = str(purpose or "").strip().lower()
+    normalized = normalize_purpose(purpose)
     return PURPOSE_SUBDIR.get(normalized)
 
 

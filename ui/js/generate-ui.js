@@ -95,6 +95,12 @@ window.SDGui.generateUi = (() => {
 			sel.value = v || "";
 			return;
 		}
+		if (entry.kind === "range" && entry.slider) {
+			if (!entry.slider.isConnected) return;
+			entry.slider.value = String(v);
+			if (entry.valueLabel) entry.valueLabel.textContent = String(v);
+			return;
+		}
 		var node = $(entry.id);
 		if (!node) return;
 		// Don't clobber the control the user is currently editing.
@@ -148,6 +154,7 @@ window.SDGui.generateUi = (() => {
 			control_net: "ControlNet",
 			embeddings_connectors: "Embeddings connectors",
 			embd_dir: "Embeddings directory",
+			lora_model_dir: "LoRA folder",
 			photo_maker: "PhotoMaker",
 			pulid_weights: "PuLID weights",
 		};
@@ -156,9 +163,44 @@ window.SDGui.generateUi = (() => {
 
 	async function populateModelSelect(select, purpose) {
 		try {
-			var data = await window.SDGui.fetchJson("/api/models?type=" + encodeURIComponent(purpose));
+			var listPurpose = purpose === "lora_model_dir" ? "lora" : purpose;
+			var data = await window.SDGui.fetchJson(
+				"/api/models?type=" + encodeURIComponent(listPurpose),
+			);
 			select.replaceChildren();
-			select.appendChild(new Option("— select from component folder —", ""));
+			if (purpose === "lora_model_dir") {
+				select.appendChild(new Option("-- no LoRA folder --", ""));
+				var byFolder = {};
+				(data.models || []).forEach((m) => {
+					var folder = m.folder || "loras";
+					if (!byFolder[folder]) byFolder[folder] = { count: 0, size: 0 };
+					byFolder[folder].count += 1;
+					byFolder[folder].size += m.size || 0;
+				});
+				if (!Object.keys(byFolder).length) {
+					select.appendChild(new Option("models/loras (empty)", "models/loras"));
+					return;
+				}
+				Object.keys(byFolder)
+					.sort()
+					.forEach((folder) => {
+						var info = byFolder[folder];
+						select.appendChild(
+							new Option(
+								"models/" +
+									folder +
+									" (" +
+									info.count +
+									" LoRA" +
+									(info.count === 1 ? "" : "s") +
+									")",
+								"models/" + folder,
+							),
+						);
+					});
+				return;
+			}
+			select.appendChild(new Option("-- select from component folder --", ""));
 			// sd-cli runs with cwd = project root, so prefix model-relative paths so
 			// they resolve (Browse returns absolute paths which also resolve).
 			(data.models || []).forEach((m) =>
@@ -177,6 +219,101 @@ window.SDGui.generateUi = (() => {
 			select.replaceChildren();
 			select.appendChild(new Option("(could not list models)", ""));
 		}
+	}
+
+	function loraNameFromPath(value) {
+		var text = String(value || "").replace(/\\/g, "/");
+		var name = text.split("/").pop() || "";
+		return name.replace(/\.(safetensors|ckpt|gguf|sft|bin)$/i, "");
+	}
+
+	function loraFolderFromPath(value) {
+		var text = String(value || "").replace(/\\/g, "/");
+		var idx = text.lastIndexOf("/");
+		if (idx <= 0) return "models/loras";
+		return text.slice(0, idx);
+	}
+
+	function formatLoraStrength(value) {
+		var n = Number(value);
+		if (!Number.isFinite(n)) n = 1;
+		return String(Math.round(n * 100) / 100);
+	}
+
+	async function populateLoraFileSelect(select) {
+		try {
+			var data = await window.SDGui.fetchJson("/api/models?type=lora");
+			select.replaceChildren();
+			select.appendChild(new Option("-- no active LoRA --", ""));
+			(data.models || []).forEach((m) =>
+				select.appendChild(
+					new Option(
+						(m.folder ? m.folder + "/" : "") +
+							m.name +
+							" (" +
+							Math.round(m.size / 1048576) +
+							" MB)",
+						"models/" + m.relative,
+					),
+				),
+			);
+		} catch (e) {
+			select.replaceChildren();
+			select.appendChild(new Option("(could not list LoRAs)", ""));
+		}
+	}
+
+	function renderLoraControls(container) {
+		var wrap = el("div", "gen-model-field");
+		var head = el("div", "field-head");
+		head.appendChild(el("span", "form-label", "Active LoRA"));
+		wrap.appendChild(head);
+
+		var row = el("div", "field-row");
+		var select = el("select");
+		select.appendChild(new Option("Loading...", ""));
+		controls.lora_file = { id: null, kind: "path", select: select, purpose: "lora" };
+		select.addEventListener("change", () => {
+			window.SDGui.flagCore.setFlagValue("lora_file", select.value);
+			if (select.value) {
+				window.SDGui.flagCore.setFlagValue("lora_model_dir", loraFolderFromPath(select.value));
+			}
+		});
+		populateLoraFileSelect(select).then(() => syncControl("lora_file"));
+		row.appendChild(select);
+		wrap.appendChild(row);
+
+		var sliderRow = el("div", "field-row");
+		var slider = el("input");
+		slider.type = "range";
+		slider.min = "-1";
+		slider.max = "2";
+		slider.step = "0.05";
+		var current = window.SDGui.flagCore.getFlagValues().lora_strength;
+		slider.value = current === undefined || current === "" ? "1" : String(current);
+		var valueLabel = el("span", "help-text", formatLoraStrength(slider.value));
+		controls.lora_strength = {
+			id: null,
+			kind: "range",
+			slider: slider,
+			valueLabel: valueLabel,
+		};
+		slider.addEventListener("input", () => {
+			var value = formatLoraStrength(slider.value);
+			valueLabel.textContent = value;
+			window.SDGui.flagCore.setFlagValue("lora_strength", Number(value));
+		});
+		sliderRow.appendChild(slider);
+		sliderRow.appendChild(valueLabel);
+		wrap.appendChild(sliderRow);
+
+		var hint = el(
+			"p",
+			"help-text",
+			"Adds <lora:name:strength> to the prompt at generation time.",
+		);
+		wrap.appendChild(hint);
+		container.appendChild(wrap);
 	}
 
 	async function browseModel(field) {
@@ -235,6 +372,7 @@ window.SDGui.generateUi = (() => {
 				"control_net",
 				"embeddings_connectors",
 				"embd_dir",
+				"lora_model_dir",
 				"photo_maker",
 				"pulid_weights",
 			].map((key) => ({
@@ -242,6 +380,13 @@ window.SDGui.generateUi = (() => {
 				purpose: (window.SDGui.BUNDLE_FIELD_PURPOSES || {})[key] || key,
 				required: false,
 			}));
+		}
+		if (!fieldList.some((field) => field.key === "lora_model_dir")) {
+			fieldList.push({
+				key: "lora_model_dir",
+				purpose: "lora_model_dir",
+				required: false,
+			});
 		}
 
 		fieldList.forEach((field) => {
@@ -270,6 +415,7 @@ window.SDGui.generateUi = (() => {
 			wrap.appendChild(row);
 			container.appendChild(wrap);
 		});
+		renderLoraControls(container);
 	}
 
 	// path-kind control sync (model picker selects)
@@ -532,7 +678,24 @@ window.SDGui.generateUi = (() => {
 		}
 		(result.warnings || []).forEach((w) => window.SDGui.toast(w, "warning"));
 
-		var vals = window.SDGui.flagCore.getFlagValues();
+		var vals = Object.assign({}, window.SDGui.flagCore.getFlagValues());
+		if (vals.lora_file) {
+			var loraName = loraNameFromPath(vals.lora_file);
+			var loraStrength = formatLoraStrength(vals.lora_strength);
+			var loraTag = "<lora:" + loraName + ":" + loraStrength + ">";
+			vals.prompt = ((vals.prompt || "").trim() + " " + loraTag).trim();
+			var promptPair = result.args.find((pair) => pair[0] === "--prompt" || pair[0] === "-p");
+			if (promptPair) {
+				promptPair[1] = vals.prompt;
+			} else {
+				result.args.push(["--prompt", vals.prompt]);
+			}
+			var loraDir = vals.lora_model_dir || loraFolderFromPath(vals.lora_file);
+			vals.lora_model_dir = loraDir;
+			if (!result.args.some((pair) => pair[0] === "--lora-model-dir")) {
+				result.args.push(["--lora-model-dir", loraDir]);
+			}
+		}
 		var body = {
 			mode: window.SDGui.flagCore.getMode(),
 			bundle: window.SDGui.flagCore.getBundle(),

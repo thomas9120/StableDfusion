@@ -158,7 +158,7 @@ def select_file_in_native_dialog(
 def get_select_file_options(
     ctx: AppContext, purpose: Any, title: Any
 ) -> tuple[str, Path, FileTypes]:
-    normalized_purpose = str(purpose or "model").strip().lower()
+    normalized_purpose = model_storage_service.normalize_purpose(purpose or "model")
     normalized_title = str(title or "").strip() or "Select File"
 
     initial_dir = (

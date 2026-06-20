@@ -24,6 +24,9 @@ def _norm_ext(value: str) -> str:
 
 def _extensions_for_type(purpose: str) -> tuple[str, ...]:
     """Return the extensions advertised for a picker purpose, else all model exts."""
+    purpose = model_storage_service.normalize_purpose(purpose)
+    if purpose == "lora_model_dir":
+        purpose = "lora"
     entry = file_picker_service.PURPOSE_FILTERS.get(purpose)
     if not entry:
         return MODEL_EXTS
@@ -40,7 +43,7 @@ def _extensions_for_type(purpose: str) -> tuple[str, ...]:
 
 def list_models(request: Request, response: Response, ctx: AppContext) -> None:
     query = urllib.parse.parse_qs(request.query or "")
-    purpose = (query.get("type", [""])[0] or "").strip().lower()
+    purpose = model_storage_service.normalize_purpose(query.get("type", [""])[0])
     exts = _extensions_for_type(purpose) if purpose else MODEL_EXTS
     allowed = {_norm_ext(e) for e in exts}
 

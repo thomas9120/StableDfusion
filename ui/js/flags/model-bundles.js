@@ -135,6 +135,7 @@ window.SDGui.BUNDLE_FIELD_PURPOSES = {
 	uncond_diffusion_model: "diffusion_model",
 	control_net: "control",
 	embeddings_connectors: "model",
+	lora_model_dir: "lora_model_dir",
 	upscale_model: "esrgan",
 	embd_dir: "model",
 	hires_upscalers_dir: "esrgan",

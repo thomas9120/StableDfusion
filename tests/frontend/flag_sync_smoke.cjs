@@ -144,6 +144,24 @@ function findChromiumExecutable() {
 				});
 			}
 			if (url.includes("/api/models")) {
+				const queryType = new URL(url).searchParams.get("type");
+				if (queryType === "lora") {
+					return route.fulfill({
+						status: 200,
+						contentType: "application/json",
+						body: JSON.stringify({
+							models: [
+								{
+									name: "style-test.safetensors",
+									relative: "loras/style-test.safetensors",
+									folder: "loras",
+									size: 123456,
+									mtime: 1,
+								},
+							],
+						}),
+					});
+				}
 				return route.fulfill({
 					status: 200,
 					contentType: "application/json",
@@ -272,6 +290,15 @@ function findChromiumExecutable() {
 			window.SDGui.flagCore.setFlagValue("prompt", "a cat");
 		});
 		await page.fill("#gen-prompt", "a cat");
+		const loraUi = await page.evaluate(() => {
+			window.SDGui.flagCore.setFlagValue("lora_file", "models/loras/style-test.safetensors");
+			window.SDGui.flagCore.setFlagValue("lora_strength", 0.75);
+			window.SDGui.flagCore.setFlagValue("lora_model_dir", "models/loras");
+			const ranges = Array.from(document.querySelectorAll("#gen-model-components input[type='range']"));
+			const slider = ranges.find((input) => input.min === "-1" && input.max === "2");
+			return !!slider;
+		});
+		check("LoRA strength slider is rendered with expected range", loraUi);
 
 		// 5. Click Generate -> posts + polls.
 		await page.click("#btn-generate");
@@ -316,6 +343,15 @@ function findChromiumExecutable() {
 		check(
 			"Generate POST included total_steps",
 			generatePosted && Number.isInteger(generatePosted.total_steps),
+		);
+		const postedArgs = (generatePosted.args || []).map((p) => p.join("=")).join(" ");
+		check(
+			"Generate POST injected LoRA prompt tag",
+			postedArgs.includes("--prompt=a cat <lora:style-test:0.75>"),
+		);
+		check(
+			"Generate POST included LoRA model dir",
+			postedArgs.includes("--lora-model-dir=models/loras"),
 		);
 
 		// 8. No uncaught page errors.
