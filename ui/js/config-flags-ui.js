@@ -163,6 +163,20 @@ window.SDGui.configFlagsUi = (() => {
 		renderPreview();
 	}
 
+	function expandAll() {
+		(window.SDGui.FLAG_CATEGORIES || []).forEach((cat) => {
+			expandedCats[cat.id] = true;
+		});
+		render();
+	}
+
+	function collapseAll() {
+		(window.SDGui.FLAG_CATEGORIES || []).forEach((cat) => {
+			expandedCats[cat.id] = false;
+		});
+		render();
+	}
+
 	function init() {
 		var search = document.getElementById("flag-search");
 		if (search) {
@@ -171,6 +185,10 @@ window.SDGui.configFlagsUi = (() => {
 				render();
 			});
 		}
+		var btnExpand = document.getElementById("btn-expand-all");
+		if (btnExpand) btnExpand.addEventListener("click", expandAll);
+		var btnCollapse = document.getElementById("btn-collapse-all");
+		if (btnCollapse) btnCollapse.addEventListener("click", collapseAll);
 		// Re-render when shared state changes (e.g. Generate edits the same flag).
 		window.SDGui.flagCore.onChange(() => {
 			// Avoid clobbering focused inputs: only refresh preview + visibility,
