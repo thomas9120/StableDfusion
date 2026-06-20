@@ -727,11 +727,14 @@ window.SDGui.manager = (() => {
 		showStatus("info", "Stopping GUI server...");
 		try {
 			await fetchJson("/api/shutdown", { method: "POST" });
+			showStatus("info", "Shutdown requested. Waiting for server to stop...");
+			var stopped = await waitForServerOffline(12, 500);
 			showStatus(
-				"success",
-				"GUI server is shutting down. This page will stop responding.",
+				stopped ? "success" : "info",
+				stopped
+					? "GUI server stopped. Start server.py again to reconnect."
+					: "Shutdown requested. This page may stop responding shortly.",
 			);
-			setTimeout(() => window.location.reload(), 1500);
 		} catch (e) {
 			showStatus("error", "Failed to stop GUI server: " + e.message);
 			if (button) button.disabled = false;
@@ -787,6 +790,18 @@ window.SDGui.manager = (() => {
 			} catch (e) {
 				await new Promise((r) => setTimeout(r, intervalMs));
 			}
+		}
+		return false;
+	}
+
+	async function waitForServerOffline(maxRetries, intervalMs) {
+		for (var i = 0; i < maxRetries; i++) {
+			try {
+				await fetchJson("/api/status");
+			} catch (e) {
+				return true;
+			}
+			await new Promise((r) => setTimeout(r, intervalMs));
 		}
 		return false;
 	}
