@@ -25,6 +25,8 @@ models/*
 !models/text-encoders/.gitkeep
 !models/loras/
 !models/loras/.gitkeep
+!models/upscalers/
+!models/upscalers/.gitkeep
 presets/*
 !presets/.gitkeep
 tools/
@@ -44,3 +46,7 @@ desktop.ini
 /models/loras
 /models/text-encoders
 docs/polish.md
+PLAN.md
+PLAN.md
+/mocks
+PLAN.md

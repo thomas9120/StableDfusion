@@ -1402,41 +1402,263 @@ textarea {
 	transform: scale(0.94);
 }
 
-/* A6 — dimensions row: swap + ratio chips. */
+/* A6 — dimensions widget: Aspect → Size → result + advanced exact. */
+.dim-widget {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+	margin-bottom: var(--space-3);
+}
+.dim-step-label {
+	margin: 0;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--fg-faint);
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+}
+.dim-step-label .dim-hint {
+	font-weight: 400;
+	text-transform: none;
+	letter-spacing: 0;
+	color: var(--fg-faint);
+}
+
+/* Shape chips (aspect ratio) with proportional glyphs. */
+.dim-shapes {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: var(--space-2);
+}
+.dim-shape {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	padding: 8px 4px;
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-md);
+	background: var(--bg-elevated);
+	color: var(--fg-muted);
+	cursor: pointer;
+	transition: all var(--ease-fast);
+	font-family: var(--font);
+}
+.dim-shape:hover {
+	background: var(--bg-hover);
+	color: var(--fg);
+	border-color: rgba(255, 255, 255, 0.16);
+}
+.dim-shape.active {
+	background: var(--accent-subtle);
+	border-color: var(--accent-border);
+	color: var(--fg-bright);
+	box-shadow: 0 0 0 1px var(--accent-border);
+}
+.dim-glyph {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 26px;
+}
+.dim-glyph i {
+	display: block;
+	border: 1.5px solid currentColor;
+	border-radius: 2px;
+	background: currentColor;
+	opacity: 0.85;
+}
+.dim-shape-label {
+	font-size: 11px;
+	font-weight: 600;
+}
+
+/* Size tier buttons (longer edge). */
+.dim-sizes {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+	gap: var(--space-2);
+}
+.dim-size {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	padding: 9px 4px;
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-md);
+	background: var(--bg-elevated);
+	color: var(--fg-muted);
+	cursor: pointer;
+	transition: all var(--ease-fast);
+	font-family: var(--font);
+	position: relative;
+}
+.dim-size:hover {
+	background: var(--bg-hover);
+	color: var(--fg);
+}
+.dim-size.active {
+	background: var(--accent-subtle);
+	border-color: var(--accent-border);
+	color: var(--fg-bright);
+	box-shadow: 0 0 0 1px var(--accent-border);
+}
+.dim-size .num {
+	font-size: 14px;
+	font-weight: 700;
+	font-family: var(--mono);
+}
+.dim-size .tag {
+	font-size: 10px;
+	color: var(--fg-faint);
+	letter-spacing: 0.03em;
+}
+.dim-size.active .tag {
+	color: var(--accent-hover);
+}
+.dim-size .rec {
+	position: absolute;
+	top: 4px;
+	right: 6px;
+	font-size: 8px;
+	color: var(--green);
+	opacity: 0;
+}
+.dim-size.recommended .rec {
+	opacity: 1;
+}
+.dim-size.recommended .rec::before {
+	content: "●";
+}
+
+/* Live readout card. */
+.dim-result {
+	display: flex;
+	align-items: center;
+	gap: var(--space-4);
+	margin-top: var(--space-2);
+	padding: var(--space-4);
+	background: var(--bg-raised);
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-md);
+}
+.dim-preview {
+	flex: 0 0 96px;
+	height: 96px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--bg-base);
+	border-radius: var(--radius-sm);
+	overflow: hidden;
+}
+.dim-preview i {
+	display: block;
+	background: linear-gradient(135deg, var(--accent), #bb9af7);
+	border-radius: 3px;
+	transition:
+		width var(--ease-fast),
+		height var(--ease-fast);
+}
+.dim-result-text {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	min-width: 0;
+}
+.dim-xy {
+	font-family: var(--mono);
+	font-size: 18px;
+	font-weight: 700;
+	color: var(--fg-bright);
+}
+.dim-meta {
+	font-size: 12px;
+	color: var(--fg-muted);
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.dim-budget {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-size: 11px;
+	font-weight: 600;
+	padding: 1px 7px;
+	border-radius: 100px;
+}
+.dim-budget::before {
+	content: "";
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: currentColor;
+}
+.dim-budget.ok {
+	color: var(--green);
+	background: var(--green-subtle);
+}
+.dim-budget.warn {
+	color: var(--yellow);
+	background: var(--yellow-subtle);
+}
+.dim-budget.over {
+	color: var(--red);
+	background: var(--red-subtle);
+}
+
+/* Exact dimensions (advanced, collapsible). */
+.dim-advanced {
+	margin-top: var(--space-2);
+	border-top: 1px solid var(--border);
+	padding-top: var(--space-3);
+}
+.dim-advanced > summary {
+	cursor: pointer;
+	list-style: none;
+	font-size: 12px;
+	color: var(--fg-muted);
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	user-select: none;
+}
+.dim-advanced > summary::-webkit-details-marker {
+	display: none;
+}
+.dim-advanced > summary::before {
+	content: "▸";
+	color: var(--fg-faint);
+	transition: transform var(--ease-fast);
+	font-size: 10px;
+}
+.dim-advanced[open] > summary::before {
+	transform: rotate(90deg);
+}
+.dim-advanced > summary:hover {
+	color: var(--fg);
+}
 .dim-row {
 	display: flex;
 	align-items: flex-end;
 	gap: var(--space-2);
+	margin-top: var(--space-3);
 }
 .dim-row .form-group {
 	flex: 1;
 	margin-bottom: 0;
 }
-.ratio-chips {
-	display: flex;
-	gap: var(--space-1);
-	flex-wrap: wrap;
-	margin-bottom: var(--space-3);
-}
-.ratio-chip {
-	padding: 3px var(--space-2);
-	border: 1px solid var(--border-strong);
-	border-radius: 100px;
-	background: var(--bg-elevated);
-	color: var(--fg-muted);
+.dim-exact-hint {
+	margin-top: var(--space-2);
 	font-size: 11px;
-	cursor: pointer;
-	transition: all var(--ease-fast);
-	font-family: var(--font);
-}
-.ratio-chip:hover {
-	color: var(--fg);
-	background: var(--bg-hover);
-}
-.ratio-chip.active {
-	background: var(--accent-subtle);
-	color: var(--accent);
-	border-color: var(--accent-border);
+	color: var(--fg-faint);
 }
 
 /* A8 — sticky generate action row so the primary button stays reachable. */

@@ -167,7 +167,8 @@ stable-d-gui/
 │   ├── diffusion/                # full/diffusion models
 │   ├── vae/                      # VAE / TAESD files
 │   ├── text-encoders/            # CLIP / T5 / LLM encoders
-│   └── loras/                    # LoRA files
+│   ├── loras/                    # LoRA files
+│   └── upscalers/                # RealESRGAN/upscale model files
 ├── output/                       # generated images/videos + thumbnails + JSON sidecars
 ├── presets/                      # saved preset JSON
 ├── tools/                        # auto-downloaded cloudflared
@@ -376,7 +377,7 @@ For users who want a persistent API / the embedded web UI:
 
 ## 13. Model management + HF downloader
 
-- `/api/models?type=<diffusion|vae|clip_l|clip_g|t5xxl|llm|taesd|esrgan|control|lora|image>` lists matching files from purpose-specific folders under `models/` with size + mtime, while still showing legacy root files.
+- `/api/models?type=<diffusion|vae|clip_l|clip_g|t5xxl|llm|taesd|upscaler|control|lora|image>` lists matching files from purpose-specific folders under `models/` with size + mtime, while still showing legacy root files.
 - File picker (`/api/select-file`) opens a native dialog filtered by `purpose`.
 - HF downloader (`hf-download.py` + `hf-download-ui.js`):
   - **Repo-files**: list files (any of `.safetensors`, `.ckpt`, `.pth`, `.gguf`, `.sft`, `.bin`) and let the user pick **multiple** components in one session (diffusion model + vae + clip + t5xxl …), unlike LLama-GUI's single-model + single-mmproj flow.

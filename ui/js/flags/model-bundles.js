@@ -136,9 +136,9 @@ window.SDGui.BUNDLE_FIELD_PURPOSES = {
 	control_net: "control",
 	embeddings_connectors: "model",
 	lora_model_dir: "lora_model_dir",
-	upscale_model: "esrgan",
+	upscale_model: "upscaler",
 	embd_dir: "model",
-	hires_upscalers_dir: "esrgan",
+	hires_upscalers_dir: "upscaler",
 	photo_maker: "model",
 	pulid_weights: "model",
 };

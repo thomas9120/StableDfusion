@@ -165,6 +165,23 @@ function findChromiumExecutable() {
 			}
 			if (url.includes("/api/models")) {
 				const queryType = new URL(url).searchParams.get("type");
+				if (queryType === "upscaler" || queryType === "esrgan") {
+					return route.fulfill({
+						status: 200,
+						contentType: "application/json",
+						body: JSON.stringify({
+							models: [
+								{
+									name: "RealESRGAN_x4plus.pth",
+									relative: "upscalers/RealESRGAN_x4plus.pth",
+									folder: "upscalers",
+									size: 123456,
+									mtime: 1,
+								},
+							],
+						}),
+					});
+				}
 				if (queryType === "lora") {
 					return route.fulfill({
 						status: 200,
@@ -349,6 +366,44 @@ function findChromiumExecutable() {
 			previewText.includes("--width") && previewText.includes("768"),
 		);
 
+		// 3b. Dimensions widget (Aspect → Size): pick 16:9, then its 1344
+		// longer-edge bucket, which must flow through shared flag state.
+		await page.click('#gen-dim-shapes .dim-shape[data-shape="16:9"]');
+		await page.waitForTimeout(40);
+		await page.click('#gen-dim-sizes .dim-size[data-long="1344"]');
+		await page.waitForTimeout(60);
+		const bucketDims = await page.evaluate(() => ({
+			width: window.SDGui.flagCore.getFlagValues().width,
+			height: window.SDGui.flagCore.getFlagValues().height,
+			widthInput: document.getElementById("gen-width").value,
+			heightInput: document.getElementById("gen-height").value,
+		}));
+		check(
+			"dimension bucket writes width/height through shared flag state",
+			bucketDims.width === 1344 &&
+				bucketDims.height === 768 &&
+				bucketDims.widthInput === "1344" &&
+				bucketDims.heightInput === "768",
+		);
+		// Manual edit returns the size selection to Custom. The exact inputs
+		// live inside a collapsed <details>; clicking Custom opens it + focuses
+		// the width field, so drive entry through that path.
+		await page.click('#gen-dim-sizes .dim-size[data-long="custom"]');
+		await page.waitForTimeout(40);
+		await page.fill("#gen-width", "832");
+		await page.dispatchEvent("#gen-width", "change");
+		await page.waitForTimeout(60);
+		const customActive = await page.evaluate(() => {
+			const c = document.querySelector(
+				'#gen-dim-sizes .dim-size[data-long="custom"]',
+			);
+			return c ? c.classList.contains("active") : false;
+		});
+		check(
+			"manual dimension edit returns size selection to Custom",
+			customActive,
+		);
+
 		// 4. Pick a model via the Generate picker so generate() has a model.
 		await page.selectOption("#gen-model-bundle", "sd1");
 		await page.waitForTimeout(150);
@@ -524,9 +579,9 @@ function findChromiumExecutable() {
 		await page.setInputFiles("#preset-import-file", importBundlePath);
 		await page.waitForFunction(
 			() =>
-				Array.from(document.querySelectorAll("#presets-list .preset-title")).some(
-					(n) => n.textContent === "Imported Bundle Preset",
-				),
+				Array.from(
+					document.querySelectorAll("#presets-list .preset-title"),
+				).some((n) => n.textContent === "Imported Bundle Preset"),
 			{ timeout: 3000 },
 		);
 		check(
@@ -536,9 +591,9 @@ function findChromiumExecutable() {
 		await page.setInputFiles("#preset-import-file", importSinglePath);
 		await page.waitForFunction(
 			() =>
-				Array.from(document.querySelectorAll("#presets-list .preset-title")).some(
-					(n) => n.textContent === "Imported Single Preset",
-				),
+				Array.from(
+					document.querySelectorAll("#presets-list .preset-title"),
+				).some((n) => n.textContent === "Imported Single Preset"),
 			{ timeout: 3000 },
 		);
 		check(
@@ -567,7 +622,9 @@ function findChromiumExecutable() {
 			.join(" ");
 		check(
 			"Server UI POST included diffusion model",
-			serverPostedArgs.includes("--diffusion-model=models/diffusion/server.gguf"),
+			serverPostedArgs.includes(
+				"--diffusion-model=models/diffusion/server.gguf",
+			),
 		);
 		check(
 			"Server UI POST included bool and extra args",
@@ -626,6 +683,15 @@ function findChromiumExecutable() {
 		check("upscale shows upscale inputs", !upscaleVis.upscale);
 		check("upscale hides img2img inputs", upscaleVis.img2img);
 		check("upscale hides prompt section", upscaleVis.prompt);
+		const upscaleOptions = await page.evaluate(() =>
+			Array.from(document.querySelectorAll("#gen-upscale-model option")).map(
+				(o) => o.value,
+			),
+		);
+		check(
+			"upscale model dropdown lists upscalers folder",
+			upscaleOptions.includes("models/upscalers/RealESRGAN_x4plus.pth"),
+		);
 
 		const convertVis = await sectionVisibility("convert");
 		check("convert shows convert inputs", !convertVis.convert);

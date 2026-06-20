@@ -96,3 +96,17 @@ def test_lora_model_dir_alias_lists_loras_folder(tmp_path):
     rels = [m["relative"] for m in out["models"]]
 
     assert rels == ["loras/style.safetensors"]
+
+
+def test_upscaler_listing_uses_upscalers_folder_and_esrgan_alias(tmp_path):
+    ctx = _ctx(tmp_path)
+    (ctx.paths.models / "upscalers").mkdir(parents=True)
+    (ctx.paths.models / "diffusion").mkdir()
+    (ctx.paths.models / "upscalers" / "RealESRGAN_x4plus.pth").write_bytes(b"x")
+    (ctx.paths.models / "diffusion" / "model.gguf").write_bytes(b"x")
+
+    out = _list(ctx, "type=upscaler")
+    alias_out = _list(ctx, "type=esrgan")
+
+    assert [m["relative"] for m in out["models"]] == ["upscalers/RealESRGAN_x4plus.pth"]
+    assert [m["relative"] for m in alias_out["models"]] == ["upscalers/RealESRGAN_x4plus.pth"]
