@@ -1,0 +1,75 @@
+<div class="section-panel" id="section-server" style="display: none">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Server &amp; API</div>
+      <div class="page-title-sub">
+        Run sd-server persistently; view endpoints; Cloudflare tunnel.
+      </div>
+    </div>
+  </div>
+  <div class="server-grid">
+    <div class="card">
+      <div id="server-status" class="status-box"></div>
+      <div id="server-flags" class="server-flags"></div>
+      <div class="form-group">
+        <label class="form-label" for="server-extra-args"
+          >Extra server args</label
+        >
+        <textarea
+          id="server-extra-args"
+          rows="2"
+          placeholder="--cache-mode easycache --cache-option threshold=0.25"
+        ></textarea>
+      </div>
+      <pre id="server-command-preview" class="command-preview"></pre>
+      <div class="form-row">
+        <button
+          id="btn-sd-server-start"
+          class="btn btn-primary"
+          type="button"
+        >
+          Start sd-server
+        </button>
+        <button
+          id="btn-sd-server-stop"
+          class="btn btn-danger"
+          type="button"
+        >
+          Stop
+        </button>
+      </div>
+      <div class="form-group">
+        <span class="form-label">Server log</span>
+        <pre id="server-log" class="server-log"></pre>
+      </div>
+    </div>
+    <div class="card">
+      <div id="api-endpoints"></div>
+      <div class="section">
+        <h3>Cloudflare tunnel</h3>
+        <div id="tunnel-status" class="status-box"></div>
+        <div class="form-row">
+          <button
+            id="btn-tunnel-start"
+            class="btn btn-primary"
+            type="button"
+          >
+            Start tunnel
+          </button>
+          <button
+            id="btn-tunnel-stop"
+            class="btn btn-danger"
+            type="button"
+          >
+            Stop tunnel
+          </button>
+          <button id="btn-tunnel-copy" class="btn btn-sm" type="button">
+            Copy URL
+          </button>
+        </div>
+        <div id="tunnel-url" class="server-url"></div>
+        <pre id="tunnel-log" class="server-log"></pre>
+      </div>
+    </div>
+  </div>
+</div>
