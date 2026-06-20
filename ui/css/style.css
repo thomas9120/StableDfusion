@@ -760,6 +760,61 @@ textarea {
 	transition:
 		opacity 0.3s ease,
 		transform 0.3s ease;
+	display: flex;
+	align-items: flex-start;
+	gap: var(--space-2);
+}
+.toast-text {
+	flex: 1;
+	min-width: 0;
+	word-break: break-word;
+	line-height: 1.4;
+	padding-top: 1px;
+}
+.toast-close {
+	flex-shrink: 0;
+	background: transparent;
+	border: none;
+	color: var(--fg-muted);
+	font-size: 16px;
+	line-height: 1;
+	padding: 0 4px;
+	margin: -2px -2px 0 0;
+	cursor: pointer;
+	border-radius: var(--radius-xs);
+	font-family: var(--font);
+	transition: all var(--ease-fast);
+}
+.toast-close:hover {
+	color: var(--fg);
+	background: var(--bg-hover);
+}
+.toast-close:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+.btn-primary.is-generating {
+	opacity: 0.92;
+}
+.gen-btn-spinner {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+.gen-btn-spinner[hidden] {
+	display: none;
+}
+.gen-btn-spinner svg {
+	animation: gen-btn-spin 0.9s linear infinite;
+	display: block;
+}
+@keyframes gen-btn-spin {
+	from {
+		transform: rotate(0deg);
+	}
+	to {
+		transform: rotate(360deg);
+	}
 }
 .toast-error {
 	border-left-color: var(--red);

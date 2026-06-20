@@ -3,18 +3,52 @@
 // to stable-diffusion.cpp (pattern-matched assets, sdcpp/ paths).
 window.SDGui = window.SDGui || {};
 
-// Lightweight non-blocking toast. Safe DOM (no innerHTML).
+window.SDGui.TOAST_MAX = 5;
+window.SDGui.TOAST_LINGER_MS = 5000;
+window.SDGui.TOAST_HOVER_MS = 2000;
+
+function dismissToastNode(note) {
+	if (!note || !note.parentNode || note.classList.contains("toast-out")) return;
+	note.classList.add("toast-out");
+	setTimeout(() => {
+		if (note.parentNode) note.remove();
+	}, 300);
+}
+
 window.SDGui.toast = (message, kind) => {
 	var container = document.getElementById("toast-container");
 	if (!container) return;
+	while (container.children.length >= window.SDGui.TOAST_MAX) {
+		dismissToastNode(container.firstChild);
+	}
 	var note = document.createElement("div");
 	note.className = "toast toast-" + (kind || "info");
-	note.textContent = String(message || "");
+
+	var text = document.createElement("span");
+	text.className = "toast-text";
+	text.textContent = String(message || "");
+	note.appendChild(text);
+
+	var close = document.createElement("button");
+	close.type = "button";
+	close.className = "toast-close";
+	close.setAttribute("aria-label", "Dismiss notification");
+	close.textContent = "\u00d7";
+	close.addEventListener("click", () => dismissToastNode(note));
+	note.appendChild(close);
+
 	container.appendChild(note);
-	setTimeout(() => {
-		note.classList.add("toast-out");
-		setTimeout(() => note.remove(), 300);
-	}, 3500);
+
+	var timer = null;
+	var arm = (ms) => {
+		if (timer) clearTimeout(timer);
+		timer = setTimeout(() => dismissToastNode(note), ms);
+	};
+	note.addEventListener("mouseenter", () => {
+		if (timer) clearTimeout(timer);
+	});
+	note.addEventListener("mouseleave", () => arm(window.SDGui.TOAST_HOVER_MS));
+	arm(window.SDGui.TOAST_LINGER_MS);
 };
 
 // Shared API helper. Throws an Error (with the server's message) on non-OK
