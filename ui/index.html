@@ -374,11 +374,7 @@
                       <span class="req">required</span></label
                     >
                     <div class="field-row">
-                      <input
-                        type="text"
-                        id="gen-upscale-model"
-                        placeholder="models/diffusion/RealESRGAN_x4plus.pth"
-                      />
+                      <select id="gen-upscale-model"></select>
                       <button
                         id="btn-browse-upscale-model"
                         class="btn btn-sm"
@@ -469,66 +465,141 @@
                 </div>
               </div>
               <div id="gen-sampling-section">
-                <div
-                  class="ratio-chips"
-                  id="gen-ratio-chips"
-                  role="group"
-                  aria-label="Aspect ratio presets"
-                >
-                  <button type="button" class="ratio-chip" data-ratio="1">
-                    1:1
-                  </button>
-                  <button type="button" class="ratio-chip" data-ratio="1.5">
-                    3:2
-                  </button>
-                  <button type="button" class="ratio-chip" data-ratio="0.6667">
-                    2:3
-                  </button>
-                  <button type="button" class="ratio-chip" data-ratio="1.7778">
-                    16:9
-                  </button>
-                  <button type="button" class="ratio-chip" data-ratio="0.5625">
-                    9:16
-                  </button>
-                </div>
-                <div class="dim-row">
-                  <div class="form-group">
-                    <label class="form-label" for="gen-width">Width</label>
-                    <input
-                      type="number"
-                      id="gen-width"
-                      min="64"
-                      step="8"
-                      value="512"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    id="btn-swap-dims"
-                    class="icon-btn"
-                    title="Swap width and height"
-                    aria-label="Swap width and height"
+                <div class="dim-widget">
+                  <!-- Step 1: shape (aspect ratio) -->
+                  <p class="dim-step-label">
+                    Shape <span class="dim-hint">aspect ratio</span>
+                  </p>
+                  <div
+                    class="dim-shapes"
+                    id="gen-dim-shapes"
+                    role="group"
+                    aria-label="Aspect ratio"
                   >
-                    <svg
-                      class="nav-icon"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      <path
-                        d="M7 4v12m0 0l-3-3m3 3l3-3M17 20V8m0 0l-3 3m3-3l3 3"
-                      />
-                    </svg>
-                  </button>
-                  <div class="form-group">
-                    <label class="form-label" for="gen-height">Height</label>
-                    <input
-                      type="number"
-                      id="gen-height"
-                      min="64"
-                      step="8"
-                      value="512"
-                    />
+                    <button type="button" class="dim-shape" data-shape="1:1">
+                      <span class="dim-glyph"
+                        ><i style="width: 18px; height: 18px"></i
+                      ></span>
+                      <span class="dim-shape-label">1:1</span>
+                    </button>
+                    <button type="button" class="dim-shape" data-shape="3:2">
+                      <span class="dim-glyph"
+                        ><i style="width: 22px; height: 15px"></i
+                      ></span>
+                      <span class="dim-shape-label">3:2</span>
+                    </button>
+                    <button type="button" class="dim-shape" data-shape="2:3">
+                      <span class="dim-glyph"
+                        ><i style="width: 15px; height: 22px"></i
+                      ></span>
+                      <span class="dim-shape-label">2:3</span>
+                    </button>
+                    <button type="button" class="dim-shape" data-shape="4:3">
+                      <span class="dim-glyph"
+                        ><i style="width: 22px; height: 17px"></i
+                      ></span>
+                      <span class="dim-shape-label">4:3</span>
+                    </button>
+                    <button type="button" class="dim-shape" data-shape="3:4">
+                      <span class="dim-glyph"
+                        ><i style="width: 17px; height: 22px"></i
+                      ></span>
+                      <span class="dim-shape-label">3:4</span>
+                    </button>
+                    <button type="button" class="dim-shape" data-shape="16:9">
+                      <span class="dim-glyph"
+                        ><i style="width: 22px; height: 13px"></i
+                      ></span>
+                      <span class="dim-shape-label">16:9</span>
+                    </button>
+                    <button type="button" class="dim-shape" data-shape="9:16">
+                      <span class="dim-glyph"
+                        ><i style="width: 13px; height: 22px"></i
+                      ></span>
+                      <span class="dim-shape-label">9:16</span>
+                    </button>
                   </div>
+
+                  <!-- Step 2: size (longer edge) — buttons injected by JS -->
+                  <p class="dim-step-label">
+                    Size <span class="dim-hint">longer edge, px</span>
+                  </p>
+                  <div
+                    class="dim-sizes"
+                    id="gen-dim-sizes"
+                    role="group"
+                    aria-label="Size"
+                  ></div>
+
+                  <!-- Live readout: exact pixels + cost -->
+                  <div class="dim-result">
+                    <div class="dim-preview">
+                      <i id="gen-dim-preview-box"></i>
+                    </div>
+                    <div class="dim-result-text">
+                      <span class="dim-xy" id="gen-dim-xy">512 × 512</span>
+                      <span class="dim-meta">
+                        <span id="gen-dim-mp">0.26 MP</span> ·
+                        <span id="gen-dim-ratio">1:1</span> ·
+                        <span id="gen-dim-base">512 long edge</span>
+                        <span class="dim-budget ok" id="gen-dim-budget"
+                          >on budget</span
+                        >
+                      </span>
+                    </div>
+                  </div>
+
+                  <!-- Step 3 (advanced): exact dimensions -->
+                  <details class="dim-advanced" id="gen-dim-advanced">
+                    <summary>Exact dimensions (advanced)</summary>
+                    <div class="dim-row">
+                      <div class="form-group">
+                        <label class="form-label" for="gen-width">Width</label>
+                        <input
+                          type="number"
+                          id="gen-width"
+                          min="64"
+                          max="4096"
+                          step="8"
+                          value="512"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        id="btn-swap-dims"
+                        class="icon-btn"
+                        title="Swap width and height"
+                        aria-label="Swap width and height"
+                      >
+                        <svg
+                          class="nav-icon"
+                          viewBox="0 0 24 24"
+                          aria-hidden="true"
+                        >
+                          <path
+                            d="M7 4v12m0 0l-3-3m3 3l3-3M17 20V8m0 0l-3 3m3-3l3 3"
+                          />
+                        </svg>
+                      </button>
+                      <div class="form-group">
+                        <label class="form-label" for="gen-height"
+                          >Height</label
+                        >
+                        <input
+                          type="number"
+                          id="gen-height"
+                          min="64"
+                          max="4096"
+                          step="8"
+                          value="512"
+                        />
+                      </div>
+                    </div>
+                    <p class="dim-exact-hint">
+                      Multiples of 8 · range 64–4096. Editing here switches the
+                      size to <b>Custom</b>.
+                    </p>
+                  </details>
                 </div>
                 <div class="form-row">
                   <div class="form-group">

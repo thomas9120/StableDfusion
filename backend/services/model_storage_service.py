@@ -15,6 +15,7 @@ MODEL_SUBDIRS = {
     "vae": "vae",
     "text_encoders": "text-encoders",
     "loras": "loras",
+    "upscalers": "upscalers",
 }
 
 PURPOSE_SUBDIR: dict[str, str] = {
@@ -35,6 +36,10 @@ PURPOSE_SUBDIR: dict[str, str] = {
     "embd_dir": MODEL_SUBDIRS["text_encoders"],
     "lora": MODEL_SUBDIRS["loras"],
     "lora_model_dir": MODEL_SUBDIRS["loras"],
+    "upscaler": MODEL_SUBDIRS["upscalers"],
+    "upscale_model": MODEL_SUBDIRS["upscalers"],
+    "esrgan": MODEL_SUBDIRS["upscalers"],
+    "hires_upscalers_dir": MODEL_SUBDIRS["upscalers"],
 }
 
 FLAG_PURPOSES: dict[str, str] = {
@@ -56,6 +61,8 @@ FLAG_PURPOSES: dict[str, str] = {
     "--qwen2vl": "llm",
     "--qwen2vl_vision": "llm_vision",
     "--lora-model-dir": "lora_model_dir",
+    "--upscale-model": "upscale_model",
+    "--hires-upscalers-dir": "hires_upscalers_dir",
 }
 
 
@@ -101,6 +108,8 @@ def infer_subdir_for_filename(filename: str) -> str:
 
     if any(token in joined for token in ("lora", "loras", "lycoris")):
         return MODEL_SUBDIRS["loras"]
+    if any(token in joined for token in ("upscaler", "upscale", "esrgan", "realesrgan")):
+        return MODEL_SUBDIRS["upscalers"]
     if (
         "vae" in joined
         or leaf in {"ae.safetensors", "ae.gguf", "taesd.safetensors"}

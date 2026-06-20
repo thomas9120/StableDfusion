@@ -107,6 +107,13 @@ def test_safe_destination_allows_nested_subdirs(tmp_path):
     assert dest.parent == ctx.paths.models / "text-encoders" / "text_encoder"
 
 
+def test_safe_destination_routes_upscalers_to_upscalers_folder(tmp_path):
+    ctx = _ctx(tmp_path)
+    dest = hf_download_service._safe_destination(ctx.paths.models, "RealESRGAN_x4plus.pth")
+
+    assert dest == ctx.paths.models / "upscalers" / "RealESRGAN_x4plus.pth"
+
+
 def test_safe_destination_rejects_traversal(tmp_path):
     ctx = _ctx(tmp_path)
     try:
