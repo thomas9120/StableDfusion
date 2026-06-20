@@ -479,24 +479,21 @@ Directory structure, bootable `server.py` + `backend/app.py` serving a placehold
   92a3b73).
 - Backend unit tests + route test cover the new extension/content-type paths.
 
-**Deferred to a later pass:**
+**Do this next:**
 
 - **Video UI controls** (flags are already defined in `definitions.js` but
   have no UI surface on the video panel): `control_video` directory picker,
   `moe_boundary` (Wan2.2 MoE), `extra_tiling_args` (LTX VAE tiling),
   `flow-shift`, and a dedicated **LTX bundle** (only Wan exists today).
-- **Per-tab history filtering** — filter the history grid by `entry.mode`
-  (entries already carry `mode`) so the video tab shows only video results.
-  ~3-line change, no folder split (single `output/` dir confirmed sufficient:
-  no all-outputs gallery view exists to clutter).
-- **Real Wan2.x end-to-end run** — needs a video model on disk; pipeline is
-  wired and unit-tested but not exercised live yet.
 - **LoRA / ControlNet / PhotoMaker / PuLID panels** (beyond the single-LoRA
   slider already on Generate).
 - **Advanced backend tuning** (`--backend` / `--params-backend` / `--max-vram`)
   surfaced as first-class Generate controls.
 - Optional `sd-server` `/metrics` proxy.
-- **Install-packaged launchers** (`.bat` / `.sh` / `.command`) + **Pinokio**
+- **Install-packaged launchers** (`.bat` / `.sh` / `.command`) 
+
+Don't do this yet:
+**Pinokio**
   launcher companion.
 
 ---
