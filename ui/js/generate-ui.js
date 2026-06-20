@@ -158,13 +158,17 @@ window.SDGui.generateUi = (() => {
 		try {
 			var data = await window.SDGui.fetchJson("/api/models?type=" + encodeURIComponent(purpose));
 			select.replaceChildren();
-			select.appendChild(new Option("— select from models/ —", ""));
+			select.appendChild(new Option("— select from component folder —", ""));
 			// sd-cli runs with cwd = project root, so prefix model-relative paths so
 			// they resolve (Browse returns absolute paths which also resolve).
 			(data.models || []).forEach((m) =>
 				select.appendChild(
 					new Option(
-						m.name + " (" + Math.round(m.size / 1048576) + " MB)",
+						(m.folder ? m.folder + "/" : "") +
+							m.name +
+							" (" +
+							Math.round(m.size / 1048576) +
+							" MB)",
 						"models/" + m.relative,
 					),
 				),
@@ -376,6 +380,29 @@ window.SDGui.generateUi = (() => {
 		var actions = $("gen-result-actions");
 		if (!box) return;
 		box.replaceChildren();
+
+		// Show any generation warnings (small output, suspicious files, etc.).
+		var wrn = snap.warnings || [];
+		if (wrn.length) {
+			var warnDiv = el("div", "gen-warnings");
+			wrn.forEach(function (w) {
+				warnDiv.appendChild(el("div", "gen-warning-msg", "⚠ " + w));
+			});
+			box.appendChild(warnDiv);
+		}
+
+		// Show stderr tail (sd-cli diagnostics) when available.
+		var stderrTail = (snap.stderr_tail || "").toString().trim();
+		if (stderrTail) {
+			var details = el("details", "gen-stderr");
+			var summary = el("summary", "", "sd-cli diagnostic output (stderr)");
+			details.appendChild(summary);
+			var pre = el("pre", "gen-stderr-text");
+			pre.textContent = stderrTail;
+			details.appendChild(pre);
+			box.appendChild(details);
+		}
+
 		var files = snap.result_files || [];
 		var mode = snap.mode || window.SDGui.flagCore.getMode();
 

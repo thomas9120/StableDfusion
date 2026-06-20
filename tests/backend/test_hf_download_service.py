@@ -96,7 +96,7 @@ def test_validate_revision_rejects_bad():
 def test_safe_destination_resolves_under_models(tmp_path):
     ctx = _ctx(tmp_path)
     dest = hf_download_service._safe_destination(ctx.paths.models, "flux.safetensors")
-    assert dest == ctx.paths.models / "flux.safetensors"
+    assert dest == ctx.paths.models / "diffusion" / "flux.safetensors"
 
 
 def test_safe_destination_allows_nested_subdirs(tmp_path):
@@ -104,7 +104,7 @@ def test_safe_destination_allows_nested_subdirs(tmp_path):
     dest = hf_download_service._safe_destination(
         ctx.paths.models, "text_encoder/clip_l.safetensors"
     )
-    assert dest.parent == ctx.paths.models / "text_encoder"
+    assert dest.parent == ctx.paths.models / "text-encoders" / "text_encoder"
 
 
 def test_safe_destination_rejects_traversal(tmp_path):
@@ -211,9 +211,9 @@ def test_start_download_dispatches_thread_and_reaches_done(tmp_path, monkeypatch
     assert snap["completed_files"] == ["a.gguf", "b.safetensors"]
     assert snap["repo_id"] == "city96/FLUX.1-schnell-gguf"
 
-    # Files should have been written under models/.
-    assert (ctx.paths.models / "a.gguf").exists()
-    assert (ctx.paths.models / "b.safetensors").exists()
+    # Files should have been written under component folders.
+    assert (ctx.paths.models / "diffusion" / "a.gguf").exists()
+    assert (ctx.paths.models / "diffusion" / "b.safetensors").exists()
 
     assert ctx.state.model_download_in_progress is False
 
@@ -350,6 +350,10 @@ def test_get_repo_files_filters_to_supported_extensions(tmp_path, monkeypatch):
     sizes = {f["name"]: f["size"] for f in out["files"]}
     assert sizes["flux.safetensors"] == 1024
     assert sizes["ae.safetensors"] == 2048
+    folders = {f["name"]: f["folder"] for f in out["files"]}
+    assert folders["flux.safetensors"] == "diffusion"
+    assert folders["ae.safetensors"] == "vae"
+    assert folders["text_encoder/clip_l.safetensors"] == "text-encoders"
     assert out["count"] == 4
     assert out["total_size"] == 1024 + 2048 + 512 + 4096
 

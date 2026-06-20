@@ -26,7 +26,9 @@ def is_process_running(ctx: AppContext) -> bool:
 def get_output_snapshot(ctx: AppContext) -> dict[str, Any]:
     with ctx.state.output_buffer_lock:
         lines = list(ctx.state.output_buffer)
-    return {"output": lines, "running": is_process_running(ctx)}
+    with ctx.state.stderr_buffer_lock:
+        stderr_lines = list(ctx.state.stderr_buffer)
+    return {"output": lines, "stderr": stderr_lines, "running": is_process_running(ctx)}
 
 
 def flatten_launch_args(args_list: Iterable[Any] | None) -> list[str]:
@@ -63,10 +65,16 @@ def stream_output(ctx: AppContext, pipe, is_stderr: bool = False) -> None:
     try:
         for line in iter(pipe.readline, ""):
             if line:
-                with ctx.state.output_buffer_lock:
-                    ctx.state.output_buffer.append(line.rstrip("\n\r"))
-                    if len(ctx.state.output_buffer) > config.PROCESS_OUTPUT_LIMIT:
-                        del ctx.state.output_buffer[: config.PROCESS_OUTPUT_TRIM]
+                if is_stderr:
+                    with ctx.state.stderr_buffer_lock:
+                        ctx.state.stderr_buffer.append(line.rstrip("\n\r"))
+                        if len(ctx.state.stderr_buffer) > config.PROCESS_OUTPUT_LIMIT:
+                            del ctx.state.stderr_buffer[: config.PROCESS_OUTPUT_TRIM]
+                else:
+                    with ctx.state.output_buffer_lock:
+                        ctx.state.output_buffer.append(line.rstrip("\n\r"))
+                        if len(ctx.state.output_buffer) > config.PROCESS_OUTPUT_LIMIT:
+                            del ctx.state.output_buffer[: config.PROCESS_OUTPUT_TRIM]
     except Exception:
         pass
 
@@ -111,6 +119,8 @@ def launch_process(ctx: AppContext, tool: str, args_list: Iterable[Any] | None) 
 
         with ctx.state.output_buffer_lock:
             ctx.state.output_buffer.clear()
+        with ctx.state.stderr_buffer_lock:
+            ctx.state.stderr_buffer.clear()
 
         try:
             ctx.state.process = subprocess.Popen(

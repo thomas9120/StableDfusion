@@ -84,6 +84,34 @@ def test_build_argv_rejects_unsafe_token():
     raise AssertionError("expected ValueError for newline token")
 
 
+def test_prepare_rewrites_legacy_flat_model_path(tmp_path):
+    ctx = AppContext(
+        paths=AppPaths(
+            root=tmp_path,
+            models=tmp_path / "models",
+            output=tmp_path / "output",
+            output_gallery=tmp_path / "output" / ".gallery",
+            output_preview=tmp_path / "output" / ".preview",
+        )
+    )
+    (ctx.paths.models / "diffusion").mkdir(parents=True)
+    (ctx.paths.models / "diffusion" / "z-image.gguf").write_bytes(b"x")
+
+    prepared = generate_service._prepare(
+        ctx,
+        {
+            "mode": "img_gen",
+            "args": [["--diffusion-model", "models/z-image.gguf"]],
+            "seed": 42,
+            "total_steps": 1,
+            "params": {"diffusion_model": "models/z-image.gguf"},
+        },
+    )
+
+    argv = prepared["argv"]
+    assert "models/diffusion/z-image.gguf" in argv
+
+
 # ── parse_step_progress ───────────────────────────────────────────────────
 def test_parse_step_progress_single():
     assert generate_service.parse_step_progress("step 5/20") == (5, 20)

@@ -139,6 +139,15 @@ window.SDGui.flagCore = (() => {
 				if (!vals.model && !vals.diffusion_model) {
 					return "No model selected. Choose a model (or diffusion-model) for this mode.";
 				}
+				// Z-Image-Turbo: the --llm must be a SEPARATE Qwen3-4B text
+				// encoder file, not the same GGUF as --diffusion-model.
+				if (vals.llm && vals.llm === vals.diffusion_model) {
+					return (
+						"LLM text encoder must be a separate file from the diffusion model. " +
+						"Download a Qwen3-4B GGUF (e.g. from unsloth/Qwen3-4B-Instruct-2507-GGUF) " +
+						"and select it for the LLM text encoder field."
+					);
+				}
 				return null;
 			case "convert":
 				if (!vals.model) {
@@ -181,6 +190,17 @@ window.SDGui.flagCore = (() => {
 
 			var v = vals[f.id];
 			if (v === undefined || v === null) return;
+
+			// --llm must point to a separate text encoder file, not the same
+			// GGUF as --diffusion-model (e.g. Z-Image-Turbo needs a separate
+			// Qwen3-4B GGUF for text encoding).
+			if (f.id === "llm" && v && v === vals.diffusion_model) {
+				warnings.push(
+					"LLM text encoder must be a separate file from the diffusion model. " +
+						"Download a Qwen3-4B GGUF and select it for LLM text encoder.",
+				);
+				return;
+			}
 
 			if (f.type === "bool") {
 				if (v === true) args.push([f.flag]);

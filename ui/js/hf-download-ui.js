@@ -8,8 +8,8 @@
 //      "Select all" intelligently only toggles files > 0 size by default
 //      (since some repos ship both GGUF and SafeTensors variants and most
 //      users want exactly one full bundle).
-//   3. "Download to models/" → POST /api/hf/download → background thread
-//      streams each file into models/ with progress polling.
+//   3. "Download to component folders" → POST /api/hf/download → background
+//      thread streams each file into models/<component>/ with progress polling.
 //   4. Cancel button sets the cancellation flag; the worker stops after the
 //      current chunk and reports "canceled".
 //   5. On completion, we ask the Generate tab to refresh its model pickers
@@ -102,7 +102,8 @@ window.SDGui.hfDownloadUi = (() => {
 			});
 
 			var name = el("span", "hf-file-name", file.name);
-			var size = el("span", "hf-file-size", fmtSize(file.size));
+			var folder = file.folder ? "models/" + file.folder : "models";
+			var size = el("span", "hf-file-size", folder + "  " + fmtSize(file.size));
 
 			row.appendChild(cb);
 			row.appendChild(name);

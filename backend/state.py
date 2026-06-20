@@ -108,6 +108,8 @@ class ServerState:
     process_lock: threading.Lock = field(default_factory=threading.Lock)
     output_buffer: list[str] = field(default_factory=list)
     output_buffer_lock: threading.Lock = field(default_factory=threading.Lock)
+    stderr_buffer: list[str] = field(default_factory=list)
+    stderr_buffer_lock: threading.Lock = field(default_factory=threading.Lock)
     active_process_tool: str | None = None
 
     # Install (stable-diffusion.cpp release) progress.

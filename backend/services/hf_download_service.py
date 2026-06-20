@@ -4,8 +4,8 @@ Adapted from LLama-GUI's hf_download.py. Key differences for SD:
 - Models are multi-file bundles (diffusion + vae + clip + t5xxl + llm).
 - Accepts more extensions than GGUF-only (.safetensors / .ckpt / .pth /
   .pt / .gguf / .sft / .bin).
-- Downloads land directly under ``models/`` so the existing model pickers
-  see them without extra plumbing.
+- Downloads land under component folders in ``models/`` so the model pickers
+  stay organized.
 
 State slots used (see backend/state.py):
 - ``model_download``         — progress snapshot polled by the UI.
@@ -28,6 +28,7 @@ from typing import Any
 from huggingface_hub import HfApi  # imported at module level so tests can monkeypatch
 
 from ..context import AppContext
+from . import model_storage_service
 
 # Phase 3: SD component file types. Diffusers/transformers configs (.json,
 # .txt, .md) are NOT listed — we only want weight files in models/.
@@ -124,7 +125,13 @@ def get_repo_files(
     for name in names:
         if not validate_hf_filename(name):
             continue
-        files.append({"name": name, "size": sizes.get(name, 0)})
+        files.append(
+            {
+                "name": name,
+                "size": sizes.get(name, 0),
+                "folder": model_storage_service.infer_subdir_for_filename(name),
+            }
+        )
 
     files.sort(key=lambda f: f["name"].lower())
     return {
@@ -143,7 +150,7 @@ class RepoListingError(Exception):
 
 
 def _safe_destination(models_dir: Path, filename: str) -> Path:
-    """Resolve ``models_dir / filename`` and verify it stays inside models_dir.
+    """Resolve a component-folder destination and verify it stays inside models.
 
     Raises ValueError on traversal attempts. Intermediate subdirectories are
     created so HF repos that nest files under e.g. ``text_encoder/`` survive.
@@ -157,7 +164,8 @@ def _safe_destination(models_dir: Path, filename: str) -> Path:
     if not validate_hf_filename(cleaned):
         raise ValueError(f"Unsafe filename: {filename!r}")
     base = models_dir.resolve()
-    target = (models_dir / cleaned).resolve()
+    destination_root = model_storage_service.download_destination_root(models_dir, cleaned)
+    target = (destination_root / cleaned).resolve()
     try:
         target.relative_to(base)
     except ValueError as exc:
@@ -352,7 +360,7 @@ def _run_downloads(
 
         ctx.state.model_download.update(
             status="done",
-            message=f"Done — {len(files)} file(s) saved to models/.",
+            message=f"Done — {len(files)} file(s) saved into model component folders.",
         )
     finally:
         with ctx.state.model_download_lock:

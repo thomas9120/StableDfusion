@@ -2,15 +2,17 @@
 
 Query ``?type=<purpose>`` filters by that purpose's file extensions using the
 shared file_picker.PURPOSE_FILTERS heuristics (best-effort: SD weights share
-extensions, so the filter is a hint, not a guarantee). Recurses into subfolders.
+extensions, so the filter is a hint, not a guarantee). Purpose-specific queries
+prefer the matching component subfolder while still showing legacy root files.
 Each entry carries name, relative path, size, and mtime (PLAN.md §13).
 """
 
 import urllib.parse
+from pathlib import Path
 
 from backend.context import AppContext
 from backend.http import Request, Response
-from backend.services import file_picker_service
+from backend.services import file_picker_service, model_storage_service
 
 MODEL_EXTS = (".safetensors", ".ckpt", ".pth", ".pt", ".gguf", ".sft", ".bin")
 
@@ -43,19 +45,30 @@ def list_models(request: Request, response: Response, ctx: AppContext) -> None:
     allowed = {_norm_ext(e) for e in exts}
 
     files = []
-    if ctx.paths.models.exists():
-        for path in sorted(ctx.paths.models.rglob("*")):
+    seen: set[Path] = set()
+    for root in model_storage_service.roots_for_listing(ctx, purpose):
+        if not root.exists():
+            continue
+        iterator = root.rglob("*") if root != ctx.paths.models or not purpose else root.glob("*")
+        for path in sorted(iterator):
             if not path.is_file():
                 continue
             if path.name == ".gitkeep":
                 continue
             if _norm_ext(path.suffix) not in allowed:
                 continue
+            resolved = path.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
             stat = path.stat()
             files.append(
                 {
                     "name": path.name,
                     "relative": path.relative_to(ctx.paths.models).as_posix(),
+                    "folder": path.parent.relative_to(ctx.paths.models).as_posix()
+                    if path.parent != ctx.paths.models
+                    else "",
                     "size": stat.st_size,
                     "mtime": int(stat.st_mtime),
                 }

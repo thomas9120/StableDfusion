@@ -40,7 +40,7 @@ design, and phased roadmap. Agent workflow rules are in
 | `backend/` | HTTP server, routes, services, state (Python stdlib) |
 | `ui/` | Static frontend (vanilla HTML/CSS/JS, no bundler) |
 | `sdcpp/bin/` | Downloaded `sd-cli` / `sd-server` binaries |
-| `models/` | User model files |
+| `models/` | User model component folders (`diffusion/`, `vae/`, `text-encoders/`, `loras/`) |
 | `output/` | Generated images + gallery sidecars |
 
 ## Differences from LLama-GUI
@@ -49,7 +49,8 @@ design, and phased roadmap. Agent workflow rules are in
 - `sd-cli` is **one-shot** (run per image), unlike `llama-server` (persistent) —
   the GUI's signature feature is the in-app **Generate gallery**.
 - SD models are **multi-file** (diffusion-model + VAE + CLIP/T5/LLM), so the
-  Generate tab is driven by **model-type bundles** instead of chat templates.
+  Generate tab is driven by **model-type bundles** and organized component
+  folders instead of one flat model directory.
 - Releases are continuous builds (`master-<n>-<commit>`); assets are matched by
   **suffix pattern** rather than constructed from the tag.
 

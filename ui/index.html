@@ -253,7 +253,7 @@
                   <div class="form-group">
                     <label class="form-label">ESRGAN upscale model <span class="req">required</span></label>
                     <div class="field-row">
-                      <input type="text" id="gen-upscale-model" placeholder="models/RealESRGAN_x4plus.pth" />
+                      <input type="text" id="gen-upscale-model" placeholder="models/diffusion/RealESRGAN_x4plus.pth" />
                       <button id="btn-browse-upscale-model" class="btn btn-sm" type="button">Browse</button>
                     </div>
                   </div>
@@ -516,7 +516,7 @@
               <div class="page-title">Hugging Face Download</div>
               <div class="page-title-sub">
                 Pull multi-file model components (diffusion + vae + encoders)
-                from a Hugging Face repo directly into <code>models/</code>.
+                from a Hugging Face repo into organized model folders.
               </div>
             </div>
           </div>
@@ -570,7 +570,7 @@
 
             <div class="form-row">
               <button id="btn-hf-download" class="btn btn-primary" type="button" disabled>
-                Download to models/
+                Download to model folders
               </button>
               <button id="btn-hf-cancel" class="btn btn-danger hidden" type="button">
                 Cancel
@@ -587,7 +587,9 @@
             <div class="section">
               <h3>What's downloaded</h3>
               <p class="help-text">
-                Downloaded files land in <code>models/</code>. After completion,
+                Downloaded files land under <code>models/diffusion/</code>,
+                <code>models/vae/</code>, <code>models/text-encoders/</code>,
+                or <code>models/loras/</code>. After completion,
                 use <em>Refresh</em> in the Generate tab to populate the model
                 pickers — or just open the Generate tab and the new files will
                 appear automatically on next open.

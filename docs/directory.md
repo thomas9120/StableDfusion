@@ -8,7 +8,7 @@
 | Module | Role | Status |
 |---|---|---|
 | `app.py` | HTTP handler, CORS, route registry, `main()` | ✅ boots |
-| `config.py` | Paths (`sdcpp/`, `output/`, `models/`), ports (5250 / 1234), env (`SD_GUI_*`) | ✅ |
+| `config.py` | Paths (`sdcpp/`, `output/`, `models/` component folders), ports (5250 / 1234), env (`SD_GUI_*`) | ✅ |
 | `context.py` | `AppContext`, `AppPaths`, `ServerConfig`, `BackendServices` | ✅ |
 | `state.py` | `ServerState` + `AtomicDict` + locks (generation, sd_server, model_download, tunnel) | ✅ |
 | `http.py` | `Request`/`Response`/CORS helpers (generic) | ✅ |
@@ -33,8 +33,9 @@ phase.
 
 ## Runtime directories
 
-Created on boot by `backend/app.main()`: `models/`, `presets/`, `sdcpp/bin/`,
-`output/`, `output/.preview/`, `output/.gallery/`.
+Created on boot by `backend/app.main()`: `models/`, `models/diffusion/`,
+`models/vae/`, `models/text-encoders/`, `models/loras/`, `presets/`,
+`sdcpp/bin/`, `output/`, `output/.preview/`, `output/.gallery/`.
 
 ## Tooling
 

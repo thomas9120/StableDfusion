@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from ..context import AppContext
-from . import process_manager
+from . import model_storage_service, process_manager
 
 SD_MODES = ("img_gen", "vid_gen", "convert", "upscale", "metadata")
 
@@ -220,6 +220,7 @@ def _prepare(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
     user_args = request.get("args")
     if not isinstance(user_args, list):
         raise ValueError("Missing 'args' list")
+    user_args = model_storage_service.rewrite_legacy_model_args(ctx, user_args)
 
     if mode in MODEL_REQUIRED_MODES and not _has_model(user_args):
         raise ValueError(
@@ -356,6 +357,9 @@ def _run_job(
         print(f"[generate] launch failed: {launch['error']}", flush=True)
         return
 
+    cmd_line = launch.get("command", " ".join(argv))
+    print(f"[generate] {job_id} running sd-cli: {cmd_line}", flush=True)
+
     last_mtime = 0.0
     step_estimate = 0
     preview_interval = 1
@@ -421,22 +425,60 @@ def _run_job(
         time.sleep(_POLL_INTERVAL)
 
     rc = proc.returncode if proc else None
+    snap = process_manager.get_output_snapshot(ctx)
+    stdout_tail = "\n".join(snap.get("output", [])[-20:])
+    stderr_tail = "\n".join(snap.get("stderr", [])[-40:])
     if rc != 0:
-        tail_err = "\n".join(process_manager.get_output_snapshot(ctx).get("output", [])[-12:])
         ctx.state.generation.update(
             state="error",
             message=f"sd-cli exited with code {rc}.",
             error=f"exit {rc}",
+            stdout_tail=stdout_tail,
+            stderr_tail=stderr_tail,
             finished_at=time.time(),
         )
-        print(f"[generate] sd-cli exit {rc} for {job_id}:\n{tail_err}", flush=True)
+        print(f"[generate] sd-cli exit {rc} for {job_id}", flush=True)
+        if stdout_tail:
+            print(f"[generate] sd-cli stdout tail:\n{stdout_tail}", flush=True)
+        if stderr_tail:
+            print(f"[generate] sd-cli stderr tail:\n{stderr_tail}", flush=True)
         return
+
+    # Log stderr even on success — warnings from sd-cli (VAE issues, flow-shift,
+    # tensor mismatches, etc.) are often only written to stderr.
+    if stderr_tail:
+        print(f"[generate] {job_id} sd-cli stderr:\n{stderr_tail}", flush=True)
+    if stdout_tail:
+        print(f"[generate] {job_id} sd-cli stdout tail:\n{stdout_tail}", flush=True)
 
     results = _collect_results(output_path, base_name)
     rel_files = [p.name for p in results]
     sidecar["files"] = rel_files
     sidecar["result_count"] = len(rel_files)
     sidecar["finished_at"] = datetime.datetime.now(datetime.UTC).isoformat()
+
+    # Validate output files have actual content (defensive against silent
+    # failures that produce empty or near-empty output).
+    warnings: list[str] = []
+    if mode in FILE_PRODUCING_MODES:
+        for p in results:
+            file_size = p.stat().st_size if p.exists() else 0
+            if file_size == 0:
+                warnings.append(f"{p.name} is 0 bytes (empty output)")
+            elif file_size < 64:
+                warnings.append(f"{p.name} is only {file_size} bytes (likely corrupt)")
+            elif p.suffix.lower() == ".png" and file_size < 1024:
+                warnings.append(
+                    f"{p.name} is only {file_size} bytes (unusually small PNG — may be all-white)"
+                )
+        if warnings:
+            sidecar["warnings"] = warnings
+            for w in warnings:
+                print(f"[generate] {job_id} WARNING: {w}", flush=True)
+
+    # Stash stderr tail in the sidecar so frontend can surface it.
+    if stderr_tail:
+        sidecar["stderr_tail"] = stderr_tail[-4000:]
 
     # Metadata mode: sd-cli prints to stdout (no output file). Capture the tail
     # so the sidecar carries the result the user actually wanted (the metadata
@@ -457,6 +499,8 @@ def _run_job(
         if mode == "metadata"
         else f"Done — {len(rel_files)} file(s) saved."
     )
+    if warnings:
+        done_message += " (with warnings)"
     update_kwargs: dict[str, Any] = {
         "state": "done",
         "step": total_steps or step_estimate,
@@ -464,6 +508,8 @@ def _run_job(
         "percent": 100,
         "message": done_message,
         "result_files": rel_files,
+        "warnings": warnings,
+        "stderr_tail": stderr_tail[-2000:] if stderr_tail else "",
         "finished_at": time.time(),
     }
     if mode == "metadata" and sidecar.get("stdout_excerpt"):

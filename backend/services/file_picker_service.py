@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from ..context import AppContext
+from . import model_storage_service
 
 FileTypes = Sequence[tuple[str, str]]
 
@@ -160,7 +161,11 @@ def get_select_file_options(
     normalized_purpose = str(purpose or "model").strip().lower()
     normalized_title = str(title or "").strip() or "Select File"
 
-    initial_dir = ctx.paths.models if normalized_purpose in MODEL_PURPOSES else ctx.paths.root
+    initial_dir = (
+        model_storage_service.directory_for_purpose(ctx, normalized_purpose)
+        if normalized_purpose in MODEL_PURPOSES
+        else ctx.paths.root
+    )
 
     filetypes, default_title = PURPOSE_FILTERS.get(
         normalized_purpose, ([("All files", "*.*")], "Select File")

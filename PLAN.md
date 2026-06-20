@@ -163,7 +163,11 @@ stable-d-gui/
 │   └── backend/                  # unittest
 ├── sdcpp/                        # downloaded binaries (sd-cli, sd-server + shared libs)
 │   └── bin/
-├── models/                       # user model files (.safetensors/.ckpt/.gguf/.sft)
+├── models/                       # user model component folders
+│   ├── diffusion/                # full/diffusion models
+│   ├── vae/                      # VAE / TAESD files
+│   ├── text-encoders/            # CLIP / T5 / LLM encoders
+│   └── loras/                    # LoRA files
 ├── output/                       # generated images/videos + thumbnails + JSON sidecars
 ├── presets/                      # saved preset JSON
 ├── tools/                        # auto-downloaded cloudflared
@@ -372,11 +376,11 @@ For users who want a persistent API / the embedded web UI:
 
 ## 13. Model management + HF downloader
 
-- `/api/models?type=<diffusion|vae|clip_l|clip_g|t5xxl|llm|taesd|esrgan|control|lora|image>` lists matching files in `models/` (and optionally subfolders) with size + mtime.
+- `/api/models?type=<diffusion|vae|clip_l|clip_g|t5xxl|llm|taesd|esrgan|control|lora|image>` lists matching files from purpose-specific folders under `models/` with size + mtime, while still showing legacy root files.
 - File picker (`/api/select-file`) opens a native dialog filtered by `purpose`.
 - HF downloader (`hf-download.py` + `hf-download-ui.js`):
   - **Repo-files**: list files (any of `.safetensors`, `.ckpt`, `.pth`, `.gguf`, `.sft`, `.bin`) and let the user pick **multiple** components in one session (diffusion model + vae + clip + t5xxl …), unlike LLama-GUI's single-model + single-mmproj flow.
-  - Download with cancel, progress, overwrite prompt, partial-file cleanup, strict repo-id/filename/path-traversal validation.
+  - Download with cancel, progress, overwrite prompt, partial-file cleanup, strict repo-id/filename/path-traversal validation, and automatic placement into `models/diffusion/`, `models/vae/`, `models/text-encoders/`, or `models/loras/`.
   - On completion, auto-populate the matching Generate file pickers.
 
 ---
@@ -390,7 +394,7 @@ For users who want a persistent API / the embedded web UI:
 | GUI port | `5250` (default) |
 | sd-server port | `1234` (upstream default) |
 | Binary dir | `sdcpp/bin/` (`sd-cli`, `sd-server` + shared libs) |
-| Models dir | `models/` |
+| Models dir | `models/` with `diffusion/`, `vae/`, `text-encoders/`, `loras/` |
 | Output dir | `output/` (+ `output/.preview/`, `output/.gallery/` for sidecars/thumbnails) |
 | Presets dir | `presets/` |
 | Tools dir | `tools/cloudflared/` |
@@ -437,7 +441,7 @@ Directory structure, bootable `server.py` + `backend/app.py` serving a placehold
 - Expand `definitions.js` to the full `sd-cli` flag set (verify against `-h` / `common.cpp`).
 - `presets.py` + `presets.js` (CRUD, import/export, grouped by model type), custom launch args.
 
-### Phase 5 — Server mode + API + tunnel
+### Phase 5 — Server mode + API + tunnel ✅
 
 - `SD_SERVER_FLAGS`, `server_mode.py`, `server-ui.js`, `api-tab.js`, `remote-tunnel-ui.js`.
 - **Decision:** `sd-server -h` exposes a large inherited surface (133 long flags on the
@@ -448,7 +452,7 @@ Directory structure, bootable `server.py` + `backend/app.py` serving a placehold
   `--diffusion-fa`, `--offload-to-cpu`, `--mmap`), plus an "extra server args"
   escape hatch for rare flags.
 
-### Phase 6 — Expansion
+### Phase 6 — Expansion - deferred for now
 
 - Video mode (`vid_gen`), LoRA/ControlNet/PhotoMaker/PuLID panels, advanced backend tuning (`--backend`/`--params-backend`/`--max-vram`), optional `sd-server` `/metrics` proxy, install-packaged launchers (.bat/.sh/.command), Pinokio launcher companion.
 

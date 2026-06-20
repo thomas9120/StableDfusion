@@ -44,7 +44,7 @@ from .routes import server_mode as server_mode_routes
 from .routes import status as status_routes
 from .routes import tunnel as tunnel_routes
 from .routing import Router
-from .services import server_mode_service
+from .services import model_storage_service, server_mode_service
 
 try:
     import certifi
@@ -373,6 +373,7 @@ def main() -> None:
         config.OUTPUT_GALLERY_DIR,
     ):
         d.mkdir(parents=True, exist_ok=True)
+    model_storage_service.ensure_model_subdirs(APP_CONTEXT)
 
     server_class = http.server.ThreadingHTTPServer
     if ":" in config.GUI_HOST:

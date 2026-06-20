@@ -17,6 +17,14 @@ sdcpp/bin/*
 output/
 models/*
 !models/.gitkeep
+!models/diffusion/
+!models/diffusion/.gitkeep
+!models/vae/
+!models/vae/.gitkeep
+!models/text-encoders/
+!models/text-encoders/.gitkeep
+!models/loras/
+!models/loras/.gitkeep
 presets/*
 !presets/.gitkeep
 tools/
@@ -30,3 +38,8 @@ desktop.ini
 .vscode/
 *.log
 /.pi
+/models/vae
+/models/vae
+/models/diffusion
+/models/loras
+/models/text-encoders

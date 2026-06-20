@@ -78,7 +78,7 @@ window.SDGui.MODEL_TYPE_BUNDLES = [
 		fields: [
 			{ key: "diffusion_model", purpose: "diffusion_model", required: true },
 			{ key: "vae", purpose: "vae", required: true },
-			{ key: "llm", purpose: "llm", required: true },
+			{ key: "llm", purpose: "llm", required: false },
 		],
 		defaults: { mode: "img_gen", width: 1328, height: 1328 },
 	},
@@ -94,13 +94,20 @@ window.SDGui.MODEL_TYPE_BUNDLES = [
 	},
 	{
 		value: "z_image",
-		label: "Z-Image",
+		label: "Z-Image (Turbo)",
 		fields: [
 			{ key: "diffusion_model", purpose: "diffusion_model", required: true },
 			{ key: "vae", purpose: "vae", required: true },
 			{ key: "llm", purpose: "llm", required: true },
 		],
-		defaults: { mode: "img_gen", diffusion_fa: true, offload_to_cpu: true, cfg_scale: 1.0 },
+		defaults: {
+			mode: "img_gen",
+			diffusion_fa: true,
+			offload_to_cpu: true,
+			cfg_scale: 1.0,
+			steps: 8,
+			vae_tiling: true,
+		},
 	},
 	{
 		value: "custom",
