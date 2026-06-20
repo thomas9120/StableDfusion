@@ -2,6 +2,8 @@
 // Mirrors LLama-GUI's app.js (trimmed: no chat/benchmark wiring).
 window.SDGui = window.SDGui || {};
 
+window.SDGui.ACTIVE_SECTION_KEY = "sdgui.activeSection";
+
 window.SDGui.panelLifecycle = (() => {
 	// D1 — per-section visibility hooks so modules can pause/resume polling.
 	var handlers = {}; // section -> [ { start, stop } ]
@@ -46,12 +48,43 @@ window.SDGui.panelLifecycle = (() => {
 })();
 
 (() => {
+	var DEFAULT_SECTION = "generate";
+	var VALID_SECTIONS = [
+		"install",
+		"generate",
+		"configure",
+		"server",
+		"hf-download",
+		"presets",
+	];
+
+	function getSavedSection() {
+		try {
+			var saved = localStorage.getItem(window.SDGui.ACTIVE_SECTION_KEY);
+			if (VALID_SECTIONS.indexOf(saved) !== -1) return saved;
+		} catch (e) {
+			/* ignore */
+		}
+		return DEFAULT_SECTION;
+	}
+
+	function saveActiveSection(section) {
+		if (VALID_SECTIONS.indexOf(section) === -1) return;
+		try {
+			localStorage.setItem(window.SDGui.ACTIVE_SECTION_KEY, section);
+		} catch (e) {
+			/* ignore */
+		}
+	}
+
 	function switchSection(section) {
+		if (VALID_SECTIONS.indexOf(section) === -1) section = DEFAULT_SECTION;
 		document.querySelectorAll(".section-panel").forEach((el) => {
 			el.style.display = "none";
 		});
 		var panel = document.getElementById("section-" + section);
 		if (panel) panel.style.display = "block";
+		saveActiveSection(section);
 
 		document.querySelectorAll(".nav-item").forEach((btn) => {
 			btn.classList.toggle(
@@ -179,8 +212,7 @@ window.SDGui.panelLifecycle = (() => {
 		initNav();
 		initSidebarToggle();
 		initModules();
-		// Start on the Generate panel (the default visible section).
-		window.SDGui.panelLifecycle.setActive("generate");
+		switchSection(getSavedSection());
 		refreshStatusBadge();
 		window.setInterval(refreshStatusBadge, 5000);
 	});

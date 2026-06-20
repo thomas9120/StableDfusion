@@ -97,6 +97,8 @@ function findChromiumExecutable() {
 	let generateStarted = false;
 	let generatePosted = null;
 	let serverPosted = null;
+	let shutdownRequested = false;
+	let shutdownPosts = 0;
 	let presetStore = [];
 	const failures = [];
 
@@ -215,6 +217,7 @@ function findChromiumExecutable() {
 				});
 			}
 			if (url.includes("/api/status")) {
+				if (shutdownRequested) return route.abort("failed");
 				return route.fulfill({
 					status: 200,
 					contentType: "application/json",
@@ -223,6 +226,15 @@ function findChromiumExecutable() {
 						version: "smoke",
 						backend: "cpu-avx2",
 					}),
+				});
+			}
+			if (url.includes("/api/shutdown") && method === "POST") {
+				shutdownRequested = true;
+				shutdownPosts += 1;
+				return route.fulfill({
+					status: 200,
+					contentType: "application/json",
+					body: JSON.stringify({ shutting_down: true }),
 				});
 			}
 			if (url.includes("/api/sd-server/status")) {
@@ -323,12 +335,36 @@ function findChromiumExecutable() {
 			if (m.type() === "error") errors.push(m.text());
 		});
 		page.on("pageerror", (e) => errors.push(String(e)));
+		let navigationCount = 0;
+		page.on("framenavigated", (frame) => {
+			if (frame === page.mainFrame()) navigationCount += 1;
+		});
 
 		await page.goto(base, { waitUntil: "domcontentloaded" });
 		await page.waitForFunction(
 			() =>
 				!!(window.SDGui && window.SDGui.generateUi && window.SDGui.flagCore),
 		);
+
+		await page.click('.nav-item[data-section="install"]');
+		await page.waitForTimeout(40);
+		await page.reload({ waitUntil: "domcontentloaded" });
+		await page.waitForFunction(
+			() =>
+				document.getElementById("section-install").style.display === "block",
+			{ timeout: 3000 },
+		);
+		const persistedTab = await page.evaluate(() => ({
+			active: document
+				.querySelector('.nav-item[data-section="install"]')
+				.classList.contains("active"),
+			stored: localStorage.getItem(window.SDGui.ACTIVE_SECTION_KEY),
+		}));
+		check(
+			"active tab persists across app reloads",
+			persistedTab.active && persistedTab.stored === "install",
+		);
+		await page.click('.nav-item[data-section="generate"]');
 
 		// 1. Flag definitions validate.
 		const validation = await page.evaluate(() =>
@@ -831,6 +867,34 @@ function findChromiumExecutable() {
 			window.SDGui.flagCore.setFlagValue("init_img", ""),
 		);
 		await page.selectOption("#gen-mode", "img_gen");
+
+		// Install-tab lifecycle: Stop GUI Server should request shutdown and
+		// leave the current page alone. A forced reload here would fall back to
+		// the Generate tab and make shutdown look like an app restart.
+		await page.click('.nav-item[data-section="install"]');
+		const stopNavBase = navigationCount;
+		await page.click("#btn-stop-app");
+		await page.click("#confirm-modal-ok");
+		await page.waitForFunction(
+			() => document.getElementById("install-status").textContent,
+			{ timeout: 3000 },
+		);
+		await page.waitForTimeout(1800);
+		const stopState = await page.evaluate(() => ({
+			activeInstall: document
+				.querySelector('.nav-item[data-section="install"]')
+				.classList.contains("active"),
+			status: document.getElementById("install-status").textContent,
+		}));
+		check("Stop GUI Server posts shutdown", shutdownPosts === 1);
+		check(
+			"Stop GUI Server does not reload the app",
+			navigationCount === stopNavBase && stopState.activeInstall,
+		);
+		check(
+			"Stop GUI Server reports disconnected state",
+			/stopped|Shutdown requested/.test(stopState.status),
+		);
 
 		// HF download tab initializes without errors + lists files from stub.
 		const repoFilesBody = JSON.stringify({
