@@ -3,39 +3,161 @@
 > **Companion to `PLAN.md`.** This file tracks the *as-built* structure.
 > `PLAN.md` is the design source of truth; this file reflects what's on disk.
 
+## Root
+
+| File | Role |
+|---|---|
+| `server.py` | Entry point — `python server.py` boots the backend on port 5250 |
+| `config.json` | Persisted install state (version, backend, tag) |
+| `install-windows.bat` | One-click Windows installer |
+| `start-windows.bat` | One-click Windows launcher |
+| `requirements.txt` | Python dependencies (stdlib + optional `certifi`) |
+| `pyproject.toml` | Ruff config |
+| `pyrightconfig.json` | Pyright type-checking config |
+| `package.json` | Node dev deps (Playwright for smoke tests) |
+| `AGENTS.md` | Agent instructions and conventions |
+| `PLAN.md` | Architecture design document (source of truth) |
+
 ## Backend (`backend/`)
 
 | Module | Role | Status |
 |---|---|---|
-| `app.py` | HTTP handler, CORS, route registry, `main()` | ✅ boots |
+| `app.py` | HTTP handler, CORS, route registry, `_assemble_index()` partial system, `main()` | ✅ boots |
 | `config.py` | Paths (`sdcpp/`, `output/`, `models/` component folders), ports (5250 / 1234), env (`SD_GUI_*`) | ✅ |
 | `context.py` | `AppContext`, `AppPaths`, `ServerConfig`, `BackendServices` | ✅ |
 | `state.py` | `ServerState` + `AtomicDict` + locks (generation, sd_server, model_download, tunnel) | ✅ |
 | `http.py` | `Request`/`Response`/CORS helpers (generic) | ✅ |
 | `routing.py` | `Router` (exact + prefix) | ✅ |
 
+### Partial assembly
+
+`app.py` contains `_assemble_index()` which reads `ui/index.html` (the shell) and
+substitutes `<!-- @partial NAME -->` placeholders with the contents of
+`ui/partials/NAME.html`. Partials are re-read on every request (no caching) so
+edits reflect on browser refresh. Missing partials log a warning and leave the
+placeholder intact. The `ui/partials/` directory is never served directly —
+`is_static_ui_path()` in `http.py` only allows `/css/`, `/js/`, `/assets/` prefixes.
+
 ### Routes (`backend/routes/`) — wired in `app.py:API_ROUTER`
 
-Most return 501 TODOs until their phase. Functional now: `status.get_status`,
-`models.list_models`, `images.list_images`.
+| Route | Method | Handler |
+|---|---|---|
+| `/api/status` | GET | `status.get_status` |
+| `/api/releases` | GET | `install.get_releases` |
+| `/api/download-progress` | GET | `install.get_download_progress` |
+| `/api/models` | GET | `models.list_models` |
+| `/api/images` | GET | `images.list_images` |
+| `/api/generate/status` | GET | `generate.get_status` |
+| `/api/generate/preview` | GET | `generate.get_preview` |
+| `/api/hf/download-status` | GET | `hf_download.get_download_status` |
+| `/api/sd-server/status` | GET | `server_mode.get_status` |
+| `/api/remote-tunnel/status` | GET | `tunnel.get_status` |
+| `/api/app-update-status` | GET | `git_update.get_status` |
+| `/api/presets` | GET | `presets.list_presets` |
+| `/api/install` | POST | `install.start_install` |
+| `/api/update` | POST | `install.start_update` |
+| `/api/cleanup-sdcpp` | POST | `install.cleanup_sdcpp` |
+| `/api/generate` | POST | `generate.generate` |
+| `/api/generate/cancel` | POST | `generate.cancel` |
+| `/api/hf/repo-files` | POST | `hf_download.list_repo_files` |
+| `/api/hf/download` | POST | `hf_download.start_download` |
+| `/api/hf/download-cancel` | POST | `hf_download.cancel_download` |
+| `/api/sd-server/start` | POST | `server_mode.start` |
+| `/api/sd-server/stop` | POST | `server_mode.stop` |
+| `/api/remote-tunnel/start` | POST | `tunnel.start` |
+| `/api/remote-tunnel/stop` | POST | `tunnel.stop` |
+| `/api/app-update` | POST | `git_update.start_update` |
+| `/api/shutdown` | POST | `lifecycle.post_shutdown` |
+| `/api/restart` | POST | `lifecycle.post_restart` |
+| `/api/open-folder` | POST | `lifecycle.post_open_folder` |
+| `/api/select-file` | POST | `file_picker.select_file` |
+| `/api/presets` | POST | `presets.save_preset` |
+| `/api/presets/shortcut` | POST | `presets.export_preset_shortcut` |
+| `/api/image/{name}` | GET | `images.serve_image` (prefix) |
+| `/api/presets/{name}` | DELETE | `presets.delete_preset` (prefix) |
 
 ### Services (`backend/services/`)
 
-`sdcpp_manager`, `process_manager` (indexed); `*_service` modules are stubs that
-`raise NotImplementedError`. See `PLAN.md` §7 and AGENTS.md "Service module
-naming".
+| Module | Role |
+|---|---|
+| `sdcpp_manager.py` | Backend specs, release asset matching, install/update orchestration |
+| `process_manager.py` | Spawn/kill sd-cli and sd-server processes |
+| `model_storage_service.py` | Model directory structure and file listing |
+| `server_mode_service.py` | sd-server lifecycle and `/v1/*` proxy |
+| `generate_service.py` | One-shot sd-cli generation |
+| `hf_download_service.py` | HuggingFace repo file listing and download |
+| `file_picker_service.py` | Native file/folder picker dialogs |
+| `git_update_service.py` | Git auto-update for the app itself |
+| `tunnel_service.py` | Cloudflare tunnel for remote access |
+| `lifecycle_service.py` | Shutdown, restart, open-folder operations |
 
 ## Frontend (`ui/`)
 
+### Shell and partials
+
+`ui/index.html` is a ~160-line shell containing the `<head>`, sidebar nav, modal,
+script tags, and `<!-- @partial NAME -->` placeholders. The six tab panels live
+in `ui/partials/`:
+
+| Partial | Tab |
+|---|---|
+| `install.html` | Install / update sd-cli |
+| `generate.html` | Image generation (prompt, dimensions, bundles, history) |
+| `configure.html` | Full flag editor with search, collapse/expand, command preview |
+| `server.html` | sd-server mode and API docs |
+| `hf-download.html` | HuggingFace model downloader |
+| `presets.html` | Save/load/export flag presets |
+
+### JavaScript (`ui/js/`)
+
 Script load order is fixed in `index.html` (see `PLAN.md` §8). `app.js` does
-tab switching + status polling; other modules are namespace stubs awaiting their
-phase.
+tab switching + status polling; other modules attach to `window.SDGui.*`.
+
+| Module | Role |
+|---|---|
+| `app.js` | Tab switching, status polling, init orchestration |
+| `manager.js` | Process state, sidebar status badge |
+| `flag-core.js` | Shared flag state (`window.SDGui.flagCore`), `setFlagValue`, `getLaunchArgs` |
+| `flag-validation.js` | Flag value validation and coercion |
+| `config-flags-ui.js` | Configure tab: search/filter, category collapse, command preview, expand/collapse-all buttons |
+| `generate-ui.js` | Generate tab: prompt, dimensions, bundles, history grid |
+| `gallery-rendering.js` | Image gallery rendering helpers |
+| `hf-download-ui.js` | HF Download tab UI |
+| `server-ui.js` | Server tab UI |
+| `api-tab.js` | API documentation tab |
+| `remote-tunnel-ui.js` | Remote tunnel status and controls |
+| `presets.js` | Presets save/load/export |
+| `app-data.js` | Shared app data helpers |
+
+#### Flags subsystem (`ui/js/flags/`)
+
+| Module | Role |
+|---|---|
+| `definitions.js` | Single source of truth for all sd-cli/sd-server flags |
+| `categories.js` | Flag category groupings |
+| `options.js` | Enum option lists for flags |
+| `model-bundles.js` | Multi-file model bundle definitions (diffusion + VAE + text-encoder + LoRA) |
+| `helpers.js` | Flag lookup helpers (`getFlagsByCategory`, etc.) |
+
+### CSS (`ui/css/`)
+
+| File | Role |
+|---|---|
+| `tokens.css` | Design tokens (colors, spacing, typography, radii) |
+| `style.css` | Component styles, layout, buttons, forms, modals |
 
 ## Runtime directories
 
 Created on boot by `backend/app.main()`: `models/`, `models/diffusion/`,
 `models/vae/`, `models/text-encoders/`, `models/loras/`, `presets/`,
 `sdcpp/bin/`, `output/`, `output/.preview/`, `output/.gallery/`.
+
+## Tests (`tests/`)
+
+| Directory | Contents |
+|---|---|
+| `tests/backend/` | pytest unit tests for routes, services, and managers |
+| `tests/frontend/` | Playwright smoke tests (dev only) |
 
 ## Tooling
 
