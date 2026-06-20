@@ -21,7 +21,7 @@ if exist ".venv\Scripts\python.exe" (
 )
 
 echo.
-echo Starting Stable-D GUI...
+echo Starting StableDfusion...
 echo URL: http://%HOST%:%PORT%
 echo.
 
@@ -30,6 +30,6 @@ start "" "http://%HOST%:%PORT%"
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
-    echo Stable-D GUI exited with an error.
+    echo StableDfusion exited with an error.
     pause
 )

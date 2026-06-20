@@ -4,7 +4,7 @@ setlocal
 cd /d "%~dp0"
 
 echo.
-echo Stable-D GUI Windows installer
+echo StableDfusion Windows installer
 echo ==============================
 echo.
 
@@ -62,6 +62,6 @@ if %ERRORLEVEL% EQU 0 (
 
 echo.
 echo Install complete.
-echo Run start-windows.bat to launch Stable-D GUI.
+echo Run start-windows.bat to launch StableDfusion.
 echo.
 pause

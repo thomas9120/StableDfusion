@@ -11,6 +11,8 @@
 | `config.json` | Persisted install state (version, backend, tag) |
 | `install-windows.bat` | One-click Windows installer |
 | `start-windows.bat` | One-click Windows launcher |
+| `install.sh` | macOS/Linux installer |
+| `start.sh` | macOS/Linux launcher |
 | `requirements.txt` | Python dependencies (stdlib + optional `certifi`) |
 | `pyproject.toml` | Ruff config |
 | `pyrightconfig.json` | Pyright type-checking config |
