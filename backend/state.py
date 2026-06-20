@@ -66,7 +66,10 @@ def default_sd_server_state() -> dict[str, Any]:
         "pid": None,
         "host": config.SD_SERVER_HOST,
         "port": config.SD_SERVER_PORT,
+        "target_url": f"http://{config.SD_SERVER_HOST}:{config.SD_SERVER_PORT}",
         "message": "sd-server is not running.",
+        "command": "",
+        "log": "",
     }
 
 
@@ -142,5 +145,7 @@ class ServerState:
     sd_server: AtomicDict = field(default_factory=lambda: AtomicDict(default_sd_server_state()))
     sd_server_process: Any = None
     sd_server_lock: threading.Lock = field(default_factory=threading.Lock)
+    sd_server_log: list[str] = field(default_factory=list)
+    sd_server_log_lock: threading.Lock = field(default_factory=threading.Lock)
 
     gui_server: Any = None

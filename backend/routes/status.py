@@ -50,6 +50,7 @@ def get_status(request: Request, response: Response, ctx: AppContext) -> None:
                 "executable_suffix": services.binary_suffix,
                 "running": services.is_process_running(),
                 "active_process_tool": ctx.state.active_process_tool,
+                "sd_server": ctx.state.sd_server.snapshot(),
                 "available_backends": available_backends,
                 "models_dir": str(ctx.paths.models),
                 "output_dir": str(ctx.paths.output),

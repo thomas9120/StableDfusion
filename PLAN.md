@@ -440,6 +440,13 @@ Directory structure, bootable `server.py` + `backend/app.py` serving a placehold
 ### Phase 5 — Server mode + API + tunnel
 
 - `SD_SERVER_FLAGS`, `server_mode.py`, `server-ui.js`, `api-tab.js`, `remote-tunnel-ui.js`.
+- **Decision:** `sd-server -h` exposes a large inherited surface (133 long flags on the
+  installed `92a3b73` build, 132 excluding `--help`). Phase 5 should **not** build
+  a second full Configure tab. Use a curated `SD_SERVER_FLAGS` set for listener
+  settings, model bundle paths, core default generation params, and practical
+  runtime controls (`--threads`, `--backend`, `--params-backend`, `--max-vram`,
+  `--diffusion-fa`, `--offload-to-cpu`, `--mmap`), plus an "extra server args"
+  escape hatch for rare flags.
 
 ### Phase 6 — Expansion
 

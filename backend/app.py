@@ -44,6 +44,7 @@ from .routes import server_mode as server_mode_routes
 from .routes import status as status_routes
 from .routes import tunnel as tunnel_routes
 from .routing import Router
+from .services import server_mode_service
 
 try:
     import certifi
@@ -191,6 +192,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         except (json.JSONDecodeError, UnicodeDecodeError):
             return None
 
+    def read_raw_body(self):
+        length = int(self.headers.get("Content-Length", 0))
+        if length > 10 * 1024 * 1024:
+            return None
+        return self.rfile.read(length) if length else b""
+
     def dispatch(self, method, parsed, body=None):
         match = API_ROUTER.match(method, parsed.path)
         if match is None:
@@ -206,8 +213,38 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         )
         match.handler(request, Response(self), APP_CONTEXT)
 
+    def proxy_to_sd_server(self, method, parsed, body=b""):
+        try:
+            status, headers, payload = server_mode_service.proxy(
+                APP_CONTEXT,
+                method,
+                parsed.path,
+                parsed.query,
+                dict(self.headers.items()),
+                body or b"",
+            )
+        except Exception as exc:
+            print(f"[proxy] sd-server proxy error: {exc}", file=sys.stderr)
+            self.send_error(502, "sd-server proxy failed")
+            return
+        self.send_response(status)
+        for key, value in headers.items():
+            if key.lower() == "content-length":
+                continue
+            self.send_header(key, value)
+        self.send_header("Access-Control-Allow-Origin", self.get_access_control_origin())
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
+        if is_v1_proxy_path(parsed.path):
+            if not is_safe_request_origin(self.headers, self.get_allowed_request_origins()):
+                self.send_error(403)
+                return
+            self.proxy_to_sd_server("GET", parsed)
+            return
         if parsed.path in ("/", "/index.html"):
             index = config.UI_DIR / "index.html"
             if index.exists():
@@ -226,7 +263,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         if is_v1_proxy_path(parsed.path):
-            self.send_error(501, "sd-server proxy is Phase 5")
+            body = self.read_raw_body()
+            if body is None:
+                self.send_error(413, "Request body too large")
+                return
+            if not is_safe_request_origin(self.headers, self.get_allowed_request_origins()):
+                self.send_error(403)
+                return
+            self.proxy_to_sd_server("POST", parsed, body)
             return
         body = self.read_body()
         if body is None:
@@ -242,7 +286,42 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not is_safe_request_origin(self.headers, self.get_allowed_request_origins()):
             self.send_error(403)
             return
+        if is_v1_proxy_path(parsed.path):
+            body = self.read_raw_body()
+            if body is None:
+                self.send_error(413, "Request body too large")
+                return
+            self.proxy_to_sd_server("DELETE", parsed, body)
+            return
         self.dispatch("DELETE", parsed, self.read_body())
+
+    def do_PUT(self):
+        parsed = urllib.parse.urlparse(self.path)
+        if not is_v1_proxy_path(parsed.path):
+            self.send_error(404)
+            return
+        if not is_safe_request_origin(self.headers, self.get_allowed_request_origins()):
+            self.send_error(403)
+            return
+        body = self.read_raw_body()
+        if body is None:
+            self.send_error(413, "Request body too large")
+            return
+        self.proxy_to_sd_server("PUT", parsed, body)
+
+    def do_PATCH(self):
+        parsed = urllib.parse.urlparse(self.path)
+        if not is_v1_proxy_path(parsed.path):
+            self.send_error(404)
+            return
+        if not is_safe_request_origin(self.headers, self.get_allowed_request_origins()):
+            self.send_error(403)
+            return
+        body = self.read_raw_body()
+        if body is None:
+            self.send_error(413, "Request body too large")
+            return
+        self.proxy_to_sd_server("PATCH", parsed, body)
 
 
 API_ROUTER = (

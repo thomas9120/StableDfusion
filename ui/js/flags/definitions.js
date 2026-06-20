@@ -1495,5 +1495,86 @@ window.SDGui.SD_CLI_FLAGS = [
 	},
 ];
 
-// Dedicated flag set for persistent sd-server (Phase 5).
-window.SDGui.SD_SERVER_FLAGS = [];
+// Dedicated curated flag set for persistent sd-server. sd-server inherits most
+// of sd-cli's surface (132 usable long flags on commit 92a3b73), so the Server
+// tab intentionally exposes the common path and runtime controls plus an extra
+// args escape hatch instead of duplicating Configure.
+(() => {
+	function fromCli(id, overrides) {
+		var base = (window.SDGui.SD_CLI_FLAGS || []).find((f) => f.id === id);
+		if (!base) return null;
+		return Object.assign({}, base, overrides || {}, { server: true });
+	}
+
+	var serverOnly = [
+		{
+			id: "listen_ip",
+			flag: "--listen-ip",
+			short: "-l",
+			type: "text",
+			category: "server",
+			label: "Listen IP",
+			desc: "sd-server listen address.",
+			default: "127.0.0.1",
+			server: true,
+		},
+		{
+			id: "listen_port",
+			flag: "--listen-port",
+			type: "int",
+			category: "server",
+			label: "Listen port",
+			desc: "sd-server listen port.",
+			default: 1234,
+			server: true,
+		},
+		{
+			id: "serve_html_path",
+			flag: "--serve-html-path",
+			type: "path",
+			category: "server",
+			label: "Serve HTML path",
+			desc: "Optional HTML file served by sd-server at root.",
+			default: "",
+			server: true,
+		},
+	];
+
+	window.SDGui.SD_SERVER_FLAGS = serverOnly.concat(
+		[
+			"model",
+			"diffusion_model",
+			"vae",
+			"clip_l",
+			"clip_g",
+			"clip_vision",
+			"t5xxl",
+			"llm",
+			"llm_vision",
+			"taesd",
+			"control_net",
+			"embd_dir",
+			"lora_model_dir",
+			"width",
+			"height",
+			"steps",
+			"cfg_scale",
+			"sampling_method",
+			"scheduler",
+			"seed",
+			"threads",
+			"backend",
+			"params_backend",
+			"max_vram",
+			"type",
+			"diffusion_fa",
+			"offload_to_cpu",
+			"mmap",
+			"vae_tiling",
+			"verbose",
+			"color",
+		]
+			.map((id) => fromCli(id))
+			.filter(Boolean),
+	);
+})();

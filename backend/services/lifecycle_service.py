@@ -18,12 +18,16 @@ from ..context import AppContext
 
 def stop_runtime_services(ctx: AppContext) -> None:
     """Stop any running sd-cli/sd-server process + cloudflared tunnel."""
-    from . import process_manager, tunnel_service
+    from . import process_manager, server_mode_service, tunnel_service
 
     try:
         tunnel_service.stop_remote_tunnel(ctx)
     except Exception as exc:
         print(f"[lifecycle] tunnel stop error: {exc}", file=sys.stderr)
+    try:
+        server_mode_service.stop(ctx)
+    except Exception as exc:
+        print(f"[lifecycle] sd-server stop error: {exc}", file=sys.stderr)
     try:
         process_manager.stop_process(ctx)
     except Exception as exc:

@@ -1,4 +1,4 @@
-"""Persistent sd-server routes. TODO(Phase 5).
+"""Persistent sd-server routes.
 
 - POST /api/sd-server/start
 - POST /api/sd-server/stop
@@ -6,16 +6,27 @@
 """
 
 from backend.context import AppContext
-from backend.http import Request, Response
+from backend.http import Request, Response, sanitize_error
+from backend.services import server_mode_service
 
 
 def start(request: Request, response: Response, ctx: AppContext) -> None:
-    response.error("sd-server start not implemented yet (Phase 5)", 501)
+    try:
+        result = server_mode_service.start(ctx, request.body or {})
+        if result.get("error"):
+            response.error(str(result["error"]), int(result.get("status") or 500))
+            return
+        response.json(result)
+    except Exception as exc:
+        response.error(sanitize_error(exc, 500), 500)
 
 
 def stop(request: Request, response: Response, ctx: AppContext) -> None:
-    response.error("sd-server stop not implemented yet (Phase 5)", 501)
+    try:
+        response.json({"stopped": server_mode_service.stop(ctx)})
+    except Exception as exc:
+        response.error(sanitize_error(exc, 500), 500)
 
 
 def get_status(request: Request, response: Response, ctx: AppContext) -> None:
-    response.json(ctx.state.sd_server.snapshot())
+    response.json(server_mode_service.status(ctx))
