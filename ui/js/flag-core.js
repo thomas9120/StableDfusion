@@ -129,6 +129,11 @@ window.SDGui.flagCore = (() => {
 		return flag.mode === "all" || flag.mode === state.mode;
 	}
 
+	function isSuppressedForMode(flag) {
+		if (state.mode !== "upscale") return false;
+		return flag.category === "model_components" && flag.id !== "upscale_model";
+	}
+
 	// Mode-specific required inputs (Phase 3). Different modes need different
 	// file-pickers populated before sd-cli will run; surface that as a clear
 	// error rather than letting sd-cli bail with an opaque message.
@@ -187,6 +192,7 @@ window.SDGui.flagCore = (() => {
 		flags.forEach((f) => {
 			if (!modeMatches(f)) return;
 			if (f.backendOwned) return;
+			if (isSuppressedForMode(f)) return;
 
 			var v = vals[f.id];
 			if (v === undefined || v === null) return;

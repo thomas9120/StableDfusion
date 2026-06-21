@@ -268,64 +268,40 @@
           </div>
         </details>
 
-        <div class="gen-section-break" aria-hidden="true">
-          <span>Model setup</span>
-        </div>
-        <!-- @section bundle -->
-        <div class="form-group">
-          <label class="form-label">Model type bundle</label>
-          <select id="gen-model-bundle">
-            <option value="">Loading...</option>
-          </select>
-        </div>
-        <!-- @section model -->
-        <div id="gen-model-components" class="form-group">
-          <!-- bundle-driven file pickers rendered by generate-ui.js -->
-          <p class="help-text">
-            Select a model type bundle to show its file pickers.
-          </p>
+        <div id="gen-model-setup-section">
+          <div class="gen-section-break" aria-hidden="true">
+            <span>Model setup</span>
+          </div>
+          <!-- @section bundle -->
+          <div class="form-group">
+            <label class="form-label">Model type bundle</label>
+            <select id="gen-model-bundle">
+              <option value="">Loading...</option>
+            </select>
+          </div>
+          <!-- @section model -->
+          <div id="gen-model-components" class="form-group">
+            <!-- bundle-driven file pickers rendered by generate-ui.js -->
+            <p class="help-text">
+              Select a model type bundle to show its file pickers.
+            </p>
+          </div>
         </div>
 
-        <!-- @section actions -->
-        <div class="gen-actions">
-          <button
-            id="btn-generate"
-            class="btn btn-primary"
-            title="Generate (Ctrl/Cmd+Enter)"
-          >
-            <span class="gen-btn-spinner" aria-hidden="true" hidden>
-              <svg viewBox="0 0 24 24" width="14" height="14">
-                <circle
-                  cx="12"
-                  cy="12"
-                  r="9"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.5"
-                  stroke-linecap="round"
-                  stroke-dasharray="14 42"
-                />
-              </svg>
-            </span>
-            <span class="gen-btn-label">Generate</span>
-          </button>
-          <button id="btn-generate-cancel" class="btn btn-danger hidden">
-            Cancel
-          </button>
-          <span class="gen-kbd-hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span>
-        </div>
-        <div class="gen-section-break" aria-hidden="true">
-          <span>Optional tools</span>
-        </div>
-        <!-- @section mode-inputs -->
-        <!-- Mode-specific inputs: shown/hidden per mode by generate-ui.js -->
-        <div id="gen-mode-inputs" class="form-group">
-          <span id="gen-mode-label" class="form-label"
-            >Image references (optional)</span
-          >
-          <p id="gen-mode-help" class="gen-mode-help">
-            Add a reference image for image-to-image, inpainting, or ControlNet.
-          </p>
+        <div id="gen-mode-inputs-section">
+          <div class="gen-section-break" aria-hidden="true">
+            <span id="gen-mode-section-title">Optional tools</span>
+          </div>
+          <!-- @section mode-inputs -->
+          <!-- Mode-specific inputs: shown/hidden per mode by generate-ui.js -->
+          <div id="gen-mode-inputs" class="form-group">
+            <span id="gen-mode-label" class="form-label"
+              >Image references (optional)</span
+            >
+            <p id="gen-mode-help" class="gen-mode-help">
+              Add a reference image for image-to-image, inpainting, or
+              ControlNet.
+            </p>
 
           <!-- img_gen / vid_gen: img2img (init-image / mask / control) -->
           <div id="gen-img2img-inputs" class="mode-inputs">
@@ -672,6 +648,36 @@
               </button>
             </details>
           </div>
+        </div>
+        </div>
+
+        <!-- @section actions -->
+        <div class="gen-actions">
+          <button
+            id="btn-generate"
+            class="btn btn-primary"
+            title="Generate (Ctrl/Cmd+Enter)"
+          >
+            <span class="gen-btn-spinner" aria-hidden="true" hidden>
+              <svg viewBox="0 0 24 24" width="14" height="14">
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="9"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-dasharray="14 42"
+                />
+              </svg>
+            </span>
+            <span class="gen-btn-label">Generate</span>
+          </button>
+          <button id="btn-generate-cancel" class="btn btn-danger hidden">
+            Cancel
+          </button>
+          <span class="gen-kbd-hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span>
         </div>
       </div>
       <div class="card">

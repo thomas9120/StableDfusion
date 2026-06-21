@@ -90,22 +90,27 @@ window.SDGui.generateUi = (() => {
 
 	var MODE_META = {
 		img_gen: {
+			sectionTitle: "Optional tools",
 			label: "Image references (optional)",
 			help: "Add a reference image for image-to-image, inpainting, or ControlNet.",
 		},
 		vid_gen: {
+			sectionTitle: "Video inputs",
 			label: "Video inputs (optional)",
 			help: "Add a start/end frame image for video generation.",
 		},
 		upscale: {
+			sectionTitle: "Upscale setup",
 			label: "Upscale source",
 			help: "Select the image to upscale and a RealESRGAN model.",
 		},
 		convert: {
+			sectionTitle: "Convert options",
 			label: "Convert source",
 			help: "Source model is selected above; convert writes a GGUF/tensor file.",
 		},
 		metadata: {
+			sectionTitle: "Metadata tool",
 			label: "Inspect image",
 			help: "Select an image to read its embedded generation metadata.",
 		},
@@ -244,6 +249,10 @@ window.SDGui.generateUi = (() => {
 		var label = $("gen-mode-label");
 		var help = $("gen-mode-help");
 		var meta = MODE_META[mode === "metadata" ? "metadata" : sectionMode];
+		var sectionTitle = $("gen-mode-section-title");
+		if (sectionTitle && meta && meta.sectionTitle) {
+			sectionTitle.textContent = meta.sectionTitle;
+		}
 		if (label && meta) label.textContent = meta.label;
 		if (help && meta) help.textContent = meta.help;
 		var helpWrap = $("gen-mode-inputs");
@@ -262,6 +271,7 @@ window.SDGui.generateUi = (() => {
 		setHidden($("gen-prompt-section"), !usePrompt);
 		setHidden($("gen-sampling-section"), !usePrompt);
 		setHidden($("gen-advanced-section"), !usePrompt);
+		setHidden($("gen-model-setup-section"), mode === "upscale");
 
 		dims.updateAffordances();
 		updateActionCopy();
