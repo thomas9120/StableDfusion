@@ -720,10 +720,14 @@ window.SDGui.manager = (() => {
 		}
 	}
 
-	async function checkAppUpdateStatus() {
+	function appUpdateStatusUrl(fetchRemote) {
+		return "/api/app-update-status" + (fetchRemote ? "?fetch=true" : "");
+	}
+
+	async function checkAppUpdateStatus(fetchRemote) {
 		showAppUpdateStatus("info", "Checking app update status...");
 		try {
-			var status = await fetchJson("/api/app-update-status");
+			var status = await fetchJson(appUpdateStatusUrl(fetchRemote));
 			renderAppUpdateStatus(status);
 		} catch (e) {
 			showAppUpdateStatus("error", "Failed to check app updates: " + e.message);
@@ -731,8 +735,7 @@ window.SDGui.manager = (() => {
 	}
 
 	async function updateAppFromGitHub() {
-		var status =
-			latestAppUpdateStatus || (await fetchJson("/api/app-update-status"));
+		var status = await fetchJson(appUpdateStatusUrl(true));
 		if (!status.can_update) {
 			renderAppUpdateStatus(status);
 			return;
@@ -904,13 +907,13 @@ window.SDGui.manager = (() => {
 		wire("btn-open-output", () => openFolder("output"));
 		wire("btn-stop-app", stopPythonServer);
 		wire("btn-restart-app", restartPythonServer);
-		wire("btn-check-app-update", checkAppUpdateStatus);
+		wire("btn-check-app-update", () => checkAppUpdateStatus(true));
 		wire("btn-update-app", updateAppFromGitHub);
 		wire("refresh-releases", () => fetchReleases(true));
 
 		fetchReleases(false);
 		checkStatus();
-		checkAppUpdateStatus();
+		checkAppUpdateStatus(false);
 
 		if (window.addEventListener)
 			window.addEventListener("beforeunload", stopInstallProgressPolling);
