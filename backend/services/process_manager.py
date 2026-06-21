@@ -42,9 +42,11 @@ def flatten_launch_args(args_list: Iterable[Any] | None) -> list[str]:
 
 
 def _build_process_env(ctx: AppContext) -> dict[str, str]:
-    """Prepend ``sdcpp/bin`` to PATH (+ LD/DYLD_LIBRARY_PATH) for shared libs."""
+    """Prepend active stable-diffusion.cpp bin to PATH/library paths."""
+    from . import sdcpp_manager
+
     env = os.environ.copy()
-    runtime_paths = [str(ctx.paths.sdcpp_bin)]
+    runtime_paths = [str(sdcpp_manager.get_active_runtime_bin(ctx))]
     existing = env.get("PATH", "")
     env["PATH"] = os.pathsep.join(runtime_paths + ([existing] if existing else []))
     platform_name = ctx.services.current_platform or sys.platform

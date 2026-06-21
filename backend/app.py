@@ -119,7 +119,9 @@ def get_tool_filename(tool: str) -> str:
 
 
 def find_tool_executable(tool: str):
-    return config.SDCPP_BIN_DIR / get_tool_filename(tool)
+    from .services import sdcpp_manager
+
+    return sdcpp_manager.get_active_runtime_bin(APP_CONTEXT) / get_tool_filename(tool)
 
 
 def is_process_running() -> bool:
@@ -128,16 +130,23 @@ def is_process_running() -> bool:
 
 
 def load_config() -> dict:
+    from .services import sdcpp_manager
+
     if config.CONFIG_FILE.exists():
         try:
-            return json.loads(config.CONFIG_FILE.read_text(encoding="utf-8"))
+            return sdcpp_manager.normalize_install_config(
+                json.loads(config.CONFIG_FILE.read_text(encoding="utf-8"))
+            )
         except (json.JSONDecodeError, OSError):
-            return {"version": None, "backend": None, "tag": None}
-    return {"version": None, "backend": None, "tag": None}
+            return sdcpp_manager.normalize_install_config({})
+    return sdcpp_manager.normalize_install_config({})
 
 
 def save_config(cfg: Mapping[str, Any]) -> None:
-    config.CONFIG_FILE.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+    from .services import sdcpp_manager
+
+    normalized = sdcpp_manager.normalize_install_config(cfg)
+    config.CONFIG_FILE.write_text(json.dumps(normalized, indent=2), encoding="utf-8")
 
 
 def configure_services(ctx=APP_CONTEXT) -> None:
@@ -358,6 +367,10 @@ API_ROUTER = (
     .add("POST", "/api/install", install_routes.start_install)
     .add("POST", "/api/update", install_routes.start_update)
     .add("POST", "/api/cleanup-sdcpp", install_routes.cleanup_sdcpp)
+    .add("POST", "/api/sdcpp/active", install_routes.set_active_runtime)
+    .add("POST", "/api/sdcpp/repair", install_routes.repair_runtime)
+    .add("POST", "/api/sdcpp/update", install_routes.update_runtime)
+    .add("POST", "/api/sdcpp/remove", install_routes.remove_runtime)
     .add("POST", "/api/generate", generate_routes.generate)
     .add("POST", "/api/generate/cancel", generate_routes.cancel)
     .add("POST", "/api/hf/repo-files", hf_download_routes.list_repo_files)
@@ -386,6 +399,7 @@ def main() -> None:
         config.MODELS_DIR,
         config.PRESETS_DIR,
         config.SDCPP_BIN_DIR,
+        config.SDCPP_INSTALLS_DIR,
         config.OUTPUT_DIR,
         config.OUTPUT_PREVIEW_DIR,
         config.OUTPUT_GALLERY_DIR,
