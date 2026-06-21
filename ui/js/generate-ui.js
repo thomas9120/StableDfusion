@@ -226,7 +226,11 @@ window.SDGui.generateUi = (() => {
 	function updateActionCopy() {
 		var cfg = activeConfig();
 		var genBtn = $("btn-generate");
-		if (genBtn) genBtn.textContent = cfg.button;
+		if (genBtn) {
+			var label = genBtn.querySelector(".gen-btn-label");
+			if (label) label.textContent = cfg.button;
+			else genBtn.textContent = cfg.button;
+		}
 		var resultEmpty = $("gen-result-empty");
 		if (resultEmpty) resultEmpty.textContent = cfg.empty;
 	}

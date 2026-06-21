@@ -60,7 +60,8 @@ window.SDGui.gallery = (() => {
 		var img = el("img");
 		img.src = url;
 		img.alt = altText || "result";
-		if (asThumb) img.loading = "lazy";
+		img.loading = "lazy";
+		img.decoding = "async";
 		return img;
 	}
 
@@ -124,6 +125,7 @@ window.SDGui.gallery = (() => {
 			img.src = src;
 			img.alt = entry.prompt || "";
 			img.loading = "lazy";
+			img.decoding = "async";
 			// Broken image (e.g. output file deleted on disk): swap to a
 			// "file missing" placeholder so the grid doesn't show a broken icon;
 			// the delete action is then the natural way to prune stale entries.

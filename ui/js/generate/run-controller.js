@@ -213,6 +213,9 @@ window.SDGui.generateRunController = (() => {
 		lastPreviewMtime = 0;
 		onRunStart(runningSection);
 		setGenerating(true);
+		if (flagCore && typeof flagCore.persistPrompts === "function") {
+			flagCore.persistPrompts();
+		}
 		previewProgress.setRunStartTime(Date.now());
 		if (runningSection === getActiveSection()) {
 			previewProgress.showProgressBar(true, true);

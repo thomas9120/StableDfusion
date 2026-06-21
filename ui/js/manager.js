@@ -305,11 +305,22 @@ window.SDGui.manager = (() => {
 
 		if (badge) {
 			if (status.installed) {
-				badge.textContent =
-					(status.installed_version_name || status.version) +
-					" (" +
-					status.backend +
-					")";
+				badge.replaceChildren();
+				var primary = document.createElement("span");
+				primary.className = "badge-primary";
+				primary.textContent =
+					status.installed_version_name || status.version;
+				badge.appendChild(primary);
+				if (status.backend) {
+					var sep = document.createElement("span");
+					sep.className = "badge-sep";
+					sep.textContent = " · ";
+					badge.appendChild(sep);
+					var secondary = document.createElement("span");
+					secondary.className = "badge-secondary";
+					secondary.textContent = status.backend;
+					badge.appendChild(secondary);
+				}
 				badge.className = "badge badge-green";
 			} else if (status.config_stale) {
 				badge.textContent = "Install Incomplete";
