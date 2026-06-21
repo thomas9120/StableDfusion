@@ -210,6 +210,13 @@ function findChromiumExecutable() {
 									size: 123456,
 									mtime: 1,
 								},
+								{
+									name: "detail-test.safetensors",
+									relative: "loras/detail-test.safetensors",
+									folder: "loras",
+									size: 123456,
+									mtime: 1,
+								},
 							],
 						}),
 					});
@@ -486,20 +493,39 @@ function findChromiumExecutable() {
 			window.SDGui.flagCore.setFlagValue("prompt", "a cat");
 		});
 		await page.fill("#gen-prompt", "a cat");
+		await page
+			.locator("#gen-model-components .lora-row select")
+			.first()
+			.selectOption("models/loras/style-test.safetensors");
+		await page
+			.locator("#gen-model-components .lora-row input[type='range']")
+			.first()
+			.evaluate((slider) => {
+				slider.value = "0.75";
+				slider.dispatchEvent(new Event("input", { bubbles: true }));
+			});
+		await page.getByRole("button", { name: "Add LoRA" }).click();
+		await page
+			.locator("#gen-model-components .lora-row select")
+			.nth(1)
+			.selectOption("models/loras/detail-test.safetensors");
+		await page
+			.locator("#gen-model-components .lora-row input[type='range']")
+			.nth(1)
+			.evaluate((slider) => {
+				slider.value = "0.4";
+				slider.dispatchEvent(new Event("input", { bubbles: true }));
+			});
 		const loraUi = await page.evaluate(() => {
-			window.SDGui.flagCore.setFlagValue(
-				"lora_file",
-				"models/loras/style-test.safetensors",
-			);
-			window.SDGui.flagCore.setFlagValue("lora_strength", 0.75);
-			window.SDGui.flagCore.setFlagValue("lora_model_dir", "models/loras");
 			const ranges = Array.from(
-				document.querySelectorAll("#gen-model-components input[type='range']"),
+				document.querySelectorAll("#gen-model-components .lora-row input[type='range']"),
 			);
-			const slider = ranges.find(
-				(input) => input.min === "-1" && input.max === "2",
+			const state = window.SDGui.flagCore.getFlagValues().lora_files || [];
+			return (
+				ranges.length >= 2 &&
+				ranges.every((input) => input.min === "-1" && input.max === "2") &&
+				state.length === 2
 			);
-			return !!slider;
 		});
 		check("LoRA strength slider is rendered with expected range", loraUi);
 
@@ -578,7 +604,9 @@ function findChromiumExecutable() {
 			.join(" ");
 		check(
 			"Generate POST injected LoRA prompt tag",
-			postedArgs.includes("--prompt=a cat <lora:style-test:0.75>"),
+			postedArgs.includes(
+				"--prompt=a cat <lora:style-test:0.75> <lora:detail-test:0.4>",
+			),
 		);
 		check(
 			"Generate POST included LoRA model dir",
