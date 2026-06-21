@@ -112,6 +112,7 @@ function findChromiumExecutable() {
 	let serverPosted = null;
 	let shutdownRequested = false;
 	let shutdownPosts = 0;
+	let refreshedModelLists = false;
 	let presetStore = [];
 	const failures = [];
 
@@ -181,58 +182,87 @@ function findChromiumExecutable() {
 			if (url.includes("/api/models")) {
 				const queryType = new URL(url).searchParams.get("type");
 				if (queryType === "upscaler" || queryType === "esrgan") {
+					const models = [
+						{
+							name: "RealESRGAN_x4plus.pth",
+							relative: "upscalers/RealESRGAN_x4plus.pth",
+							folder: "upscalers",
+							size: 123456,
+							mtime: 1,
+						},
+					];
+					if (refreshedModelLists) {
+						models.push({
+							name: "FreshUpscaler.pth",
+							relative: "upscalers/FreshUpscaler.pth",
+							folder: "upscalers",
+							size: 654321,
+							mtime: 2,
+						});
+					}
 					return route.fulfill({
 						status: 200,
 						contentType: "application/json",
 						body: JSON.stringify({
-							models: [
-								{
-									name: "RealESRGAN_x4plus.pth",
-									relative: "upscalers/RealESRGAN_x4plus.pth",
-									folder: "upscalers",
-									size: 123456,
-									mtime: 1,
-								},
-							],
+							models,
 						}),
 					});
 				}
 				if (queryType === "lora") {
+					const models = [
+						{
+							name: "style-test.safetensors",
+							relative: "loras/style-test.safetensors",
+							folder: "loras",
+							size: 123456,
+							mtime: 1,
+						},
+						{
+							name: "detail-test.safetensors",
+							relative: "loras/detail-test.safetensors",
+							folder: "loras",
+							size: 123456,
+							mtime: 1,
+						},
+					];
+					if (refreshedModelLists) {
+						models.push({
+							name: "fresh-lora.safetensors",
+							relative: "loras/fresh-lora.safetensors",
+							folder: "loras",
+							size: 654321,
+							mtime: 2,
+						});
+					}
 					return route.fulfill({
 						status: 200,
 						contentType: "application/json",
 						body: JSON.stringify({
-							models: [
-								{
-									name: "style-test.safetensors",
-									relative: "loras/style-test.safetensors",
-									folder: "loras",
-									size: 123456,
-									mtime: 1,
-								},
-								{
-									name: "detail-test.safetensors",
-									relative: "loras/detail-test.safetensors",
-									folder: "loras",
-									size: 123456,
-									mtime: 1,
-								},
-							],
+							models,
 						}),
+					});
+				}
+				const models = [
+					{
+						name: "test.gguf",
+						relative: "test.gguf",
+						size: 123456,
+						mtime: 1,
+					},
+				];
+				if (refreshedModelLists) {
+					models.push({
+						name: "fresh-model.gguf",
+						relative: "fresh-model.gguf",
+						size: 654321,
+						mtime: 2,
 					});
 				}
 				return route.fulfill({
 					status: 200,
 					contentType: "application/json",
 					body: JSON.stringify({
-						models: [
-							{
-								name: "test.gguf",
-								relative: "test.gguf",
-								size: 123456,
-								mtime: 1,
-							},
-						],
+						models,
 					}),
 				});
 			}
@@ -588,6 +618,53 @@ function findChromiumExecutable() {
 			);
 		});
 		check("LoRA strength slider is rendered with expected range", loraUi);
+
+		await page
+			.locator("#gen-model-components .gen-model-field select")
+			.first()
+			.selectOption("models/test.gguf");
+		await page.fill("#gen-prompt", "refresh keeps prompt");
+		await page.dispatchEvent("#gen-prompt", "input");
+		await page.fill("#gen-seed", "12345");
+		await page.dispatchEvent("#gen-seed", "change");
+		const refreshNavBase = navigationCount;
+		refreshedModelLists = true;
+		await page.click("#btn-refresh-model-lists");
+		await page.waitForFunction(() =>
+			Array.from(
+				document.querySelectorAll("#gen-model-components option"),
+			).some((o) => o.value === "models/fresh-model.gguf"),
+		);
+		const refreshedGenerateModels = await page.evaluate(() => {
+			const modelSelect = document.querySelector(
+				"#gen-model-components .gen-model-field select",
+			);
+			const loraOptions = Array.from(
+				document.querySelectorAll("#gen-model-components .lora-row select option"),
+			).map((o) => o.value);
+			const state = window.SDGui.flagCore.getFlagValues();
+			return {
+				modelValue: modelSelect ? modelSelect.value : "",
+				hasFreshLora: loraOptions.includes("models/loras/fresh-lora.safetensors"),
+				prompt: state.prompt,
+				seed: state.seed,
+				loraCount: Array.isArray(state.lora_files) ? state.lora_files.length : 0,
+			};
+		});
+		check(
+			"Refresh model lists updates dropdowns without navigation",
+			navigationCount === refreshNavBase &&
+				refreshedGenerateModels.modelValue === "models/test.gguf" &&
+				refreshedGenerateModels.hasFreshLora,
+		);
+		check(
+			"Refresh model lists preserves Generate state",
+			refreshedGenerateModels.prompt === "refresh keeps prompt" &&
+				refreshedGenerateModels.seed === 12345 &&
+				refreshedGenerateModels.loraCount === 2,
+		);
+		await page.fill("#gen-prompt", "a cat");
+		await page.dispatchEvent("#gen-prompt", "input");
 
 		// 5. Click Generate -> posts + polls.
 		await page.click("#btn-generate");
@@ -1016,6 +1093,7 @@ function findChromiumExecutable() {
 		check("video tab shows video inputs", !videoVis.video);
 		check("video tab hides image metadata inspector", videoVis.metadata);
 
+		refreshedModelLists = false;
 		const upscaleVis = await sectionVisibility("upscale");
 		check("Upscale tab sets upscale mode", upscaleVis.mode === "upscale");
 		check("upscale shows upscale inputs", !upscaleVis.upscale);
@@ -1031,6 +1109,22 @@ function findChromiumExecutable() {
 		check(
 			"upscale model dropdown lists upscalers folder",
 			upscaleOptions.includes("models/upscalers/RealESRGAN_x4plus.pth"),
+		);
+		refreshedModelLists = true;
+		await page.click("#btn-refresh-upscale-models");
+		await page.waitForFunction(() =>
+			Array.from(document.querySelectorAll("#gen-upscale-model option")).some(
+				(o) => o.value === "models/upscalers/FreshUpscaler.pth",
+			),
+		);
+		const refreshedUpscaleOptions = await page.evaluate(() =>
+			Array.from(document.querySelectorAll("#gen-upscale-model option")).map(
+				(o) => o.value,
+			),
+		);
+		check(
+			"Upscale refresh updates upscaler dropdown",
+			refreshedUpscaleOptions.includes("models/upscalers/FreshUpscaler.pth"),
 		);
 
 		const convertVis = await sectionVisibility("convert");

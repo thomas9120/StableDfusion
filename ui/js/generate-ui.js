@@ -39,6 +39,7 @@ window.SDGui.generateUi = (() => {
 	var controls = ctrl.controls;
 
 	var renderBundleFields = mf.renderBundleFields;
+	var refreshModelLists = mf.refreshModelLists;
 	var generate = runner.generate;
 	var cancel = runner.cancel;
 	var inspectMetadata = runner.inspectMetadata;
@@ -539,6 +540,21 @@ window.SDGui.generateUi = (() => {
 		if (cancelBtn) cancelBtn.addEventListener("click", cancel);
 		var metadataBtn = $("btn-inspect-metadata");
 		if (metadataBtn) metadataBtn.addEventListener("click", inspectMetadata);
+		["btn-refresh-model-lists", "btn-refresh-upscale-models"].forEach((id) => {
+			var btn = $(id);
+			if (!btn) return;
+			btn.addEventListener("click", async () => {
+				btn.disabled = true;
+				try {
+					await refreshModelLists();
+					window.SDGui.toast("Model lists refreshed.", "success");
+				} catch (e) {
+					window.SDGui.toast(e.message || "Could not refresh model lists.", "error");
+				} finally {
+					btn.disabled = false;
+				}
+			});
+		});
 
 		var seedBtn = $("btn-random-seed");
 		if (seedBtn) {
@@ -603,6 +619,7 @@ window.SDGui.generateUi = (() => {
 	return {
 		init: init,
 		renderBundleFields: renderBundleFields,
+		refreshModelLists: refreshModelLists,
 		generate: generate,
 		cancel: cancel,
 		renderHistory: hist.render,
