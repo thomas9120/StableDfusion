@@ -335,7 +335,7 @@
                 <label class="form-label"
                   >Init image
                   <span class="help-text"
-                    >(optional, enables img2img)</span
+                    >(classic img2img / inpaint)</span
                   ></label
                 >
                 <div class="field-row">
@@ -353,6 +353,28 @@
                   </button>
                 </div>
               </div>
+              <div class="form-group">
+                <label class="form-label"
+                  >Reference image
+                  <span class="help-text"
+                    >(Flux Kontext / Qwen Image Edit)</span
+                  ></label
+                >
+                <div class="field-row">
+                  <input
+                    type="text"
+                    id="gen-ref-image"
+                    placeholder="output/cat.png"
+                  />
+                  <button
+                    id="btn-browse-ref-image"
+                    class="btn btn-sm"
+                    type="button"
+                  >
+                    Browse
+                  </button>
+                </div>
+              </div>
               <div class="form-row">
                 <div class="form-group">
                   <label class="form-label">Strength</label>
@@ -363,6 +385,17 @@
                     max="1"
                     step="0.05"
                     value="0.75"
+                  />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Image CFG</label>
+                  <input
+                    type="number"
+                    id="gen-img-cfg"
+                    min="0"
+                    max="30"
+                    step="0.1"
+                    value="0"
                   />
                 </div>
                 <div class="form-group">

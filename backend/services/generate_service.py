@@ -310,6 +310,8 @@ def _prepare(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
         "image": params.get("image", ""),  # metadata mode input
         "init_img": params.get("init_img", ""),  # img2img / upscale input
         "strength": params.get("strength"),  # img2img denoising strength
+        "ref_image": params.get("ref_image", ""),  # Kontext / image-edit reference
+        "img_cfg_scale": params.get("img_cfg_scale"),  # edit/inpaint image guidance
         "mask": params.get("mask", ""),  # inpaint mask
         "control_image": params.get("control_image", ""),  # controlnet
         "upscale_model": params.get("upscale_model", ""),

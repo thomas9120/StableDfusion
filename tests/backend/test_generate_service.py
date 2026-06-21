@@ -271,6 +271,39 @@ def test_prepare_upscale_requires_no_diffusion_model(tmp_path):
     assert prepared["sidecar"]["upscale_model"] == "esrgan.pth"
 
 
+def test_prepare_records_image_edit_params(tmp_path):
+    ctx = _ctx(tmp_path)
+    prepared = generate_service._prepare(
+        ctx,
+        {
+            "mode": "img_gen",
+            "args": [
+                ["--model", "model.safetensors"],
+                ["--prompt", "change the sign"],
+                ["--init-img", "init.png"],
+                ["--ref-image", "ref.png"],
+                ["--strength", "0.55"],
+                ["--img-cfg-scale", "1.25"],
+            ],
+            "seed": 0,
+            "total_steps": 20,
+            "preview_method": "none",
+            "params": {
+                "prompt": "change the sign",
+                "init_img": "init.png",
+                "ref_image": "ref.png",
+                "strength": 0.55,
+                "img_cfg_scale": 1.25,
+            },
+        },
+    )
+    sidecar = prepared["sidecar"]
+    assert sidecar["init_img"] == "init.png"
+    assert sidecar["ref_image"] == "ref.png"
+    assert sidecar["strength"] == 0.55
+    assert sidecar["img_cfg_scale"] == 1.25
+
+
 def test_collect_results_includes_non_png(tmp_path):
     """convert mode produces a .gguf (or other non-PNG); _collect_results must
     surface it (Phase 3: globbed by extension)."""

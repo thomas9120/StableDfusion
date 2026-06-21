@@ -434,6 +434,43 @@ function findChromiumExecutable() {
 		);
 		check("getLaunchArgs has no error", !setModel.error);
 
+		await page.evaluate(() => {
+			const details = document.querySelector("#gen-img2img-inputs details");
+			if (details) details.open = true;
+		});
+		await page.fill("#gen-init-img", "output/init.png");
+		await page.fill("#gen-ref-image", "output/ref.png");
+		await page.fill("#gen-strength", "0.55");
+		await page.fill("#gen-img-cfg", "1.25");
+		await page.dispatchEvent("#gen-init-img", "input");
+		await page.dispatchEvent("#gen-ref-image", "input");
+		await page.dispatchEvent("#gen-strength", "change");
+		await page.dispatchEvent("#gen-img-cfg", "change");
+		const imageEditArgs = await page.evaluate(() =>
+			window.SDGui.flagCore.getLaunchArgs(),
+		);
+		const imageEditFlat = (imageEditArgs.args || [])
+			.map((p) => p.join("="))
+			.join(" ");
+		check(
+			"img2img controls emit init image and strength",
+			imageEditFlat.includes("--init-img=output/init.png") &&
+				imageEditFlat.includes("--strength=0.55"),
+		);
+		check(
+			"image-edit controls emit reference image and image CFG",
+			imageEditFlat.includes("--ref-image=output/ref.png") &&
+				imageEditFlat.includes("--img-cfg-scale=1.25"),
+		);
+		await page.evaluate(() => {
+			window.SDGui.flagCore.setMultipleFlagValues({
+				init_img: "",
+				ref_image: "",
+				strength: 0.75,
+				img_cfg_scale: 0,
+			});
+		});
+
 		// 3. Generate <-> Configure sync: edit width in Generate, verify command preview.
 		await page.evaluate(() => window.SDGui.flagCore.setFlagValue("width", 768));
 		// Command preview lives in Configure tab; render it then read.
