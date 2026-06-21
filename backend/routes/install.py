@@ -6,6 +6,10 @@ Endpoints:
 - POST /api/install
 - POST /api/update
 - POST /api/cleanup-sdcpp
+- POST /api/sdcpp/active
+- POST /api/sdcpp/repair
+- POST /api/sdcpp/update
+- POST /api/sdcpp/remove
 """
 
 import threading
@@ -15,6 +19,43 @@ from backend.http import Request, Response, sanitize_error
 from backend.services import process_manager, sdcpp_manager
 
 RELEASE_RESPONSE_LIMIT = 30
+
+
+def _runtime_process_running(ctx: AppContext) -> bool:
+    if process_manager.is_process_running(ctx):
+        return True
+    proc = ctx.state.sd_server_process
+    return proc is not None and proc.poll() is None
+
+
+def _runtime_payload(request: Request, response: Response, ctx: AppContext):
+    body = request.body or {}
+    tag = body.get("tag")
+    backend = body.get("backend")
+    if not tag or not backend:
+        response.error("tag and backend required", 400)
+        return None
+    if backend not in ctx.services.backend_specs:
+        response.error(f"Unsupported backend: {backend}", 400)
+        return None
+    return str(tag), str(backend)
+
+
+def _begin_install_operation(response: Response, ctx: AppContext) -> bool:
+    if _runtime_process_running(ctx):
+        response.error("Stop running process first", 400)
+        return False
+    with ctx.state.install_lock:
+        if ctx.state.install_in_progress:
+            response.error("Installation already in progress", 409)
+            return False
+        ctx.state.install_in_progress = True
+        return True
+
+
+def _finish_install_operation(ctx: AppContext) -> None:
+    with ctx.state.install_lock:
+        ctx.state.install_in_progress = False
 
 
 def get_releases(request: Request, response: Response, ctx: AppContext) -> None:
@@ -51,28 +92,21 @@ def start_install(request: Request, response: Response, ctx: AppContext) -> None
     if backend not in ctx.services.backend_specs:
         response.error(f"Unsupported backend: {backend}", 400)
         return
-    if process_manager.is_process_running(ctx):
-        response.error("Stop running process first", 400)
+    if not _begin_install_operation(response, ctx):
         return
-    with ctx.state.install_lock:
-        if ctx.state.install_in_progress:
-            response.error("Installation already in progress", 409)
-            return
-        ctx.state.install_in_progress = True
 
     def _install(tag_value, backend_value):
         try:
             sdcpp_manager.install_release(ctx, tag_value, backend_value, ctx.services.backend_specs)
         finally:
-            with ctx.state.install_lock:
-                ctx.state.install_in_progress = False
+            _finish_install_operation(ctx)
 
     threading.Thread(target=_install, args=(tag, backend), daemon=True).start()
     response.json({"status": "started"})
 
 
 def start_update(request: Request, response: Response, ctx: AppContext) -> None:
-    cfg = ctx.services.load_config()
+    cfg = sdcpp_manager.normalize_install_config(ctx.services.load_config())
     tag = cfg.get("tag")
     backend = cfg.get("backend")
     if not tag or not backend:
@@ -81,42 +115,90 @@ def start_update(request: Request, response: Response, ctx: AppContext) -> None:
     if backend not in ctx.services.backend_specs:
         response.error(f"Unsupported configured backend: {backend}", 400)
         return
-    if process_manager.is_process_running(ctx):
+    start_runtime_update(tag, backend, response, ctx)
+
+
+def set_active_runtime(request: Request, response: Response, ctx: AppContext) -> None:
+    payload = _runtime_payload(request, response, ctx)
+    if payload is None:
+        return
+    if _runtime_process_running(ctx):
         response.error("Stop running process first", 400)
         return
-    with ctx.state.install_lock:
-        if ctx.state.install_in_progress:
-            response.error("Installation already in progress", 409)
-            return
-        ctx.state.install_in_progress = True
+    tag, backend = payload
     try:
-        releases = sdcpp_manager.get_releases(ctx)
-        latest = releases[0]["tag_name"] if releases else None
-        if latest and latest != tag:
-
-            def _update(latest_tag, backend_name):
-                try:
-                    sdcpp_manager.install_release(
-                        ctx, latest_tag, backend_name, ctx.services.backend_specs
-                    )
-                finally:
-                    with ctx.state.install_lock:
-                        ctx.state.install_in_progress = False
-
-            threading.Thread(target=_update, args=(latest, backend), daemon=True).start()
-            response.json({"status": "started", "from": tag, "to": latest})
-        else:
-            with ctx.state.install_lock:
-                ctx.state.install_in_progress = False
-            response.json({"status": "already_latest"})
+        response.json({"active_install": sdcpp_manager.set_active_runtime(ctx, tag, backend)})
+    except ValueError as exc:
+        response.error(str(exc), 400)
     except Exception as exc:
-        with ctx.state.install_lock:
-            ctx.state.install_in_progress = False
+        response.error(sanitize_error(exc, 500), 500)
+
+
+def repair_runtime(request: Request, response: Response, ctx: AppContext) -> None:
+    payload = _runtime_payload(request, response, ctx)
+    if payload is None:
+        return
+    tag, backend = payload
+    if not _begin_install_operation(response, ctx):
+        return
+    set_active = sdcpp_manager.is_active_runtime(ctx, tag, backend)
+
+    def _repair(tag_value, backend_value, should_activate):
+        try:
+            sdcpp_manager.install_release(
+                ctx,
+                tag_value,
+                backend_value,
+                ctx.services.backend_specs,
+                set_active=should_activate,
+            )
+        finally:
+            _finish_install_operation(ctx)
+
+    threading.Thread(target=_repair, args=(tag, backend, set_active), daemon=True).start()
+    response.json({"status": "started", "tag": tag, "backend": backend})
+
+
+def start_runtime_update(tag: str, backend: str, response: Response, ctx: AppContext) -> None:
+    if not _begin_install_operation(response, ctx):
+        return
+
+    def _update(tag_value, backend_value):
+        try:
+            sdcpp_manager.update_runtime(ctx, tag_value, backend_value, ctx.services.backend_specs)
+        finally:
+            _finish_install_operation(ctx)
+
+    threading.Thread(target=_update, args=(tag, backend), daemon=True).start()
+    response.json({"status": "started", "tag": tag, "backend": backend})
+
+
+def update_runtime(request: Request, response: Response, ctx: AppContext) -> None:
+    payload = _runtime_payload(request, response, ctx)
+    if payload is None:
+        return
+    tag, backend = payload
+    start_runtime_update(tag, backend, response, ctx)
+
+
+def remove_runtime(request: Request, response: Response, ctx: AppContext) -> None:
+    payload = _runtime_payload(request, response, ctx)
+    if payload is None:
+        return
+    if _runtime_process_running(ctx):
+        response.error("Stop running process first", 400)
+        return
+    tag, backend = payload
+    try:
+        response.json(sdcpp_manager.remove_runtime(ctx, tag, backend))
+    except ValueError as exc:
+        response.error(str(exc), 400)
+    except Exception as exc:
         response.error(sanitize_error(exc, 500), 500)
 
 
 def cleanup_sdcpp(request: Request, response: Response, ctx: AppContext) -> None:
-    if process_manager.is_process_running(ctx):
+    if _runtime_process_running(ctx):
         response.error("Stop running process first", 400)
         return
     try:

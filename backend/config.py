@@ -16,6 +16,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 # Downloaded stable-diffusion.cpp binaries live here.
 SDCPP_DIR = ROOT_DIR / "sdcpp"
 SDCPP_BIN_DIR = SDCPP_DIR / "bin"
+SDCPP_INSTALLS_DIR = SDCPP_DIR / "installs"
 
 # User model files (.safetensors / .ckpt / .gguf / .sft / .bin).
 MODELS_DIR = ROOT_DIR / "models"

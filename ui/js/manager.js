@@ -226,6 +226,161 @@ window.SDGui.manager = (() => {
 		backendSelect.value = hasCurrent ? current : available[0].id;
 	}
 
+	function runtimeLabel(runtime) {
+		if (!runtime) return "runtime";
+		return String(runtime.tag || "?") + " (" + String(runtime.backend || "?") + ")";
+	}
+
+	function makeRuntimeButton(label, className, handler, disabled) {
+		var btn = document.createElement("button");
+		btn.type = "button";
+		btn.className = className || "btn btn-sm";
+		btn.textContent = label;
+		btn.disabled = !!disabled;
+		btn.addEventListener("click", handler);
+		return btn;
+	}
+
+	async function postRuntimeAction(endpoint, runtime) {
+		return await fetchJson(endpoint, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				tag: runtime.tag,
+				backend: runtime.backend,
+			}),
+		});
+	}
+
+	async function setActiveRuntime(runtime) {
+		showStatus("info", "Switching active runtime to " + runtimeLabel(runtime) + "...");
+		try {
+			await postRuntimeAction("/api/sdcpp/active", runtime);
+			showStatus("success", "Active runtime set to " + runtimeLabel(runtime) + ".");
+			checkStatus();
+		} catch (e) {
+			showStatus("error", "Failed to switch runtime: " + e.message);
+		}
+	}
+
+	async function repairRuntime(runtime) {
+		var ok = await window.SDGui.confirmAction(
+			"Repair Runtime",
+			"Reinstall " + runtimeLabel(runtime) + "? This replaces only that runtime's binaries.",
+			"Repair",
+		);
+		if (!ok) return;
+		showStatus("info", "Repairing " + runtimeLabel(runtime) + "...");
+		setInstallButtonsDisabled(true);
+		showProgress(true);
+		try {
+			await postRuntimeAction("/api/sdcpp/repair", runtime);
+			pollInstallProgress();
+		} catch (e) {
+			showStatus("error", "Repair request failed: " + e.message);
+			showProgress(false);
+			setInstallButtonsDisabled(false);
+		}
+	}
+
+	async function updateRuntime(runtime) {
+		showStatus("info", "Checking update for " + runtimeLabel(runtime) + "...");
+		setInstallButtonsDisabled(true);
+		showProgress(true);
+		try {
+			await postRuntimeAction("/api/sdcpp/update", runtime);
+			pollInstallProgress();
+		} catch (e) {
+			showStatus("error", "Update request failed: " + e.message);
+			showProgress(false);
+			setInstallButtonsDisabled(false);
+		}
+	}
+
+	async function removeRuntime(runtime) {
+		var ok = await window.SDGui.confirmAction(
+			"Remove Runtime",
+			"Delete binaries for " +
+				runtimeLabel(runtime) +
+				"? Models, presets, and output are kept.",
+			"Remove",
+		);
+		if (!ok) return;
+		try {
+			var result = await postRuntimeAction("/api/sdcpp/remove", runtime);
+			showStatus(
+				"success",
+				"Removed " + (result.removed_files || 0) + " file(s).",
+			);
+			checkStatus();
+		} catch (e) {
+			showStatus("error", "Remove failed: " + e.message);
+		}
+	}
+
+	function renderRuntimeList(status, container) {
+		var runtimes = Array.isArray(status.installed_backends)
+			? status.installed_backends
+			: [];
+		if (!runtimes.length) return false;
+		var list = document.createElement("div");
+		list.className = "runtime-list";
+		runtimes.forEach((runtime) => {
+			var row = document.createElement("div");
+			row.className = "runtime-row" + (runtime.active ? " runtime-active" : "");
+
+			var main = document.createElement("div");
+			main.className = "runtime-main";
+			var name = document.createElement("div");
+			name.className = "runtime-name";
+			name.textContent = runtimeLabel(runtime);
+			var meta = document.createElement("div");
+			meta.className = "runtime-meta";
+			meta.textContent = runtime.path || "";
+			main.appendChild(name);
+			main.appendChild(meta);
+
+			var statusChip = document.createElement("span");
+			statusChip.className =
+				"installed-chip " +
+				(runtime.active
+					? "installed-chip-primary"
+					: runtime.exists
+						? "installed-chip-ok"
+						: "installed-chip-missing");
+			statusChip.appendChild(
+				document.createTextNode(runtime.active ? "Active" : runtime.exists ? "Ready" : "Missing"),
+			);
+
+			var actions = document.createElement("div");
+			actions.className = "runtime-actions";
+			actions.appendChild(
+				makeRuntimeButton(
+					"Set Active",
+					"btn btn-sm",
+					() => setActiveRuntime(runtime),
+					runtime.active || !runtime.exists,
+				),
+			);
+			actions.appendChild(
+				makeRuntimeButton("Update", "btn btn-sm", () => updateRuntime(runtime), !runtime.exists),
+			);
+			actions.appendChild(
+				makeRuntimeButton("Repair", "btn btn-sm", () => repairRuntime(runtime), false),
+			);
+			actions.appendChild(
+				makeRuntimeButton("Remove", "btn btn-sm btn-danger", () => removeRuntime(runtime), false),
+			);
+
+			row.appendChild(main);
+			row.appendChild(statusChip);
+			row.appendChild(actions);
+			list.appendChild(row);
+		});
+		container.appendChild(list);
+		return true;
+	}
+
 	async function fetchReleases(force) {
 		var sel = document.getElementById("release-select");
 		if (!sel) return;
@@ -367,13 +522,17 @@ window.SDGui.manager = (() => {
 		};
 
 		if (status.installed) {
-			info.className = "installed-grid";
+			info.className = "";
+			var summary = document.createElement("div");
+			summary.className = "installed-grid";
 			appendInstalledChip(
 				"Version",
 				String(status.installed_version_name || status.version),
 				"installed-chip-primary",
 			);
 			appendInstalledChip("Backend", String(status.backend), "");
+			while (info.firstChild) summary.appendChild(info.firstChild);
+			info.appendChild(summary);
 			Object.entries(status.executables || {}).forEach((entry) => {
 				var name = entry[0];
 				var exists = entry[1];
@@ -383,6 +542,7 @@ window.SDGui.manager = (() => {
 					exists ? "installed-chip-ok" : "installed-chip-missing",
 				);
 			});
+			renderRuntimeList(status, info);
 		} else if (status.config_stale) {
 			info.className = "";
 			var missing = Array.isArray(status.missing_runtime_files)
@@ -411,6 +571,7 @@ window.SDGui.manager = (() => {
 			info.appendChild(hint);
 			appendRow("Version (config)", String(status.version));
 			appendRow("Backend (config)", String(status.backend));
+			renderRuntimeList(status, info);
 		} else {
 			info.className = "";
 			var empty = document.createElement("span");
@@ -433,6 +594,7 @@ window.SDGui.manager = (() => {
 					". Select a version above and click Install.";
 			}
 			info.appendChild(empty);
+			renderRuntimeList(status, info);
 		}
 	}
 
@@ -476,25 +638,17 @@ window.SDGui.manager = (() => {
 
 	async function repairInstall() {
 		var status = latestStatus || (await checkStatus());
-		if (!status || !status.version || !status.backend) {
-			showStatus("error", "No saved installation config found to repair.");
+		var runtime =
+			status && status.active_install
+				? status.active_install
+				: status && status.version && status.backend
+					? { tag: status.version, backend: status.backend }
+					: null;
+		if (!runtime) {
+			showStatus("error", "No active runtime found to repair.");
 			return;
 		}
-		var ok = await window.SDGui.confirmAction(
-			"Repair Install",
-			"Repair installation for " +
-				status.version +
-				" (" +
-				status.backend +
-				")? This will replace existing stable-diffusion.cpp binaries.",
-			"Repair",
-		);
-		if (!ok) return;
-		await startInstall(
-			status.version,
-			status.backend,
-			"Repairing " + status.version + " (" + status.backend + ")...",
-		);
+		await repairRuntime(runtime);
 	}
 
 	async function removeSdcppFiles() {
@@ -503,22 +657,17 @@ window.SDGui.manager = (() => {
 			showStatus("error", "Stop the running process before cleaning files.");
 			return;
 		}
-		var ok = await window.SDGui.confirmAction(
-			"Remove Binaries",
-			"Delete all files under sdcpp/ and clear install metadata? Models, presets, and output are kept.",
-			"Remove",
-		);
-		if (!ok) return;
-		try {
-			var result = await fetchJson("/api/cleanup-sdcpp", { method: "POST" });
-			showStatus(
-				"success",
-				"Removed " + (result.removed_files || 0) + " file(s).",
-			);
-			checkStatus();
-		} catch (e) {
-			showStatus("error", "Cleanup failed: " + e.message);
+		var runtime =
+			status && status.active_install
+				? status.active_install
+				: status && status.version && status.backend
+					? { tag: status.version, backend: status.backend }
+					: null;
+		if (!runtime) {
+			showStatus("error", "No active runtime found to remove.");
+			return;
 		}
+		await removeRuntime(runtime);
 	}
 
 	async function checkForUpdates() {
@@ -890,6 +1039,9 @@ window.SDGui.manager = (() => {
 		ids.forEach((id) => {
 			var el = document.getElementById(id);
 			if (el) el.disabled = disabled;
+		});
+		document.querySelectorAll(".runtime-actions button").forEach((el) => {
+			el.disabled = disabled;
 		});
 	}
 

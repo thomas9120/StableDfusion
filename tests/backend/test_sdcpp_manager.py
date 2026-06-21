@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from backend.context import AppContext, AppPaths  # noqa: E402
 from backend.services import sdcpp_manager  # noqa: E402
 
 # Realistic asset names observed from the live GitHub releases API.
@@ -94,3 +95,105 @@ def test_sha256_file_matches_hashlib(tmp_path):
     f = tmp_path / "blob.bin"
     f.write_bytes(payload)
     assert sdcpp_manager.sha256_file(f) == hashlib.sha256(payload).hexdigest()
+
+
+def make_ctx(tmp_path, initial_config):
+    cfg = dict(initial_config)
+    paths = AppPaths(
+        root=tmp_path,
+        sdcpp=tmp_path / "sdcpp",
+        sdcpp_bin=tmp_path / "sdcpp" / "bin",
+        sdcpp_installs=tmp_path / "sdcpp" / "installs",
+        models=tmp_path / "models",
+        output=tmp_path / "output",
+        output_preview=tmp_path / "output" / ".preview",
+        output_gallery=tmp_path / "output" / ".gallery",
+        presets=tmp_path / "presets",
+        config_file=tmp_path / "config.json",
+        ui=tmp_path / "ui",
+        app_logo=tmp_path / "assets" / "logo.png",
+        tools=tmp_path / "tools",
+        cloudflared=tmp_path / "tools" / "cloudflared",
+    )
+    ctx = AppContext(paths=paths)
+    ctx.services.load_config = lambda: dict(cfg)
+
+    def save_config(next_cfg):
+        cfg.clear()
+        cfg.update(next_cfg)
+
+    ctx.services.save_config = save_config
+    ctx.services.sdcpp_tools = ("sd-cli", "sd-server")
+    ctx.services.get_tool_filename = lambda tool: tool + ".exe"
+    ctx.services.current_platform = "win32"
+    return ctx, cfg
+
+
+def test_normalize_install_config_migrates_legacy_shape():
+    cfg = sdcpp_manager.normalize_install_config(
+        {"version": "Build 1", "tag": "master-1-abc", "backend": "vulkan"}
+    )
+    assert cfg["active_install"] == {
+        "tag": "master-1-abc",
+        "backend": "vulkan",
+        "version": "Build 1",
+    }
+    assert cfg["installed_backends"] == [cfg["active_install"]]
+
+
+def test_active_runtime_uses_install_folder_when_present(tmp_path):
+    ctx, _cfg = make_ctx(
+        tmp_path,
+        {
+            "active_install": {
+                "tag": "master-1-abc",
+                "backend": "vulkan",
+                "version": "Build 1",
+            },
+            "installed_backends": [
+                {"tag": "master-1-abc", "backend": "vulkan", "version": "Build 1"}
+            ],
+        },
+    )
+    expected = tmp_path / "sdcpp" / "installs" / "master-1-abc" / "vulkan" / "bin"
+    expected.mkdir(parents=True)
+    assert sdcpp_manager.get_active_runtime_bin(ctx) == expected
+
+
+def test_active_runtime_falls_back_to_legacy_bin_for_existing_install(tmp_path):
+    ctx, _cfg = make_ctx(
+        tmp_path,
+        {"version": "Build 1", "tag": "master-1-abc", "backend": "vulkan"},
+    )
+    ctx.paths.sdcpp_bin.mkdir(parents=True)
+    assert sdcpp_manager.get_active_runtime_bin(ctx) == ctx.paths.sdcpp_bin
+
+
+def test_remove_runtime_deletes_only_target_and_selects_next_active(tmp_path):
+    ctx, cfg = make_ctx(
+        tmp_path,
+        {
+            "active_install": {
+                "tag": "master-1-abc",
+                "backend": "vulkan",
+                "version": "Build 1",
+            },
+            "installed_backends": [
+                {"tag": "master-1-abc", "backend": "vulkan", "version": "Build 1"},
+                {"tag": "master-1-abc", "backend": "cpu-avx2", "version": "Build 1"},
+            ],
+        },
+    )
+    vulkan = sdcpp_manager.runtime_bin_dir(ctx, "master-1-abc", "vulkan")
+    cpu = sdcpp_manager.runtime_bin_dir(ctx, "master-1-abc", "cpu-avx2")
+    vulkan.mkdir(parents=True)
+    cpu.mkdir(parents=True)
+    (vulkan / "sd-cli.exe").write_bytes(b"vulkan")
+    (cpu / "sd-cli.exe").write_bytes(b"cpu")
+
+    result = sdcpp_manager.remove_runtime(ctx, "master-1-abc", "vulkan")
+
+    assert result["removed_files"] == 1
+    assert not vulkan.exists()
+    assert (cpu / "sd-cli.exe").exists()
+    assert cfg["active_install"]["backend"] == "cpu-avx2"

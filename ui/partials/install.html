@@ -32,8 +32,8 @@
 
     <div class="form-row">
       <button id="btn-install" class="btn btn-primary">Install</button>
-      <button id="btn-update" class="btn">Check for Updates</button>
-      <button id="btn-repair" class="btn hidden">Repair Install</button>
+      <button id="btn-update" class="btn">Update Active Runtime</button>
+      <button id="btn-repair" class="btn hidden">Repair Active Runtime</button>
     </div>
 
     <div id="download-progress" class="progress-container hidden">
@@ -44,7 +44,7 @@
     </div>
 
     <div class="section">
-      <h3>Installed</h3>
+      <h3>Installed Runtimes</h3>
       <div id="installed-info"></div>
     </div>
 
@@ -67,7 +67,7 @@
       <h3>Maintenance</h3>
       <div class="form-row">
         <button id="btn-remove-sdcpp" class="btn btn-danger">
-          Remove Binaries
+          Remove Active Runtime
         </button>
         <button id="btn-restart-app" class="btn" type="button">
           Restart GUI Server

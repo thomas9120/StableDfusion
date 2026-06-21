@@ -17,6 +17,7 @@ class AppPaths:
     root: Path = config.ROOT_DIR
     sdcpp: Path = config.SDCPP_DIR
     sdcpp_bin: Path = config.SDCPP_BIN_DIR
+    sdcpp_installs: Path = config.SDCPP_INSTALLS_DIR
     models: Path = config.MODELS_DIR
     output: Path = config.OUTPUT_DIR
     output_preview: Path = config.OUTPUT_PREVIEW_DIR

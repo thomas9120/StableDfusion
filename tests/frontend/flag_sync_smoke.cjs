@@ -245,6 +245,29 @@ function findChromiumExecutable() {
 						installed: true,
 						version: "smoke",
 						backend: "cpu-avx2",
+						active_install: {
+							tag: "smoke",
+							backend: "cpu-avx2",
+							version: "smoke",
+						},
+						installed_backends: [
+							{
+								tag: "smoke",
+								backend: "cpu-avx2",
+								version: "smoke",
+								active: true,
+								exists: true,
+								path: "sdcpp/installs/smoke/cpu-avx2/bin",
+							},
+							{
+								tag: "smoke",
+								backend: "vulkan",
+								version: "smoke",
+								active: false,
+								exists: true,
+								path: "sdcpp/installs/smoke/vulkan/bin",
+							},
+						],
 					}),
 				});
 			}
@@ -1104,6 +1127,24 @@ function findChromiumExecutable() {
 		// leave the current page alone. A forced reload here would fall back to
 		// the Generate tab and make shutdown look like an app restart.
 		await page.click('.nav-item[data-section="install"]');
+		const runtimeUi = await page.evaluate(() => ({
+			rows: document.querySelectorAll(".runtime-row").length,
+			activeRows: document.querySelectorAll(".runtime-row.runtime-active").length,
+			labels: Array.from(document.querySelectorAll(".runtime-name")).map(
+				(n) => n.textContent,
+			),
+			setActiveDisabled: Array.from(
+				document.querySelectorAll(".runtime-actions button"),
+			).some(
+				(btn) => btn.textContent === "Set Active" && btn.disabled === false,
+			),
+		}));
+		check("Install tab lists installed runtimes", runtimeUi.rows === 2);
+		check("Install tab marks one active runtime", runtimeUi.activeRows === 1);
+		check(
+			"Install tab shows inactive runtime action",
+			runtimeUi.labels.includes("smoke (vulkan)") && runtimeUi.setActiveDisabled,
+		);
 		const stopNavBase = navigationCount;
 		await page.click("#btn-stop-app");
 		await page.click("#confirm-modal-ok");

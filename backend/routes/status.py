@@ -13,8 +13,9 @@ from backend.services import sdcpp_manager
 def get_status(request: Request, response: Response, ctx: AppContext) -> None:
     try:
         services = ctx.services
-        cfg = dict(services.load_config())
+        cfg = sdcpp_manager.normalize_install_config(services.load_config())
         has_config = bool(cfg.get("tag"))
+        active_bin = sdcpp_manager.get_active_runtime_bin(ctx)
 
         executables: dict[str, bool] = {}
         for tool in services.sdcpp_tools:
@@ -40,6 +41,8 @@ def get_status(request: Request, response: Response, ctx: AppContext) -> None:
                 "config_stale": config_stale,
                 "version": cfg.get("tag"),
                 "backend": cfg.get("backend"),
+                "active_install": cfg.get("active_install"),
+                "installed_backends": sdcpp_manager.get_installed_runtimes(ctx),
                 "installed_version_name": cfg.get("version"),
                 "executables": executables,
                 "missing_runtime_files": missing_runtime_files,
@@ -55,6 +58,7 @@ def get_status(request: Request, response: Response, ctx: AppContext) -> None:
                 "models_dir": str(ctx.paths.models),
                 "output_dir": str(ctx.paths.output),
                 "sdcpp_dir": str(ctx.paths.sdcpp),
+                "active_sdcpp_bin_dir": str(active_bin),
             }
         )
     except Exception as exc:

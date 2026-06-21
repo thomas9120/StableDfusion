@@ -14,6 +14,7 @@ node_modules/
 # App data (created at runtime)
 sdcpp/bin/*
 !sdcpp/bin/.gitkeep
+sdcpp/installs/
 output/
 models/*
 !models/.gitkeep

@@ -8,7 +8,7 @@
 | File | Role |
 |---|---|
 | `server.py` | Entry point — `python server.py` boots the backend on port 5250 |
-| `config.json` | Persisted install state (version, backend, tag) |
+| `config.json` | Persisted install state (active runtime + installed backend registry) |
 | `install-windows.bat` | One-click Windows installer |
 | `start-windows.bat` | One-click Windows launcher |
 | `install.sh` | macOS/Linux installer |
@@ -59,6 +59,10 @@ placeholder intact. The `ui/partials/` directory is never served directly —
 | `/api/install` | POST | `install.start_install` |
 | `/api/update` | POST | `install.start_update` |
 | `/api/cleanup-sdcpp` | POST | `install.cleanup_sdcpp` |
+| `/api/sdcpp/active` | POST | `install.set_active_runtime` |
+| `/api/sdcpp/repair` | POST | `install.repair_runtime` |
+| `/api/sdcpp/update` | POST | `install.update_runtime` |
+| `/api/sdcpp/remove` | POST | `install.remove_runtime` |
 | `/api/generate` | POST | `generate.generate` |
 | `/api/generate/cancel` | POST | `generate.cancel` |
 | `/api/hf/repo-files` | POST | `hf_download.list_repo_files` |
@@ -177,7 +181,12 @@ modules or bundler assumptions.
 
 Created on boot by `backend/app.main()`: `models/`, `models/diffusion/`,
 `models/vae/`, `models/text-encoders/`, `models/loras/`, `presets/`,
-`sdcpp/bin/`, `output/`, `output/.preview/`, `output/.gallery/`.
+`sdcpp/bin/` (legacy/current fallback), `sdcpp/installs/`, `output/`,
+`output/.preview/`, `output/.gallery/`.
+
+New stable-diffusion.cpp installs are stored by runtime under
+`sdcpp/installs/<tag>/<backend>/bin/`. The active runtime recorded in
+`config.json` is the one used by one-shot generation and `sd-server`.
 
 ## Tests (`tests/`)
 

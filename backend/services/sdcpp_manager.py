@@ -34,6 +34,7 @@ from ..context import AppContext
 
 # macOS @rpath/ libraries reported by `otool -L`.
 RPATH_LIBRARY_RE = re.compile(r"^\s*@rpath/([^\s(]+)")
+INSTALL_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 # Short-term in-memory cache so the Install tab doesn't hammer GitHub on every
 # poll. Bypassed by passing force=True (e.g. a manual refresh). Protected by a
@@ -41,6 +42,250 @@ RPATH_LIBRARY_RE = re.compile(r"^\s*@rpath/([^\s(]+)")
 _RELEASES_CACHE: dict[str, Any] = {"data": None, "fetched_at": 0.0}
 _RELEASES_CACHE_LOCK = threading.Lock()
 _RELEASES_CACHE_TTL = 60.0
+
+
+def _blank_install_config() -> dict[str, Any]:
+    return {
+        "version": None,
+        "backend": None,
+        "tag": None,
+        "active_install": None,
+        "installed_backends": [],
+    }
+
+
+def _valid_install_part(value: object) -> bool:
+    return bool(isinstance(value, str) and INSTALL_ID_RE.fullmatch(value))
+
+
+def _install_identity(item: Mapping[str, Any]) -> tuple[str, str] | None:
+    tag = item.get("tag")
+    backend = item.get("backend")
+    if not _valid_install_part(tag) or not _valid_install_part(backend):
+        return None
+    return str(tag), str(backend)
+
+
+def normalize_install_config(raw: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Return current install config shape, migrating legacy top-level fields."""
+    cfg = _blank_install_config()
+    if isinstance(raw, Mapping):
+        cfg.update(dict(raw))
+
+    active = cfg.get("active_install")
+    if not isinstance(active, Mapping):
+        legacy_tag = cfg.get("tag")
+        legacy_backend = cfg.get("backend")
+        if _valid_install_part(legacy_tag) and _valid_install_part(legacy_backend):
+            active = {
+                "tag": legacy_tag,
+                "backend": legacy_backend,
+                "version": cfg.get("version") or legacy_tag,
+            }
+        else:
+            active = None
+
+    installed: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for item in cfg.get("installed_backends") or []:
+        if not isinstance(item, Mapping):
+            continue
+        identity = _install_identity(item)
+        if not identity or identity in seen:
+            continue
+        tag, backend = identity
+        installed.append(
+            {
+                "tag": tag,
+                "backend": backend,
+                "version": item.get("version") or tag,
+            }
+        )
+        seen.add(identity)
+
+    if isinstance(active, Mapping):
+        identity = _install_identity(active)
+        if identity:
+            tag, backend = identity
+            active = {
+                "tag": tag,
+                "backend": backend,
+                "version": active.get("version") or tag,
+            }
+            if identity not in seen:
+                installed.append(dict(active))
+                seen.add(identity)
+        else:
+            active = None
+
+    cfg["active_install"] = active
+    cfg["installed_backends"] = installed
+    if active:
+        cfg["tag"] = active["tag"]
+        cfg["backend"] = active["backend"]
+        cfg["version"] = active.get("version") or active["tag"]
+    else:
+        cfg["tag"] = None
+        cfg["backend"] = None
+        cfg["version"] = None
+    return cfg
+
+
+def save_install_config(ctx: AppContext, cfg: Mapping[str, Any]) -> None:
+    ctx.services.save_config(normalize_install_config(cfg))
+
+
+def runtime_bin_dir(ctx: AppContext, tag: str, backend: str) -> pathlib.Path:
+    if not _valid_install_part(tag) or not _valid_install_part(backend):
+        raise ValueError("Invalid runtime tag/backend.")
+    return ctx.paths.sdcpp_installs / tag / backend / "bin"
+
+
+def legacy_runtime_bin_dir(ctx: AppContext, tag: str, backend: str) -> pathlib.Path | None:
+    cfg = normalize_install_config(ctx.services.load_config())
+    active = cfg.get("active_install")
+    if (
+        isinstance(active, Mapping)
+        and active.get("tag") == tag
+        and active.get("backend") == backend
+        and not runtime_bin_dir(ctx, tag, backend).exists()
+        and ctx.paths.sdcpp_bin.exists()
+    ):
+        return ctx.paths.sdcpp_bin
+    return None
+
+
+def runtime_bin_dir_for_install(ctx: AppContext, item: Mapping[str, Any]) -> pathlib.Path:
+    identity = _install_identity(item)
+    if not identity:
+        raise ValueError("Invalid runtime metadata.")
+    tag, backend = identity
+    return legacy_runtime_bin_dir(ctx, tag, backend) or runtime_bin_dir(ctx, tag, backend)
+
+
+def get_active_install(ctx: AppContext) -> dict[str, Any] | None:
+    active = normalize_install_config(ctx.services.load_config()).get("active_install")
+    return dict(active) if isinstance(active, Mapping) else None
+
+
+def is_active_runtime(ctx: AppContext, tag: str, backend: str) -> bool:
+    active = get_active_install(ctx)
+    return _install_identity(active or {}) == (tag, backend)
+
+
+def get_active_runtime_bin(ctx: AppContext) -> pathlib.Path:
+    active = get_active_install(ctx)
+    if not active:
+        return ctx.paths.sdcpp_bin
+    return runtime_bin_dir_for_install(ctx, active)
+
+
+def get_installed_runtimes(ctx: AppContext) -> list[dict[str, Any]]:
+    cfg = normalize_install_config(ctx.services.load_config())
+    active = cfg.get("active_install") or {}
+    active_identity = _install_identity(active) if isinstance(active, Mapping) else None
+    runtimes: list[dict[str, Any]] = []
+    for item in cfg.get("installed_backends") or []:
+        if not isinstance(item, Mapping):
+            continue
+        identity = _install_identity(item)
+        if not identity:
+            continue
+        tag, backend = identity
+        bin_dir = runtime_bin_dir_for_install(ctx, item)
+        runtimes.append(
+            {
+                "tag": tag,
+                "backend": backend,
+                "version": item.get("version") or tag,
+                "active": identity == active_identity,
+                "path": str(bin_dir),
+                "exists": bin_dir.exists(),
+            }
+        )
+    return runtimes
+
+
+def _upsert_runtime(
+    ctx: AppContext,
+    tag: str,
+    backend: str,
+    version: str,
+    *,
+    set_active: bool,
+) -> None:
+    cfg = normalize_install_config(ctx.services.load_config())
+    identity = (tag, backend)
+    installed: list[dict[str, Any]] = []
+    replaced = False
+    for item in cfg.get("installed_backends") or []:
+        existing = _install_identity(item)
+        if existing == identity:
+            installed.append({"tag": tag, "backend": backend, "version": version})
+            replaced = True
+        elif existing:
+            installed.append(dict(item))
+    if not replaced:
+        installed.append({"tag": tag, "backend": backend, "version": version})
+    cfg["installed_backends"] = installed
+    if set_active or not cfg.get("active_install"):
+        cfg["active_install"] = {"tag": tag, "backend": backend, "version": version}
+    save_install_config(ctx, cfg)
+
+
+def set_active_runtime(ctx: AppContext, tag: str, backend: str) -> dict[str, Any]:
+    cfg = normalize_install_config(ctx.services.load_config())
+    match = None
+    for item in cfg.get("installed_backends") or []:
+        if _install_identity(item) == (tag, backend):
+            match = dict(item)
+            break
+    if not match:
+        raise ValueError("Runtime is not installed.")
+    bin_dir = runtime_bin_dir_for_install(ctx, match)
+    if not bin_dir.exists():
+        raise ValueError("Runtime files are missing. Repair or reinstall this runtime.")
+    cfg["active_install"] = match
+    save_install_config(ctx, cfg)
+    return match
+
+
+def remove_runtime(ctx: AppContext, tag: str, backend: str) -> dict[str, Any]:
+    cfg = normalize_install_config(ctx.services.load_config())
+    target = (tag, backend)
+    active_identity = _install_identity(cfg.get("active_install") or {})
+    removed_files = 0
+    for path in (runtime_bin_dir(ctx, tag, backend).parent,):
+        if path.exists():
+            for child in path.rglob("*"):
+                if child.is_file():
+                    removed_files += 1
+            shutil.rmtree(path, ignore_errors=True)
+    if active_identity == target:
+        legacy = legacy_runtime_bin_dir(ctx, tag, backend)
+        if legacy and legacy.exists():
+            for child in legacy.rglob("*"):
+                if child.is_file():
+                    removed_files += 1
+            shutil.rmtree(legacy, ignore_errors=True)
+            ctx.paths.sdcpp_bin.mkdir(parents=True, exist_ok=True)
+            (ctx.paths.sdcpp_bin / ".gitkeep").touch()
+
+    installed = []
+    for item in cfg.get("installed_backends") or []:
+        identity = _install_identity(item)
+        if identity and identity != target:
+            installed.append(dict(item))
+    cfg["installed_backends"] = installed
+    if active_identity == target:
+        cfg["active_install"] = installed[0] if installed else None
+    save_install_config(ctx, cfg)
+    return {
+        "removed_files": removed_files,
+        "active_install": normalize_install_config(ctx.services.load_config()).get(
+            "active_install"
+        ),
+    }
 
 
 def build_backend_specs(current_platform: str, current_arch: str) -> dict[str, dict[str, Any]]:
@@ -306,8 +551,9 @@ def validate_runtime_dependencies(
 
     missing_runtime_files: list[str] = []
     if current_platform == "darwin":
+        active_bin = get_active_runtime_bin(ctx)
         missing_runtime_files = sorted(
-            name for name in required if not (ctx.paths.sdcpp_bin / name).exists()
+            name for name in required if not (active_bin / name).exists()
         )
 
     return {
@@ -328,6 +574,8 @@ def install_release(
     tag: str,
     backend: str,
     backend_specs: Mapping[str, Mapping[str, Any]],
+    *,
+    set_active: bool = True,
 ) -> bool:
     reset_download_progress(ctx, status="downloading", message=f"Fetching release {tag}...")
 
@@ -401,22 +649,24 @@ def install_release(
 
         set_download_progress(ctx, status="extracting", message="Extracting binaries...")
 
-        # Wipe and recreate sdcpp/bin so old binaries/libraries don't linger
-        # across backend switches (e.g. cuda12 → vulkan). Preserve .gitkeep so
-        # the empty-dir placeholder stays tracked.
-        if ctx.paths.sdcpp_bin.exists():
-            shutil.rmtree(ctx.paths.sdcpp_bin)
-        ctx.paths.sdcpp_bin.mkdir(parents=True, exist_ok=True)
-        (ctx.paths.sdcpp_bin / ".gitkeep").touch()
+        target_bin = runtime_bin_dir(ctx, tag, backend)
+        if target_bin.exists():
+            shutil.rmtree(target_bin)
+        target_bin.mkdir(parents=True, exist_ok=True)
+        (target_bin / ".gitkeep").touch()
 
-        extract_archive_flat(archive_path, ctx.paths.sdcpp_bin)
+        extract_archive_flat(archive_path, target_bin)
         for extra in companion_archives:
-            extract_archive_flat(extra, ctx.paths.sdcpp_bin)
+            extract_archive_flat(extra, target_bin)
 
         # Invalidate the releases cache timestamp-wise is unnecessary; config is
         # the source of truth for "installed".
-        ctx.services.save_config(
-            {"version": release.get("name", tag), "backend": backend, "tag": tag}
+        _upsert_runtime(
+            ctx,
+            tag,
+            backend,
+            release.get("name", tag),
+            set_active=set_active,
         )
         set_download_progress(ctx, status="done", message=f"Installed {tag} ({backend})")
         return True
@@ -427,6 +677,33 @@ def install_release(
         return False
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def update_runtime(
+    ctx: AppContext,
+    tag: str,
+    backend: str,
+    backend_specs: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    releases = get_releases(ctx)
+    latest = releases[0]["tag_name"] if releases else None
+    if not latest:
+        set_download_progress(ctx, status="error", message="No releases found.")
+        return {"status": "error", "error": "No releases found."}
+    if latest == tag:
+        set_download_progress(
+            ctx,
+            status="done",
+            message=f"{tag} ({backend}) is already the latest release.",
+        )
+        return {"status": "already_latest", "tag": tag, "backend": backend}
+    cfg = normalize_install_config(ctx.services.load_config())
+    was_active = _install_identity(cfg.get("active_install") or {}) == (tag, backend)
+    ok = install_release(ctx, latest, backend, backend_specs, set_active=was_active)
+    if not ok:
+        return {"status": "error", "error": "Update failed."}
+    remove_runtime(ctx, tag, backend)
+    return {"status": "updated", "from": tag, "to": latest, "backend": backend}
 
 
 def remove_sdcpp_files(ctx: AppContext) -> int:
@@ -445,5 +722,5 @@ def remove_sdcpp_files(ctx: AppContext) -> int:
 
     ctx.paths.sdcpp_bin.mkdir(parents=True, exist_ok=True)
     (ctx.paths.sdcpp_bin / ".gitkeep").touch()
-    ctx.services.save_config({"version": None, "backend": None, "tag": None})
+    ctx.services.save_config(_blank_install_config())
     return removed
