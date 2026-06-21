@@ -100,6 +100,13 @@ window.SDGui.generateModelFields = (() => {
 		Object.keys(readinessChips).forEach(updateModelReadiness);
 	}
 
+	function appendMissingOption(select, value) {
+		if (!select || !value) return;
+		if (!Array.from(select.options).some((o) => o.value === value)) {
+			select.appendChild(new Option(value, value));
+		}
+	}
+
 	async function populateModelSelect(select, purpose) {
 		try {
 			var data = await window.SDGui.fetchJson(
@@ -128,10 +135,15 @@ window.SDGui.generateModelFields = (() => {
 		}
 	}
 
+	async function fetchLoraOptions() {
+		var data = await window.SDGui.fetchJson("/api/models?type=lora");
+		loraOptionsCache = data.models || [];
+		return loraOptionsCache;
+	}
+
 	async function populateLoraFileSelect(select) {
 		try {
-			var data = await window.SDGui.fetchJson("/api/models?type=lora");
-			loraOptionsCache = data.models || [];
+			await fetchLoraOptions();
 			select.replaceChildren();
 			select.appendChild(new Option("-- no active LoRA --", ""));
 			loraOptionsCache.forEach((m) =>
@@ -210,6 +222,22 @@ window.SDGui.generateModelFields = (() => {
 				),
 			),
 		);
+	}
+
+	function refreshRenderedLoraSelects() {
+		document
+			.querySelectorAll("#gen-model-components .lora-row select")
+			.forEach((select) => {
+				var selected = select.value;
+				appendCachedLoraOptions(select);
+				appendMissingOption(select, selected);
+				select.value = selected || "";
+			});
+	}
+
+	async function refreshLoraOptions() {
+		await fetchLoraOptions();
+		refreshRenderedLoraSelects();
 	}
 
 	function renderLoraControls(container) {
@@ -359,7 +387,15 @@ window.SDGui.generateModelFields = (() => {
 		// Drop stale model-picker controls from a previous bundle so
 		// syncControl doesn't try to push values into detached <select>s.
 		Object.keys(controls).forEach((k) => {
-			if (controls[k] && controls[k].kind === "path") delete controls[k];
+			var entry = controls[k];
+			if (
+				entry &&
+				entry.kind === "path" &&
+				entry.select &&
+				entry.select.closest("#gen-model-components")
+			) {
+				delete controls[k];
+			}
 		});
 		readinessChips = {};
 
@@ -447,6 +483,29 @@ window.SDGui.generateModelFields = (() => {
 		renderLoraControls(container);
 	}
 
+	async function refreshModelLists() {
+		var tasks = [];
+		Object.keys(controls).forEach((key) => {
+			var entry = controls[key];
+			if (!entry || entry.kind !== "path" || !entry.select) return;
+			if (!entry.select.isConnected) return;
+			var selected =
+				(flagCore && flagCore.getFlagValues
+					? flagCore.getFlagValues()[key]
+					: "") || entry.select.value;
+			tasks.push(
+				populateModelSelect(entry.select, entry.purpose).then(() => {
+					appendMissingOption(entry.select, selected);
+					entry.select.value = selected || "";
+					syncControl(key);
+					updateModelReadiness(key);
+				}),
+			);
+		});
+		tasks.push(refreshLoraOptions());
+		await Promise.all(tasks);
+	}
+
 	function init(options) {
 		options = options || {};
 		flagCore = options.flagCore || window.SDGui.flagCore;
@@ -477,5 +536,6 @@ window.SDGui.generateModelFields = (() => {
 		// syncFromState) and for hf-download-ui.js which calls
 		// window.SDGui.generateUi.renderBundleFields after a download.
 		renderBundleFields: renderBundleFields,
+		refreshModelLists: refreshModelLists,
 	};
 })();
