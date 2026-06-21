@@ -241,12 +241,49 @@ window.SDGui.flagCore = (() => {
 		return { args: args, error: null, warnings: warnings };
 	}
 
+	var PROMPT_STORAGE_PREFIX = "sdgui.prompt.";
+
+	function savePromptForMode(mode) {
+		if (!mode) return;
+		try {
+			var data = {
+				prompt: state.flagValues.prompt || "",
+				negative_prompt: state.flagValues.negative_prompt || "",
+			};
+			localStorage.setItem(
+				PROMPT_STORAGE_PREFIX + mode,
+				JSON.stringify(data),
+			);
+		} catch (e) {
+			/* quota - ignore */
+		}
+	}
+
+	function restorePromptForMode(mode) {
+		if (!mode) return;
+		try {
+			var raw = localStorage.getItem(PROMPT_STORAGE_PREFIX + mode);
+			if (!raw) return;
+			var data = JSON.parse(raw);
+			if (!data || typeof data !== "object") return;
+			if (typeof data.prompt === "string")
+				state.flagValues.prompt = data.prompt;
+			if (typeof data.negative_prompt === "string")
+				state.flagValues.negative_prompt = data.negative_prompt;
+		} catch (e) {
+			/* ignore */
+		}
+	}
+
 	return {
 		getSnapshot: getSnapshot,
 		getMode: () => state.mode,
 		setMode: (mode) => {
+			if (state.mode === mode) return;
+			savePromptForMode(state.mode);
 			state.mode = mode;
 			state.flagValues.run_mode = mode;
+			restorePromptForMode(mode);
 			notify();
 		},
 		getBundle: () => state.bundle,
@@ -271,6 +308,9 @@ window.SDGui.flagCore = (() => {
 			state.flagValues = defaultsFromFlags();
 			notify();
 		},
+		// Persist the current prompt + negative prompt for the active mode
+		// (call after a successful generation to keep a "last good" snapshot).
+		persistPrompts: () => savePromptForMode(state.mode),
 		onChange: (fn) => {
 			listeners.push(fn);
 			return () => {

@@ -2,9 +2,16 @@
 window.SDGui = window.SDGui || {};
 
 window.SDGui.serverUi = (() => {
-	var values = {};
+	var serverValues = {};
+	var controls = {};
 	var pollTimer = null;
 	var lastStatus = null;
+	var SERVER_LOCAL_IDS = {
+		listen_ip: true,
+		listen_port: true,
+		serve_html_path: true,
+		extra_args: true,
+	};
 
 	function el(tag, cls, text) {
 		var n = document.createElement(tag);
@@ -23,9 +30,63 @@ window.SDGui.serverUi = (() => {
 
 	function defaults() {
 		flags().forEach((flag) => {
-			values[flag.id] = flag.default;
+			if (isServerLocal(flag.id)) serverValues[flag.id] = flag.default;
 		});
-		values.extra_args = "";
+		serverValues.extra_args = "";
+	}
+
+	function isServerLocal(id) {
+		return SERVER_LOCAL_IDS[id] === true;
+	}
+
+	function flagValues() {
+		return window.SDGui.flagCore
+			? window.SDGui.flagCore.getFlagValues()
+			: {};
+	}
+
+	function valueFor(flag) {
+		if (isServerLocal(flag.id)) return serverValues[flag.id];
+		var vals = flagValues();
+		return vals[flag.id];
+	}
+
+	function setValue(flag, value) {
+		if (isServerLocal(flag.id)) {
+			serverValues[flag.id] = value;
+			renderCommandPreview();
+			renderSummary();
+			return;
+		}
+		window.SDGui.flagCore.setFlagValue(flag.id, value);
+	}
+
+	function normalizeControlValue(control, flag) {
+		if (flag.type === "bool") return control.checked;
+		var val = control.value;
+		if (flag.type === "int") return val === "" ? "" : parseInt(val, 10);
+		if (flag.type === "float") return val === "" ? "" : parseFloat(val);
+		return val;
+	}
+
+	function syncControl(flag) {
+		var control = controls[flag.id];
+		if (!control || document.activeElement === control) return;
+		var cur = valueFor(flag);
+		if (cur === undefined || cur === null) cur = "";
+		if (flag.type === "bool") {
+			control.checked = cur === true;
+		} else {
+			control.value = String(cur);
+		}
+	}
+
+	function syncSharedControls() {
+		flags().forEach((flag) => {
+			if (!isServerLocal(flag.id)) syncControl(flag);
+		});
+		renderCommandPreview();
+		renderSummary();
 	}
 
 	function isWide(flag) {
@@ -46,7 +107,7 @@ window.SDGui.serverUi = (() => {
 		label.setAttribute("for", "server-" + flag.id);
 		wrap.appendChild(label);
 
-		var cur = values[flag.id];
+		var cur = valueFor(flag);
 		var control = null;
 		if (flag.type === "bool") {
 			var toggle = el("label", "toggle");
@@ -54,14 +115,14 @@ window.SDGui.serverUi = (() => {
 			control.type = "checkbox";
 			control.id = "server-" + flag.id;
 			control.checked = cur === true;
+			controls[flag.id] = control;
 			toggle.appendChild(control);
 			toggle.appendChild(
 				document.createTextNode(flag.desc || flag.label || flag.id),
 			);
 			wrap.appendChild(toggle);
 			control.addEventListener("change", () => {
-				values[flag.id] = control.checked;
-				renderCommandPreview();
+				setValue(flag, control.checked);
 			});
 			return wrap;
 		}
@@ -79,12 +140,9 @@ window.SDGui.serverUi = (() => {
 		}
 		control.id = "server-" + flag.id;
 		if (cur !== undefined && cur !== null) control.value = String(cur);
+		controls[flag.id] = control;
 		control.addEventListener("input", () => {
-			var val = control.value;
-			if (flag.type === "int") val = val === "" ? "" : parseInt(val, 10);
-			if (flag.type === "float") val = val === "" ? "" : parseFloat(val);
-			values[flag.id] = val;
-			renderCommandPreview();
+			setValue(flag, normalizeControlValue(control, flag));
 		});
 		wrap.appendChild(control);
 		return wrap;
@@ -94,7 +152,7 @@ window.SDGui.serverUi = (() => {
 		var args = [];
 		flags().forEach((flag) => {
 			if (flag.id === "listen_ip" || flag.id === "listen_port") return;
-			var v = values[flag.id];
+			var v = valueFor(flag);
 			if (v === undefined || v === null || v === "") return;
 			if (v === flag.default) return;
 			if (flag.type === "bool") {
@@ -118,34 +176,62 @@ window.SDGui.serverUi = (() => {
 		var flat = [
 			"sd-server",
 			"--listen-ip",
-			String(values.listen_ip || "127.0.0.1"),
+			String(serverValues.listen_ip || "127.0.0.1"),
 			"--listen-port",
-			String(values.listen_port || 1234),
+			String(serverValues.listen_port || 1234),
 		];
 		buildArgs().forEach((pair) => {
 			flat.push.apply(flat, pair);
 		});
-		var extra = String(values.extra_args || "").trim();
+		var extra = String(serverValues.extra_args || "").trim();
 		if (extra) flat.push(extra);
 		pre.textContent = flat.join(" ");
 		// B1 — Copy button on the server command preview.
 		window.SDGui.attachCopyButton(pre, () => flat.join(" "));
 	}
 
+	function renderSummary() {
+		var root = document.getElementById("server-summary");
+		if (!root) return;
+		var host = String(serverValues.listen_ip || "127.0.0.1");
+		var port = String(serverValues.listen_port || 1234);
+		var changed = buildArgs().length;
+		var endpoint = "http://" + host + ":" + port;
+		var target = el("span", "server-summary-chip server-summary-url", endpoint);
+		var mode = el(
+			"span",
+			"server-summary-chip",
+			changed
+				? changed + " advanced option" + (changed === 1 ? "" : "s")
+				: "Default server options",
+		);
+		root.replaceChildren(target, mode);
+	}
+
 	function renderFlags() {
-		var container = document.getElementById("server-flags");
-		if (!container) return;
-		container.replaceChildren();
-		flags().forEach((flag) => container.appendChild(createControl(flag)));
+		var basic = document.getElementById("server-basic-flags");
+		var advanced = document.getElementById("server-flags");
+		controls = {};
+		if (basic) basic.replaceChildren();
+		if (advanced) advanced.replaceChildren();
+		flags().forEach((flag) => {
+			var target =
+				flag.id === "listen_ip" || flag.id === "listen_port"
+					? basic
+					: advanced;
+			if (target) target.appendChild(createControl(flag));
+		});
 		var extra = document.getElementById("server-extra-args");
 		if (extra) {
-			extra.value = values.extra_args || "";
+			extra.value = serverValues.extra_args || "";
 			extra.addEventListener("input", () => {
-				values.extra_args = extra.value;
+				serverValues.extra_args = extra.value;
 				renderCommandPreview();
+				renderSummary();
 			});
 		}
 		renderCommandPreview();
+		renderSummary();
 	}
 
 	function statusKind(status) {
@@ -205,10 +291,10 @@ window.SDGui.serverUi = (() => {
 
 	async function startServer() {
 		var body = {
-			host: values.listen_ip || "127.0.0.1",
-			port: values.listen_port || 1234,
+			host: serverValues.listen_ip || "127.0.0.1",
+			port: serverValues.listen_port || 1234,
 			args: buildArgs(),
-			extra_args: values.extra_args || "",
+			extra_args: serverValues.extra_args || "",
 		};
 		try {
 			renderStatus({ status: "starting", message: "Starting sd-server..." });
@@ -241,6 +327,7 @@ window.SDGui.serverUi = (() => {
 		var stopBtn = document.getElementById("btn-sd-server-stop");
 		if (startBtn) startBtn.addEventListener("click", startServer);
 		if (stopBtn) stopBtn.addEventListener("click", stopServer);
+		window.SDGui.flagCore.onChange(syncSharedControls);
 		refreshStatus();
 		// D1 — only poll while the Server & API panel is visible.
 		window.SDGui.panelLifecycle.register(

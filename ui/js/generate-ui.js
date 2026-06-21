@@ -49,7 +49,7 @@ window.SDGui.generateUi = (() => {
 		"generate-image": {
 			mode: "img_gen",
 			button: "Generate",
-			empty: "Your generated image will appear here.",
+			empty: "Pick a model, write a prompt, then Generate.",
 			running: "Generating... your image will appear here.",
 		},
 		"generate-video": {
@@ -226,7 +226,11 @@ window.SDGui.generateUi = (() => {
 	function updateActionCopy() {
 		var cfg = activeConfig();
 		var genBtn = $("btn-generate");
-		if (genBtn) genBtn.textContent = cfg.button;
+		if (genBtn) {
+			var label = genBtn.querySelector(".gen-btn-label");
+			if (label) label.textContent = cfg.button;
+			else genBtn.textContent = cfg.button;
+		}
 		var resultEmpty = $("gen-result-empty");
 		if (resultEmpty) resultEmpty.textContent = cfg.empty;
 	}

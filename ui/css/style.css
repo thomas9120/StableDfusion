@@ -263,6 +263,20 @@ body {
 	color: var(--yellow);
 	border-color: var(--yellow-border);
 }
+.badge-primary {
+	font-weight: 700;
+	letter-spacing: -0.1px;
+}
+.badge-secondary {
+	font-family: var(--mono);
+	font-size: 10.5px;
+	font-weight: 600;
+	opacity: 0.78;
+	letter-spacing: 0;
+}
+.badge-sep {
+	opacity: 0.5;
+}
 
 /* ════════════════════════════════════════════
    CARDS / SECTIONS
@@ -414,8 +428,15 @@ textarea {
 	transform: scale(0.97);
 }
 .btn:disabled {
-	opacity: 0.5;
+	opacity: 0.45;
 	cursor: not-allowed;
+	box-shadow: none;
+	filter: saturate(0.55);
+}
+.btn-primary:disabled {
+	background: var(--bg-elevated);
+	color: var(--fg-faint);
+	border-color: var(--border-strong);
 }
 
 .btn-primary {
@@ -452,6 +473,26 @@ textarea {
 .btn-sm {
 	padding: var(--space-1) var(--space-3);
 	font-size: 11.5px;
+}
+.btn-kbd-hint {
+	display: inline-flex;
+	align-items: center;
+	margin-left: 6px;
+	padding: 1px 5px;
+	font-family: var(--mono);
+	font-size: 10px;
+	font-weight: 600;
+	color: var(--fg-muted);
+	background: rgba(0, 0, 0, 0.28);
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	border-radius: var(--radius-xs);
+	letter-spacing: 0.02em;
+	pointer-events: none;
+}
+.btn-primary .btn-kbd-hint {
+	color: rgba(10, 14, 26, 0.7);
+	background: rgba(255, 255, 255, 0.18);
+	border-color: rgba(255, 255, 255, 0.12);
 }
 
 /* ════════════════════════════════════════════
@@ -519,6 +560,48 @@ textarea {
 #installed-info {
 	font-size: 13px;
 	line-height: 1.8;
+}
+.installed-grid {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+	line-height: 1.2;
+}
+.installed-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	padding: 7px 10px;
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-sm);
+	background: var(--bg-raised);
+	color: var(--fg);
+}
+.installed-chip-label {
+	color: var(--fg-muted);
+	font-size: 10px;
+	font-weight: 800;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+.installed-chip-value {
+	font-family: var(--mono);
+	font-size: 11.5px;
+	font-weight: 700;
+}
+.installed-chip-primary {
+	border-color: var(--accent-border);
+	background: var(--accent-subtle);
+}
+.installed-chip-ok {
+	border-color: var(--green-border);
+	background: var(--green-subtle);
+	color: var(--green);
+}
+.installed-chip-missing {
+	border-color: var(--red-border);
+	background: var(--red-subtle);
+	color: var(--red);
 }
 #installed-info strong {
 	color: var(--fg-bright);
@@ -610,6 +693,10 @@ textarea {
 	justify-content: center;
 	padding: var(--space-3);
 	position: relative;
+}
+.preview-frame {
+	background-color: var(--bg-elevated);
+	background-image: none;
 }
 /* A9 — friendly empty-state captions inside the result/preview frames. */
 .preview-frame .frame-empty,
@@ -760,6 +847,61 @@ textarea {
 	transition:
 		opacity 0.3s ease,
 		transform 0.3s ease;
+	display: flex;
+	align-items: flex-start;
+	gap: var(--space-2);
+}
+.toast-text {
+	flex: 1;
+	min-width: 0;
+	word-break: break-word;
+	line-height: 1.4;
+	padding-top: 1px;
+}
+.toast-close {
+	flex-shrink: 0;
+	background: transparent;
+	border: none;
+	color: var(--fg-muted);
+	font-size: 16px;
+	line-height: 1;
+	padding: 0 4px;
+	margin: -2px -2px 0 0;
+	cursor: pointer;
+	border-radius: var(--radius-xs);
+	font-family: var(--font);
+	transition: all var(--ease-fast);
+}
+.toast-close:hover {
+	color: var(--fg);
+	background: var(--bg-hover);
+}
+.toast-close:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+.btn-primary.is-generating {
+	opacity: 0.92;
+}
+.gen-btn-spinner {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+.gen-btn-spinner[hidden] {
+	display: none;
+}
+.gen-btn-spinner svg {
+	animation: gen-btn-spin 0.9s linear infinite;
+	display: block;
+}
+@keyframes gen-btn-spin {
+	from {
+		transform: rotate(0deg);
+	}
+	to {
+		transform: rotate(360deg);
+	}
 }
 .toast-error {
 	border-left-color: var(--red);
@@ -817,9 +959,33 @@ textarea {
 	gap: var(--space-2);
 	margin-bottom: var(--space-1);
 }
-.gen-model-field .field-head .req {
+.model-status-chip {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 52px;
+	padding: 2px 7px;
+	border: 1px solid var(--border-strong);
+	border-radius: 100px;
+	font-size: 9.5px;
+	font-weight: 800;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+.model-status-chip.is-ready,
+.model-status-chip.is-set {
+	color: var(--green);
+	background: var(--green-subtle);
+	border-color: var(--green-border);
+}
+.model-status-chip.is-needed {
 	color: var(--red);
-	font-size: 10px;
+	background: var(--red-subtle);
+	border-color: var(--red-border);
+}
+.model-status-chip.is-optional {
+	color: var(--fg-faint);
+	background: var(--bg-elevated);
 }
 .gen-model-field .field-row {
 	display: flex;
@@ -1187,7 +1353,7 @@ textarea {
 	padding: var(--space-3);
 	border: 1px solid var(--border);
 	border-radius: var(--radius-sm);
-	background: var(--bg-raised);
+	background: rgba(28, 31, 46, 0.62);
 	margin-bottom: var(--space-3);
 }
 
@@ -1240,6 +1406,24 @@ textarea {
 	padding: var(--space-2);
 	border-radius: var(--radius-sm);
 	font-size: 12px;
+}
+.hf-file-group {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	margin: var(--space-2) 0 var(--space-1);
+	padding: 4px var(--space-2);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-xs);
+	background: var(--bg-raised);
+	color: var(--fg-muted);
+	font-size: 10px;
+	font-weight: 800;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+.hf-file-group:first-child {
+	margin-top: 0;
 }
 .hf-file-row:hover {
 	background: var(--bg-hover);
@@ -1377,6 +1561,39 @@ textarea {
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: var(--space-3);
 	margin-bottom: var(--space-4);
+}
+.server-basic-flags {
+	margin-bottom: var(--space-3);
+}
+
+.server-summary {
+	display: flex;
+	gap: var(--space-2);
+	flex-wrap: wrap;
+	margin-bottom: var(--space-3);
+}
+
+.server-summary-chip {
+	display: inline-flex;
+	align-items: center;
+	min-height: 28px;
+	padding: 4px 9px;
+	border: 1px solid var(--border-strong);
+	border-radius: 100px;
+	background: var(--bg-raised);
+	color: var(--fg-muted);
+	font-size: 11px;
+	font-weight: 700;
+}
+
+.server-summary-url {
+	color: var(--cyan);
+	font-family: var(--mono);
+	font-weight: 600;
+}
+
+.server-advanced {
+	margin-bottom: var(--space-3);
 }
 
 .server-flag-wide {
@@ -1603,6 +1820,12 @@ textarea {
 .mode-details > .form-group:last-child,
 .mode-details > .form-row:last-child {
 	margin-bottom: 0;
+}
+.metadata-details {
+	background: var(--bg-surface);
+}
+.metadata-details > summary {
+	color: var(--cyan);
 }
 
 /* A5 — small icon button (dice / swap / copy / random). */
@@ -1890,15 +2113,18 @@ textarea {
 	color: var(--fg-faint);
 }
 
-/* A8 — sticky generate action row so the primary button stays reachable. */
+/* A8 — framed generate action row placed after required model setup. */
 .gen-actions {
-	padding: var(--space-2) 0 0;
+	padding: var(--space-2);
 	margin-top: var(--space-3);
 	display: flex;
 	gap: var(--space-2);
+	align-items: center;
+	background: var(--bg-raised);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
 }
-/* Section break separating generation settings from the (set-once-per-session)
-   model/mode setup block now living below the Generate button. */
+/* Section break separating generation settings, model setup, and optional tools. */
 .gen-section-break {
 	display: flex;
 	align-items: center;

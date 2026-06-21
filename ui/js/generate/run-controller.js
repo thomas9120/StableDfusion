@@ -75,12 +75,38 @@ window.SDGui.generateRunController = (() => {
 		}
 	}
 
+	function setGenBtnLabel(text) {
+		var btn = $("btn-generate");
+		if (!btn) return;
+		var label = btn.querySelector(".gen-btn-label");
+		if (label) label.textContent = text;
+	}
+
+	function setGenBtnBusy(on) {
+		var btn = $("btn-generate");
+		if (!btn) return;
+		var spinner = btn.querySelector(".gen-btn-spinner");
+		if (spinner) spinner.hidden = !on;
+		btn.classList.toggle("is-generating", !!on);
+		if (on) setGenBtnLabel("Generating\u2026");
+		else setGenBtnLabel("Generate");
+	}
+
+	function updateGenBtnFromSnap(snap) {
+		if (!snap || snap.state !== "running") return;
+		var pct = snap.percent;
+		if (typeof pct === "number" && isFinite(pct) && pct >= 0 && pct <= 100) {
+			setGenBtnLabel("Generating\u2026 " + Math.round(pct) + "%");
+		}
+	}
+
 	function setGenerating(on) {
 		generating = on;
 		var genBtn = $("btn-generate");
 		var cancelBtn = $("btn-generate-cancel");
 		if (genBtn) genBtn.disabled = on;
 		if (cancelBtn) cancelBtn.classList.toggle("hidden", !on);
+		setGenBtnBusy(!!on);
 	}
 
 	async function poll() {
@@ -88,6 +114,7 @@ window.SDGui.generateRunController = (() => {
 			var snap = await window.SDGui.fetchJson("/api/generate/status");
 			var section = runningSection || sectionForMode(snap.mode || flagCore.getMode());
 			onRunProgress(section, snap);
+			updateGenBtnFromSnap(snap);
 			if (snap.state === "running") {
 				if (snap.preview_mtime && snap.preview_mtime !== lastPreviewMtime) {
 					lastPreviewMtime = snap.preview_mtime;
@@ -186,6 +213,9 @@ window.SDGui.generateRunController = (() => {
 		lastPreviewMtime = 0;
 		onRunStart(runningSection);
 		setGenerating(true);
+		if (flagCore && typeof flagCore.persistPrompts === "function") {
+			flagCore.persistPrompts();
+		}
 		previewProgress.setRunStartTime(Date.now());
 		if (runningSection === getActiveSection()) {
 			previewProgress.showProgressBar(true, true);

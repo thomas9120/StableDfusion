@@ -827,6 +827,9 @@ function findChromiumExecutable() {
 		// Server UI posts the same curated contract that server_mode_service expects.
 		await page.click('.nav-item[data-section="server"]');
 		await page.fill("#server-listen_port", "8123");
+		await page.locator(".server-advanced").evaluate((el) => {
+			el.open = true;
+		});
 		await page.fill("#server-diffusion_model", "models/diffusion/server.gguf");
 		await page.check("#server-diffusion_fa");
 		await page.fill("#server-extra-args", "--cache-mode easycache");
@@ -955,6 +958,8 @@ function findChromiumExecutable() {
 		await page.click('.nav-item[data-section="generate-image"]');
 		await page.evaluate(() => {
 			window.SDGui.flagCore.setFlagValue("image", "output/smoke.png");
+			const details = document.querySelector(".metadata-details");
+			if (details) details.open = true;
 		});
 		await page.click("#btn-inspect-metadata");
 		await page.waitForFunction(

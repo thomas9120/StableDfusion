@@ -3,18 +3,52 @@
 // to stable-diffusion.cpp (pattern-matched assets, sdcpp/ paths).
 window.SDGui = window.SDGui || {};
 
-// Lightweight non-blocking toast. Safe DOM (no innerHTML).
+window.SDGui.TOAST_MAX = 5;
+window.SDGui.TOAST_LINGER_MS = 5000;
+window.SDGui.TOAST_HOVER_MS = 2000;
+
+function dismissToastNode(note) {
+	if (!note || !note.parentNode || note.classList.contains("toast-out")) return;
+	note.classList.add("toast-out");
+	setTimeout(() => {
+		if (note.parentNode) note.remove();
+	}, 300);
+}
+
 window.SDGui.toast = (message, kind) => {
 	var container = document.getElementById("toast-container");
 	if (!container) return;
+	while (container.children.length >= window.SDGui.TOAST_MAX) {
+		dismissToastNode(container.firstChild);
+	}
 	var note = document.createElement("div");
 	note.className = "toast toast-" + (kind || "info");
-	note.textContent = String(message || "");
+
+	var text = document.createElement("span");
+	text.className = "toast-text";
+	text.textContent = String(message || "");
+	note.appendChild(text);
+
+	var close = document.createElement("button");
+	close.type = "button";
+	close.className = "toast-close";
+	close.setAttribute("aria-label", "Dismiss notification");
+	close.textContent = "\u00d7";
+	close.addEventListener("click", () => dismissToastNode(note));
+	note.appendChild(close);
+
 	container.appendChild(note);
-	setTimeout(() => {
-		note.classList.add("toast-out");
-		setTimeout(() => note.remove(), 300);
-	}, 3500);
+
+	var timer = null;
+	var arm = (ms) => {
+		if (timer) clearTimeout(timer);
+		timer = setTimeout(() => dismissToastNode(note), ms);
+	};
+	note.addEventListener("mouseenter", () => {
+		if (timer) clearTimeout(timer);
+	});
+	note.addEventListener("mouseleave", () => arm(window.SDGui.TOAST_HOVER_MS));
+	arm(window.SDGui.TOAST_LINGER_MS);
 };
 
 // Shared API helper. Throws an Error (with the server's message) on non-OK
@@ -271,11 +305,22 @@ window.SDGui.manager = (() => {
 
 		if (badge) {
 			if (status.installed) {
-				badge.textContent =
-					(status.installed_version_name || status.version) +
-					" (" +
-					status.backend +
-					")";
+				badge.replaceChildren();
+				var primary = document.createElement("span");
+				primary.className = "badge-primary";
+				primary.textContent =
+					status.installed_version_name || status.version;
+				badge.appendChild(primary);
+				if (status.backend) {
+					var sep = document.createElement("span");
+					sep.className = "badge-sep";
+					sep.textContent = " · ";
+					badge.appendChild(sep);
+					var secondary = document.createElement("span");
+					secondary.className = "badge-secondary";
+					secondary.textContent = status.backend;
+					badge.appendChild(secondary);
+				}
 				badge.className = "badge badge-green";
 			} else if (status.config_stale) {
 				badge.textContent = "Install Incomplete";
@@ -307,29 +352,39 @@ window.SDGui.manager = (() => {
 			row.appendChild(document.createTextNode(" " + value));
 			info.appendChild(row);
 		};
+		var appendInstalledChip = (label, value, kind) => {
+			var chip = document.createElement("span");
+			chip.className = "installed-chip" + (kind ? " " + kind : "");
+			var chipLabel = document.createElement("span");
+			chipLabel.className = "installed-chip-label";
+			chipLabel.textContent = label;
+			var chipValue = document.createElement("span");
+			chipValue.className = "installed-chip-value";
+			chipValue.textContent = value;
+			chip.appendChild(chipLabel);
+			chip.appendChild(chipValue);
+			info.appendChild(chip);
+		};
 
 		if (status.installed) {
-			appendRow(
+			info.className = "installed-grid";
+			appendInstalledChip(
 				"Version",
 				String(status.installed_version_name || status.version),
+				"installed-chip-primary",
 			);
-			appendRow("Backend", String(status.backend));
-			var exeWrap = document.createElement("div");
-			var exeTitle = document.createElement("strong");
-			exeTitle.textContent = "Executables:";
-			exeWrap.appendChild(exeTitle);
-			exeWrap.appendChild(document.createElement("br"));
+			appendInstalledChip("Backend", String(status.backend), "");
 			Object.entries(status.executables || {}).forEach((entry) => {
 				var name = entry[0];
 				var exists = entry[1];
-				var line = document.createElement("span");
-				line.className = exists ? "exe-ok" : "exe-missing";
-				line.textContent = (exists ? "✓ " : "✗ ") + name;
-				exeWrap.appendChild(line);
-				exeWrap.appendChild(document.createElement("br"));
+				appendInstalledChip(
+					name,
+					exists ? "Found" : "Missing",
+					exists ? "installed-chip-ok" : "installed-chip-missing",
+				);
 			});
-			info.appendChild(exeWrap);
 		} else if (status.config_stale) {
+			info.className = "";
 			var missing = Array.isArray(status.missing_runtime_files)
 				? status.missing_runtime_files.filter(Boolean)
 				: [];
@@ -357,6 +412,7 @@ window.SDGui.manager = (() => {
 			appendRow("Version (config)", String(status.version));
 			appendRow("Backend (config)", String(status.backend));
 		} else {
+			info.className = "";
 			var empty = document.createElement("span");
 			empty.style.color = "var(--fg-faint)";
 			var platformText = status.platform_label

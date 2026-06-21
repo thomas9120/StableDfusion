@@ -62,6 +62,7 @@ CURATED_SERVER_BOOL_FLAGS = {
 }
 
 SERVER_OWNED_FLAGS = {"--listen-ip", "--listen-port"}
+MODEL_STARTUP_FLAGS = {"--model", "-m", "--diffusion-model"}
 _TOKEN_RE = re.compile(r"^[^\x00-\x1f\x7f]*$")
 _HOST_RE = re.compile(r"^[A-Za-z0-9_.:\-[\]]+$")
 _POLL_INTERVAL = 0.5
@@ -151,6 +152,10 @@ def _tokenize_extra(extra_args: Any) -> list[str]:
     return _strip_owned(validated)
 
 
+def _has_startup_model(args: list[str]) -> bool:
+    return any(tok in MODEL_STARTUP_FLAGS for tok in args)
+
+
 def build_argv(request: dict[str, Any]) -> dict[str, Any]:
     """Build final sd-server argv from curated pairs + extra args."""
     host = _validate_host(request.get("host") or request.get("listen_ip"))
@@ -163,6 +168,8 @@ def build_argv(request: dict[str, Any]) -> dict[str, Any]:
         *_flatten_pairs(request.get("args")),
         *_tokenize_extra(request.get("extra_args")),
     ]
+    if not _has_startup_model(args):
+        raise ValueError("Choose a model or diffusion model before starting sd-server.")
     return {"host": host, "port": port, "target_url": _target_url(host, port), "args": args}
 
 

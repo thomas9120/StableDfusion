@@ -268,6 +268,24 @@
           </div>
         </details>
 
+        <div class="gen-section-break" aria-hidden="true">
+          <span>Model setup</span>
+        </div>
+        <!-- @section bundle -->
+        <div class="form-group">
+          <label class="form-label">Model type bundle</label>
+          <select id="gen-model-bundle">
+            <option value="">Loading...</option>
+          </select>
+        </div>
+        <!-- @section model -->
+        <div id="gen-model-components" class="form-group">
+          <!-- bundle-driven file pickers rendered by generate-ui.js -->
+          <p class="help-text">
+            Select a model type bundle to show its file pickers.
+          </p>
+        </div>
+
         <!-- @section actions -->
         <div class="gen-actions">
           <button
@@ -275,7 +293,21 @@
             class="btn btn-primary"
             title="Generate (Ctrl/Cmd+Enter)"
           >
-            Generate
+            <span class="gen-btn-spinner" aria-hidden="true" hidden>
+              <svg viewBox="0 0 24 24" width="14" height="14">
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="9"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-dasharray="14 42"
+                />
+              </svg>
+            </span>
+            <span class="gen-btn-label">Generate</span>
           </button>
           <button id="btn-generate-cancel" class="btn btn-danger hidden">
             Cancel
@@ -283,7 +315,7 @@
           <span class="gen-kbd-hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span>
         </div>
         <div class="gen-section-break" aria-hidden="true">
-          <span>Model setup</span>
+          <span>Optional tools</span>
         </div>
         <!-- @section mode-inputs -->
         <!-- Mode-specific inputs: shown/hidden per mode by generate-ui.js -->
@@ -578,49 +610,35 @@
 
           <!-- metadata: image + format -->
           <div id="gen-metadata-inputs" class="mode-inputs">
-            <div class="gen-section-break" aria-hidden="true">
-              <span>Inspect metadata</span>
-            </div>
-            <div class="form-group">
-              <label class="form-label"
-                >Image <span class="req">required</span></label
-              >
-              <div class="field-row">
-                <input type="text" id="gen-metadata-image" />
-                <button
-                  id="btn-browse-metadata-image"
-                  class="btn btn-sm"
-                  type="button"
+            <details class="mode-details metadata-details">
+              <summary>Inspect metadata</summary>
+              <div class="form-group">
+                <label class="form-label"
+                  >Image <span class="req">required</span></label
                 >
-                  Browse
-                </button>
+                <div class="field-row">
+                  <input type="text" id="gen-metadata-image" />
+                  <button
+                    id="btn-browse-metadata-image"
+                    class="btn btn-sm"
+                    type="button"
+                  >
+                    Browse
+                  </button>
+                </div>
               </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Format</label>
-              <select id="gen-metadata-format">
-                <option value="text">text</option>
-                <option value="json">json</option>
-              </select>
-            </div>
-            <button id="btn-inspect-metadata" class="btn btn-sm" type="button">
-              Inspect metadata
-            </button>
+              <div class="form-group">
+                <label class="form-label">Format</label>
+                <select id="gen-metadata-format">
+                  <option value="text">text</option>
+                  <option value="json">json</option>
+                </select>
+              </div>
+              <button id="btn-inspect-metadata" class="btn btn-sm" type="button">
+                Inspect metadata
+              </button>
+            </details>
           </div>
-        </div>
-        <!-- @section bundle -->
-        <div class="form-group">
-          <label class="form-label">Model type bundle</label>
-          <select id="gen-model-bundle">
-            <option value="">Loading…</option>
-          </select>
-        </div>
-        <!-- @section model -->
-        <div id="gen-model-components" class="form-group">
-          <!-- bundle-driven file pickers rendered by generate-ui.js -->
-          <p class="help-text">
-            Select a model type bundle to show its file pickers.
-          </p>
         </div>
       </div>
       <div class="card">
@@ -646,7 +664,7 @@
           <span class="form-label" aria-hidden="true">Result</span>
           <div id="gen-result" class="result-frame">
             <div id="gen-result-empty" class="frame-empty">
-              Your generated image will appear here.
+              Pick a model, write a prompt, then Generate.
             </div>
           </div>
           <div id="gen-result-actions" class="form-row hidden">

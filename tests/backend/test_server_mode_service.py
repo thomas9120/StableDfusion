@@ -33,7 +33,11 @@ def test_build_argv_strips_listener_from_curated_pairs_and_extra_args():
         {
             "host": "0.0.0.0",
             "port": 8123,
-            "args": [["--listen-port", "9999"], ["--steps", "12"]],
+            "args": [
+                ["--listen-port", "9999"],
+                ["--diffusion-model", "models/diffusion/model.gguf"],
+                ["--steps", "12"],
+            ],
             "extra_args": "--listen-ip 1.2.3.4 --cache-mode easycache",
         }
     )
@@ -60,3 +64,12 @@ def test_build_argv_rejects_bad_port():
         assert "port" in str(exc)
     else:
         raise AssertionError("bad port was accepted")
+
+
+def test_build_argv_rejects_missing_startup_model():
+    try:
+        server_mode_service.build_argv({"args": [["--steps", "12"]]})
+    except ValueError as exc:
+        assert "model" in str(exc)
+    else:
+        raise AssertionError("missing model was accepted")
