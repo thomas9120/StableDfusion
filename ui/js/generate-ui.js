@@ -49,7 +49,7 @@ window.SDGui.generateUi = (() => {
 		"generate-image": {
 			mode: "img_gen",
 			button: "Generate",
-			empty: "Your generated image will appear here.",
+			empty: "Pick a model, write a prompt, then Generate.",
 			running: "Generating... your image will appear here.",
 		},
 		"generate-video": {

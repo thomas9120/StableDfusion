@@ -27,6 +27,7 @@ window.SDGui.generateModelFields = (() => {
 	// Shared registry from window.SDGui.generateControls. Injected by init()
 	// so this module doesn't reach back into another module's closure.
 	var controls = {};
+	var readinessChips = {};
 	// Re-sync a single control after its dropdown has been populated.
 	var syncControl = function () {};
 	// Called after a local state mutation so the coordinator can refresh
@@ -59,6 +60,42 @@ window.SDGui.generateModelFields = (() => {
 			hires_upscalers_dir: "Hires upscalers folder",
 		};
 		return map[key] || key;
+	}
+
+	function setModelReadiness(key, selected, required) {
+		var chip = readinessChips[key];
+		if (!chip) return;
+		chip.className = "model-status-chip";
+		if (selected) {
+			chip.classList.add(required ? "is-ready" : "is-set");
+			chip.textContent = required ? "ready" : "set";
+			return;
+		}
+		if (required) {
+			chip.classList.add("is-needed");
+			chip.textContent = "needed";
+		} else {
+			chip.classList.add("is-optional");
+			chip.textContent = "optional";
+		}
+	}
+
+	function updateModelReadiness(key) {
+		var entry = controls[key];
+		var chip = readinessChips[key];
+		if (!entry || !chip) return;
+		var value = flagCore && flagCore.getFlagValues
+			? flagCore.getFlagValues()[key]
+			: "";
+		setModelReadiness(
+			key,
+			!!value || !!(entry.select && entry.select.value),
+			chip.required,
+		);
+	}
+
+	function updateAllModelReadiness() {
+		Object.keys(readinessChips).forEach(updateModelReadiness);
 	}
 
 	async function populateModelSelect(select, purpose) {
@@ -191,6 +228,7 @@ window.SDGui.generateModelFields = (() => {
 			if (res && res.selected && res.path) {
 				flagCore.setFlagValue(field.key, res.path);
 				syncControl(field.key);
+				updateModelReadiness(field.key);
 			}
 		} catch (e) {
 			window.SDGui.toast(e.message, "error");
@@ -207,6 +245,7 @@ window.SDGui.generateModelFields = (() => {
 		Object.keys(controls).forEach((k) => {
 			if (controls[k] && controls[k].kind === "path") delete controls[k];
 		});
+		readinessChips = {};
 
 		var bundleValue = flagCore.getBundle();
 		var bundle = window.SDGui.getBundle(bundleValue);
@@ -250,7 +289,15 @@ window.SDGui.generateModelFields = (() => {
 			var wrap = el("div", "gen-model-field");
 			var head = el("div", "field-head");
 			head.appendChild(el("span", "form-label", fieldLabel(field.key)));
-			if (field.required) head.appendChild(el("span", "req", "required"));
+			var chip = el("span", "model-status-chip");
+			chip.required = field.required;
+			readinessChips[field.key] = chip;
+			setModelReadiness(
+				field.key,
+				!!flagCore.getFlagValues()[field.key],
+				field.required,
+			);
+			head.appendChild(chip);
 			wrap.appendChild(head);
 
 			var row = el("div", "field-row");
@@ -265,10 +312,12 @@ window.SDGui.generateModelFields = (() => {
 			};
 			select.addEventListener("change", () => {
 				flagCore.setFlagValue(field.key, select.value);
+				updateModelReadiness(field.key);
 			});
-			populateModelSelect(select, field.purpose).then(() =>
-				syncControl(field.key),
-			);
+			populateModelSelect(select, field.purpose).then(() => {
+				syncControl(field.key);
+				updateModelReadiness(field.key);
+			});
 
 			var browse = el("button", "btn btn-sm", "Browse");
 			browse.type = "button";
@@ -298,6 +347,9 @@ window.SDGui.generateModelFields = (() => {
 				window.SDGui.generateControls.syncControl) ||
 			syncControl;
 		onSyncAll = options.onSyncAll || function () {};
+		if (flagCore && typeof flagCore.onChange === "function") {
+			flagCore.onChange(updateAllModelReadiness);
+		}
 	}
 
 	return {

@@ -10,17 +10,22 @@
   <div class="server-grid">
     <div class="card">
       <div id="server-status" class="status-box"></div>
-      <div id="server-flags" class="server-flags"></div>
-      <div class="form-group">
-        <label class="form-label" for="server-extra-args"
-          >Extra server args</label
-        >
-        <textarea
-          id="server-extra-args"
-          rows="2"
-          placeholder="--cache-mode easycache --cache-option threshold=0.25"
-        ></textarea>
-      </div>
+      <div id="server-summary" class="server-summary"></div>
+      <div id="server-basic-flags" class="server-flags server-basic-flags"></div>
+      <details class="mode-details server-advanced">
+        <summary>Advanced server settings</summary>
+        <div id="server-flags" class="server-flags"></div>
+        <div class="form-group">
+          <label class="form-label" for="server-extra-args"
+            >Extra server args</label
+          >
+          <textarea
+            id="server-extra-args"
+            rows="2"
+            placeholder="--cache-mode easycache --cache-option threshold=0.25"
+          ></textarea>
+        </div>
+      </details>
       <pre id="server-command-preview" class="command-preview"></pre>
       <div class="form-row">
         <button

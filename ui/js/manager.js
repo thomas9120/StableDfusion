@@ -352,29 +352,39 @@ window.SDGui.manager = (() => {
 			row.appendChild(document.createTextNode(" " + value));
 			info.appendChild(row);
 		};
+		var appendInstalledChip = (label, value, kind) => {
+			var chip = document.createElement("span");
+			chip.className = "installed-chip" + (kind ? " " + kind : "");
+			var chipLabel = document.createElement("span");
+			chipLabel.className = "installed-chip-label";
+			chipLabel.textContent = label;
+			var chipValue = document.createElement("span");
+			chipValue.className = "installed-chip-value";
+			chipValue.textContent = value;
+			chip.appendChild(chipLabel);
+			chip.appendChild(chipValue);
+			info.appendChild(chip);
+		};
 
 		if (status.installed) {
-			appendRow(
+			info.className = "installed-grid";
+			appendInstalledChip(
 				"Version",
 				String(status.installed_version_name || status.version),
+				"installed-chip-primary",
 			);
-			appendRow("Backend", String(status.backend));
-			var exeWrap = document.createElement("div");
-			var exeTitle = document.createElement("strong");
-			exeTitle.textContent = "Executables:";
-			exeWrap.appendChild(exeTitle);
-			exeWrap.appendChild(document.createElement("br"));
+			appendInstalledChip("Backend", String(status.backend), "");
 			Object.entries(status.executables || {}).forEach((entry) => {
 				var name = entry[0];
 				var exists = entry[1];
-				var line = document.createElement("span");
-				line.className = exists ? "exe-ok" : "exe-missing";
-				line.textContent = (exists ? "✓ " : "✗ ") + name;
-				exeWrap.appendChild(line);
-				exeWrap.appendChild(document.createElement("br"));
+				appendInstalledChip(
+					name,
+					exists ? "Found" : "Missing",
+					exists ? "installed-chip-ok" : "installed-chip-missing",
+				);
 			});
-			info.appendChild(exeWrap);
 		} else if (status.config_stale) {
+			info.className = "";
 			var missing = Array.isArray(status.missing_runtime_files)
 				? status.missing_runtime_files.filter(Boolean)
 				: [];
@@ -402,6 +412,7 @@ window.SDGui.manager = (() => {
 			appendRow("Version (config)", String(status.version));
 			appendRow("Backend (config)", String(status.backend));
 		} else {
+			info.className = "";
 			var empty = document.createElement("span");
 			empty.style.color = "var(--fg-faint)";
 			var platformText = status.platform_label

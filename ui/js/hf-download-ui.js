@@ -77,6 +77,40 @@ window.SDGui.hfDownloadUi = (() => {
 		if (btn) btn.disabled = state.downloading || state.selected.size === 0;
 	}
 
+	function fileGroup(file) {
+		var folder = String(file.folder || "").toLowerCase();
+		if (folder === "diffusion") return "Diffusion";
+		if (folder === "vae") return "VAE";
+		if (folder === "text-encoders") return "Text Encoders";
+		if (folder === "loras") return "LoRAs";
+		return "Other";
+	}
+
+	function appendFileRow(list, file) {
+		var row = el("div", "hf-file-row");
+		if (state.selected.has(file.name)) row.classList.add("is-selected");
+
+		var cb = el("input");
+		cb.type = "checkbox";
+		cb.className = "hf-file-check";
+		cb.checked = state.selected.has(file.name);
+		cb.addEventListener("change", () => {
+			if (cb.checked) state.selected.add(file.name);
+			else state.selected.delete(file.name);
+			row.classList.toggle("is-selected", cb.checked);
+			updateSelectionSummary();
+		});
+
+		var name = el("span", "hf-file-name", file.name);
+		var folder = file.folder ? "models/" + file.folder : "models";
+		var size = el("span", "hf-file-size", folder + "  " + fmtSize(file.size));
+
+		row.appendChild(cb);
+		row.appendChild(name);
+		row.appendChild(size);
+		list.appendChild(row);
+	}
+
 	function renderFileList() {
 		var list = $("hf-file-list");
 		if (!list) return;
@@ -86,29 +120,23 @@ window.SDGui.hfDownloadUi = (() => {
 			updateSelectionSummary();
 			return;
 		}
+		var order = ["Diffusion", "VAE", "Text Encoders", "LoRAs", "Other"];
+		var groups = {};
 		state.files.forEach((file) => {
-			var row = el("div", "hf-file-row");
-			if (state.selected.has(file.name)) row.classList.add("is-selected");
-
-			var cb = el("input");
-			cb.type = "checkbox";
-			cb.className = "hf-file-check";
-			cb.checked = state.selected.has(file.name);
-			cb.addEventListener("change", () => {
-				if (cb.checked) state.selected.add(file.name);
-				else state.selected.delete(file.name);
-				row.classList.toggle("is-selected", cb.checked);
-				updateSelectionSummary();
-			});
-
-			var name = el("span", "hf-file-name", file.name);
-			var folder = file.folder ? "models/" + file.folder : "models";
-			var size = el("span", "hf-file-size", folder + "  " + fmtSize(file.size));
-
-			row.appendChild(cb);
-			row.appendChild(name);
-			row.appendChild(size);
-			list.appendChild(row);
+			var group = fileGroup(file);
+			if (!groups[group]) groups[group] = [];
+			groups[group].push(file);
+		});
+		order.forEach((group) => {
+			var files = groups[group] || [];
+			if (!files.length) return;
+			var label = el(
+				"div",
+				"hf-file-group",
+				group + " (" + files.length + ")",
+			);
+			list.appendChild(label);
+			files.forEach((file) => appendFileRow(list, file));
 		});
 		updateSelectionSummary();
 	}
