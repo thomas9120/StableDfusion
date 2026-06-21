@@ -4,6 +4,8 @@ A desktop-friendly web GUI for [`leejet/stable-diffusion.cpp`](https://github.co
 modeled on the architecture of its sibling project **LLama-GUI**. No frameworks, no
 bundler — just a Python stdlib HTTP server and vanilla JS.
 
+Video generation is still a work in progress, so you may encounter some errors.
+
 ## What it is
 
 A two-mode launcher for stable-diffusion.cpp:
