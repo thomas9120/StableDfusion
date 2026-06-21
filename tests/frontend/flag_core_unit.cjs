@@ -88,6 +88,28 @@ check("backend-owned output and run mode flags are never emitted", () => {
 	assert(!flat.includes("evil.png"));
 });
 
+check("upscale mode ignores stale generation model components", () => {
+	flagCore.resetToDefaults();
+	flagCore.setMode("upscale");
+	flagCore.setMultipleFlagValues({
+		model: "models/diffusion/sd15.gguf",
+		diffusion_model: "models/diffusion/flux.gguf",
+		vae: "models/vae/vae.gguf",
+		init_img: "output/source.png",
+		upscale_model: "models/upscalers/RealESRGAN_x4plus.pth",
+		upscale_repeats: 2,
+	});
+	const result = flagCore.getLaunchArgs();
+	const flat = flatPairs(result.args);
+	assert.equal(result.error, null);
+	assert(!flat.includes("--model=models/diffusion/sd15.gguf"));
+	assert(!flat.includes("--diffusion-model=models/diffusion/flux.gguf"));
+	assert(!flat.includes("--vae=models/vae/vae.gguf"));
+	assert(flat.includes("--init-img=output/source.png"));
+	assert(flat.includes("--upscale-model=models/upscalers/RealESRGAN_x4plus.pth"));
+	assert(flat.includes("--upscale-repeats=2"));
+});
+
 check("invalid numeric values warn without entering argv", () => {
 	flagCore.resetToDefaults();
 	flagCore.setMode("img_gen");

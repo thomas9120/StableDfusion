@@ -805,7 +805,11 @@ function findChromiumExecutable() {
 				custom_args: "--eta 0.25",
 			});
 		});
-		await page.click('.nav-item[data-section="presets"]');
+		await page.evaluate(() => window.SDGui.switchSection("presets"));
+		await page.waitForFunction(
+			() => document.getElementById("section-presets")?.style.display === "block",
+			{ timeout: 3000 },
+		);
 		await page.fill("#preset-name", "Smoke Preset");
 		await page.fill("#preset-description", "saved by smoke");
 		await page.click("#btn-save-preset");
@@ -965,6 +969,9 @@ function findChromiumExecutable() {
 					metadata: isHidden("gen-metadata-inputs"),
 					prompt: isHidden("gen-prompt-section"),
 					sampling: isHidden("gen-sampling-section"),
+					modelSetup: isHidden("gen-model-setup-section"),
+					modeTitle:
+						document.getElementById("gen-mode-section-title")?.textContent || "",
 					activeSection: localStorage.getItem(window.SDGui.ACTIVE_SECTION_KEY),
 				};
 			});
@@ -973,6 +980,7 @@ function findChromiumExecutable() {
 		const imgGen = await sectionVisibility("generate-image");
 		check("Generate Image tab sets img_gen mode", imgGen.mode === "img_gen");
 		check("img_gen shows img2img inputs", !imgGen.img2img);
+		check("img_gen shows model setup", !imgGen.modelSetup);
 		check(
 			"img_gen hides video/upscale/convert",
 			imgGen.video && imgGen.upscale && imgGen.convert,
@@ -988,6 +996,8 @@ function findChromiumExecutable() {
 		const upscaleVis = await sectionVisibility("upscale");
 		check("Upscale tab sets upscale mode", upscaleVis.mode === "upscale");
 		check("upscale shows upscale inputs", !upscaleVis.upscale);
+		check("upscale labels setup section", upscaleVis.modeTitle === "Upscale setup");
+		check("upscale hides model setup", upscaleVis.modelSetup);
 		check("upscale hides img2img inputs", upscaleVis.img2img);
 		check("upscale hides prompt section", upscaleVis.prompt);
 		const upscaleOptions = await page.evaluate(() =>
