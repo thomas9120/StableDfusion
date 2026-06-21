@@ -466,6 +466,12 @@ window.SDGui.generateUi = (() => {
 		bindBrowse("btn-browse-init-img", () =>
 			browsePath("init_img", "image", "Select init image"),
 		);
+		bindText("gen-ref-image", "ref_image");
+		bindBrowse("btn-browse-ref-image", () =>
+			browsePath("ref_image", "image", "Select reference image"),
+		);
+		bindNumber("gen-strength", "strength", true);
+		bindNumber("gen-img-cfg", "img_cfg_scale", true);
 		bindNumber("gen-control-strength", "control_strength", true);
 		bindText("gen-mask", "mask");
 		bindBrowse("btn-browse-mask", () =>

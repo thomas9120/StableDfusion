@@ -86,13 +86,33 @@ window.SDGui.MODEL_TYPE_BUNDLES = [
 	},
 	{
 		value: "qwen_image",
-		label: "Qwen-Image / Edit",
+		label: "Qwen-Image",
 		fields: [
 			{ key: "diffusion_model", purpose: "diffusion_model", required: true },
 			{ key: "vae", purpose: "vae", required: true },
 			{ key: "llm", purpose: "llm", required: false },
 		],
 		defaults: { mode: "img_gen", width: 1328, height: 1328 },
+	},
+	{
+		value: "qwen_image_edit",
+		label: "Qwen-Image Edit",
+		fields: [
+			{ key: "diffusion_model", purpose: "diffusion_model", required: true },
+			{ key: "vae", purpose: "vae", required: true },
+			{ key: "llm", purpose: "llm", required: true },
+			{ key: "llm_vision", purpose: "llm_vision", required: false },
+		],
+		defaults: {
+			mode: "img_gen",
+			width: 1328,
+			height: 1328,
+			cfg_scale: 2.5,
+			sampling_method: "euler",
+			flow_shift: 3,
+			diffusion_fa: true,
+			qwen_image_zero_cond_t: true,
+		},
 	},
 	{
 		value: "wan",
