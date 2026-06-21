@@ -150,6 +150,22 @@ window.SDGui.flagCore = (() => {
 			if (loraSelected) {
 				return "LoRAs are not supported with the Ideogram 4 bundle. Clear the LoRA selection (or switch to a different model type bundle) before generating.";
 			}
+			var requiredIdeogram4 = [
+				["diffusion_model", "diffusion model"],
+				["uncond_diffusion_model", "unconditional diffusion model"],
+				["llm", "LLM text encoder"],
+				["vae", "VAE"],
+			];
+			var missingIdeogram4 = requiredIdeogram4
+				.filter((entry) => !vals[entry[0]])
+				.map((entry) => entry[1]);
+			if (missingIdeogram4.length) {
+				return (
+					"Ideogram 4 needs these files before generating: " +
+					missingIdeogram4.join(", ") +
+					"."
+				);
+			}
 		}
 		switch (state.mode) {
 			case "img_gen":
