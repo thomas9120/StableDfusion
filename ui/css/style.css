@@ -994,6 +994,27 @@ textarea {
 .gen-model-field select {
 	flex: 1;
 }
+.lora-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+.gen-model-field .lora-row {
+	align-items: center;
+	flex-wrap: wrap;
+}
+.gen-model-field .lora-row select {
+	min-width: min(100%, 240px);
+	flex: 2 1 240px;
+}
+.gen-model-field .lora-row input[type="range"] {
+	min-width: 140px;
+	flex: 1 1 160px;
+}
+.lora-strength-value {
+	min-width: 40px;
+	text-align: right;
+}
 
 .result-frame img,
 .preview-frame img,

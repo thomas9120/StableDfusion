@@ -28,6 +28,8 @@ window.SDGui.generateModelFields = (() => {
 	// so this module doesn't reach back into another module's closure.
 	var controls = {};
 	var readinessChips = {};
+	var loraOptionsCache = null;
+	var MAX_LORA_ROWS = 5;
 	// Re-sync a single control after its dropdown has been populated.
 	var syncControl = function () {};
 	// Called after a local state mutation so the coordinator can refresh
@@ -129,9 +131,10 @@ window.SDGui.generateModelFields = (() => {
 	async function populateLoraFileSelect(select) {
 		try {
 			var data = await window.SDGui.fetchJson("/api/models?type=lora");
+			loraOptionsCache = data.models || [];
 			select.replaceChildren();
 			select.appendChild(new Option("-- no active LoRA --", ""));
-			(data.models || []).forEach((m) =>
+			loraOptionsCache.forEach((m) =>
 				select.appendChild(
 					new Option(
 						(m.folder ? m.folder + "/" : "") +
@@ -149,67 +152,180 @@ window.SDGui.generateModelFields = (() => {
 		}
 	}
 
+	function normalizeLoraEntries(vals) {
+		var entries = Array.isArray(vals.lora_files) ? vals.lora_files : [];
+		entries = entries
+			.map((entry) => ({
+				path: String((entry && entry.path) || ""),
+				strength:
+					entry && entry.strength !== undefined && entry.strength !== ""
+						? Number(entry.strength)
+						: 1,
+			}))
+			.filter((entry) => entry.path);
+		if (!entries.length && vals.lora_file) {
+			entries.push({
+				path: vals.lora_file,
+				strength:
+					vals.lora_strength !== undefined && vals.lora_strength !== ""
+						? Number(vals.lora_strength)
+						: 1,
+			});
+		}
+		return entries.slice(0, MAX_LORA_ROWS);
+	}
+
+	function setLoraEntries(entries) {
+		var clean = entries
+			.slice(0, MAX_LORA_ROWS)
+			.map((entry) => ({
+				path: String((entry && entry.path) || ""),
+				strength:
+					entry && entry.strength !== undefined && entry.strength !== ""
+						? Number(entry.strength)
+						: 1,
+			}))
+			.filter((entry) => entry.path);
+		var primary = clean[0] || { path: "", strength: 1 };
+		flagCore.setMultipleFlagValues({
+			lora_files: clean,
+			lora_file: primary.path,
+			lora_strength: primary.strength,
+			lora_model_dir: primary.path ? fmt.loraFolderFromPath(primary.path) : "",
+		});
+	}
+
+	function appendCachedLoraOptions(select) {
+		select.replaceChildren();
+		select.appendChild(new Option("-- select LoRA --", ""));
+		(loraOptionsCache || []).forEach((m) =>
+			select.appendChild(
+				new Option(
+					(m.folder ? m.folder + "/" : "") +
+						m.name +
+						" (" +
+						Math.round(m.size / 1048576) +
+						" MB)",
+					"models/" + m.relative,
+				),
+			),
+		);
+	}
+
 	function renderLoraControls(container) {
 		var wrap = el("div", "gen-model-field");
 		var head = el("div", "field-head");
-		head.appendChild(el("span", "form-label", "Active LoRA"));
+		head.appendChild(el("span", "form-label", "LoRAs"));
 		wrap.appendChild(head);
 
-		var row = el("div", "field-row");
-		var select = el("select");
-		select.appendChild(new Option("Loading...", ""));
-		controls.lora_file = {
-			id: null,
-			kind: "path",
-			select: select,
-			purpose: "lora",
-		};
-		select.addEventListener("change", () => {
-			flagCore.setFlagValue("lora_file", select.value);
-			if (select.value) {
-				flagCore.setFlagValue(
-					"lora_model_dir",
-					fmt.loraFolderFromPath(select.value),
-				);
-			}
-		});
-		populateLoraFileSelect(select).then(() => syncControl("lora_file"));
-		row.appendChild(select);
-		wrap.appendChild(row);
+		var list = el("div", "lora-list");
+		wrap.appendChild(list);
+		var pendingBlankRows = 0;
 
-		var sliderRow = el("div", "field-row");
-		var slider = el("input");
-		slider.type = "range";
-		slider.min = "-1";
-		slider.max = "2";
-		slider.step = "0.05";
-		var current = flagCore.getFlagValues().lora_strength;
-		slider.value =
-			current === undefined || current === "" ? "1" : String(current);
-		var valueLabel = el(
-			"span",
-			"help-text",
-			fmt.formatLoraStrength(slider.value),
-		);
-		controls.lora_strength = {
-			id: null,
-			kind: "range",
-			slider: slider,
-			valueLabel: valueLabel,
-		};
-		slider.addEventListener("input", () => {
-			var value = fmt.formatLoraStrength(slider.value);
-			valueLabel.textContent = value;
-			flagCore.setFlagValue("lora_strength", Number(value));
-		});
-		sliderRow.appendChild(slider);
-		sliderRow.appendChild(valueLabel);
-		wrap.appendChild(sliderRow);
+		function renderRows() {
+			var vals = flagCore.getFlagValues();
+			var activeEntries = normalizeLoraEntries(vals);
+			var entries = activeEntries.slice();
+			if (!entries.length || pendingBlankRows > 0) {
+				var blanks = Math.max(1, pendingBlankRows);
+				while (blanks > 0 && entries.length < MAX_LORA_ROWS) {
+					entries.push({ path: "", strength: 1 });
+					blanks -= 1;
+				}
+			}
+			list.replaceChildren();
+			entries.forEach((entry, index) => {
+				var row = el("div", "field-row lora-row");
+				var select = el("select");
+				appendCachedLoraOptions(select);
+				if (
+					entry.path &&
+					!Array.from(select.options).some((o) => o.value === entry.path)
+				) {
+					select.appendChild(new Option(entry.path, entry.path));
+				}
+				select.value = entry.path || "";
+				select.addEventListener("change", () => {
+					var next = normalizeLoraEntries(flagCore.getFlagValues());
+					while (next.length <= index) next.push({ path: "", strength: 1 });
+					next[index] = {
+						path: select.value,
+						strength: next[index].strength || 1,
+					};
+					if (select.value && pendingBlankRows > 0) pendingBlankRows -= 1;
+					setLoraEntries(next);
+					renderRows();
+				});
+
+				var slider = el("input");
+				slider.type = "range";
+				slider.min = "-1";
+				slider.max = "2";
+				slider.step = "0.05";
+				slider.value = fmt.formatLoraStrength(entry.strength);
+				var valueLabel = el(
+					"span",
+					"help-text lora-strength-value",
+					fmt.formatLoraStrength(slider.value),
+				);
+				slider.addEventListener("input", () => {
+					var value = Number(fmt.formatLoraStrength(slider.value));
+					valueLabel.textContent = fmt.formatLoraStrength(value);
+					var next = normalizeLoraEntries(flagCore.getFlagValues());
+					while (next.length <= index) {
+						next.push({ path: "", strength: 1 });
+					}
+					if (!next[index].path && !select.value) return;
+					next[index] = { path: next[index].path || select.value, strength: value };
+					setLoraEntries(next);
+				});
+
+				var remove = el("button", "btn btn-sm", "Remove");
+				remove.type = "button";
+				remove.disabled = entries.length === 1 && !entry.path;
+				remove.addEventListener("click", () => {
+					var next = normalizeLoraEntries(flagCore.getFlagValues());
+					if (entry.path) {
+						next.splice(index, 1);
+						setLoraEntries(next);
+					} else if (pendingBlankRows > 0) {
+						pendingBlankRows -= 1;
+					}
+					renderRows();
+				});
+
+				row.appendChild(select);
+				row.appendChild(slider);
+				row.appendChild(valueLabel);
+				row.appendChild(remove);
+				list.appendChild(row);
+			});
+
+			var active = normalizeLoraEntries(flagCore.getFlagValues());
+			var add = el("button", "btn btn-sm", "Add LoRA");
+			add.type = "button";
+			add.disabled =
+				active.length === 0 ||
+				active.length + pendingBlankRows >= MAX_LORA_ROWS;
+			add.addEventListener("click", () => {
+				var next = normalizeLoraEntries(flagCore.getFlagValues());
+				if (next.length + pendingBlankRows < MAX_LORA_ROWS) {
+					pendingBlankRows += 1;
+					renderRows();
+				}
+			});
+			list.appendChild(add);
+		}
+
+		var loading = el("div", "help-text", "Loading LoRAs...");
+		list.appendChild(loading);
+		var preload = el("select");
+		populateLoraFileSelect(preload).then(renderRows);
 
 		var hint = el(
 			"p",
 			"help-text",
-			"Adds <lora:name:strength> to the prompt at generation time.",
+			"Adds <lora:name:strength> tags to the prompt at generation time.",
 		);
 		wrap.appendChild(hint);
 		container.appendChild(wrap);

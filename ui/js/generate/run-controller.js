@@ -162,6 +162,29 @@ window.SDGui.generateRunController = (() => {
 		pollTimer = setInterval(poll, 400);
 	}
 
+	function selectedLoras(vals) {
+		var entries = Array.isArray(vals.lora_files) ? vals.lora_files : [];
+		entries = entries
+			.map((entry) => ({
+				path: String((entry && entry.path) || ""),
+				strength:
+					entry && entry.strength !== undefined && entry.strength !== ""
+						? entry.strength
+						: 1,
+			}))
+			.filter((entry) => entry.path);
+		if (!entries.length && vals.lora_file) {
+			entries.push({
+				path: vals.lora_file,
+				strength:
+					vals.lora_strength !== undefined && vals.lora_strength !== ""
+						? vals.lora_strength
+						: 1,
+			});
+		}
+		return entries.slice(0, 5);
+	}
+
 	async function generate(options) {
 		options = options || {};
 		if (generating) return;
@@ -178,11 +201,18 @@ window.SDGui.generateRunController = (() => {
 		(result.warnings || []).forEach((w) => window.SDGui.toast(w, "warning"));
 
 		var vals = Object.assign({}, flagCore.getFlagValues());
-		if (vals.lora_file) {
-			var loraName = fmt.loraNameFromPath(vals.lora_file);
-			var loraStrength = fmt.formatLoraStrength(vals.lora_strength);
-			var loraTag = "<lora:" + loraName + ":" + loraStrength + ">";
-			vals.prompt = ((vals.prompt || "").trim() + " " + loraTag).trim();
+		var loras = selectedLoras(vals);
+		if (loras.length) {
+			var loraTags = loras.map((entry) => {
+				return (
+					"<lora:" +
+					fmt.loraNameFromPath(entry.path) +
+					":" +
+					fmt.formatLoraStrength(entry.strength) +
+					">"
+				);
+			});
+			vals.prompt = ((vals.prompt || "").trim() + " " + loraTags.join(" ")).trim();
 			var promptPair = result.args.find(
 				(pair) => pair[0] === "--prompt" || pair[0] === "-p",
 			);
@@ -191,7 +221,7 @@ window.SDGui.generateRunController = (() => {
 			} else {
 				result.args.push(["--prompt", vals.prompt]);
 			}
-			var loraDir = vals.lora_model_dir || fmt.loraFolderFromPath(vals.lora_file);
+			var loraDir = vals.lora_model_dir || fmt.loraFolderFromPath(loras[0].path);
 			vals.lora_model_dir = loraDir;
 			if (!result.args.some((pair) => pair[0] === "--lora-model-dir")) {
 				result.args.push(["--lora-model-dir", loraDir]);
