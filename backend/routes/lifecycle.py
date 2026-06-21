@@ -5,9 +5,9 @@
 - POST /api/open-folder
 """
 
-from backend.context import AppContext
-from backend.http import Request, Response, sanitize_error
-from backend.services import lifecycle_service
+from ..context import AppContext
+from ..http import Request, Response, sanitize_error
+from ..services import lifecycle_service
 
 # Known folders the Install tab can open. Anything else is rejected.
 FOLDER_MAP_KEYS = {"models", "output", "sdcpp", "presets", "root"}

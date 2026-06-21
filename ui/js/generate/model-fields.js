@@ -31,11 +31,11 @@ window.SDGui.generateModelFields = (() => {
 	var loraOptionsCache = null;
 	var MAX_LORA_ROWS = 5;
 	// Re-sync a single control after its dropdown has been populated.
-	var syncControl = function () {};
+	var syncControl = () => {};
 	// Called after a local state mutation so the coordinator can refresh
 	// non-focused controls immediately (Configure tab, history mode badge,
 	// etc.) instead of waiting for the flagCore.onChange cycle.
-	var onSyncAll = function () {};
+	var onSyncAll = () => {};
 
 	function fieldLabel(key) {
 		var map = {
@@ -64,6 +64,36 @@ window.SDGui.generateModelFields = (() => {
 		return map[key] || key;
 	}
 
+	// Ideogram 4 bundle guidance: lists the four required source files,
+	// the fp8 -> bf16 -> GGUF conversion note, and the JSON-prompt caveat.
+	// Text-only (safe DOM); repo ids are shown as text so the user can paste
+	// them into the HF Download tab.
+	function buildIdeogram4Help() {
+		var box = el("div", "gen-bundle-help");
+		box.appendChild(
+			el(
+				"p",
+				"help-text",
+				"Ideogram 4 needs four files: the main diffusion model (ideogram4-*.gguf), an unconditional diffusion model (ideogram4_uncond-*.gguf, used for CFG), a Qwen3-VL-8B-Instruct GGUF text encoder (--llm), and the FLUX.2 VAE.",
+			),
+		);
+		box.appendChild(
+			el(
+				"p",
+				"help-text",
+				"Sources: ideogram-ai/ideogram-4-fp8 (main + uncond), unsloth/Qwen3-VL-8B-Instruct-GGUF (--llm), black-forest-labs/FLUX.2-dev (VAE). Convert fp8 -> bf16 -> GGUF (q8_0, or a lower quant for less VRAM) before use.",
+			),
+		);
+		box.appendChild(
+			el(
+				"p",
+				"help-text",
+				"The prompt is a structured JSON object (high_level_description, style_description, compositional_deconstruction). LoRA tags are not injected for this bundle.",
+			),
+		);
+		return box;
+	}
+
 	function setModelReadiness(key, selected, required) {
 		var chip = readinessChips[key];
 		if (!chip) return;
@@ -86,9 +116,8 @@ window.SDGui.generateModelFields = (() => {
 		var entry = controls[key];
 		var chip = readinessChips[key];
 		if (!entry || !chip) return;
-		var value = flagCore && flagCore.getFlagValues
-			? flagCore.getFlagValues()[key]
-			: "";
+		var value =
+			flagCore && flagCore.getFlagValues ? flagCore.getFlagValues()[key] : "";
 		setModelReadiness(
 			key,
 			!!value || !!(entry.select && entry.select.value),
@@ -304,7 +333,10 @@ window.SDGui.generateModelFields = (() => {
 						next.push({ path: "", strength: 1 });
 					}
 					if (!next[index].path && !select.value) return;
-					next[index] = { path: next[index].path || select.value, strength: value };
+					next[index] = {
+						path: next[index].path || select.value,
+						strength: value,
+					};
 					setLoraEntries(next);
 				});
 
@@ -402,6 +434,10 @@ window.SDGui.generateModelFields = (() => {
 		var bundleValue = flagCore.getBundle();
 		var bundle = window.SDGui.getBundle(bundleValue);
 		var fields = bundle ? bundle.fields : null;
+
+		if (bundleValue === "ideogram4") {
+			container.appendChild(buildIdeogram4Help());
+		}
 
 		var fieldList;
 		if (fields && fields.length) {
@@ -521,7 +557,7 @@ window.SDGui.generateModelFields = (() => {
 			(window.SDGui.generateControls &&
 				window.SDGui.generateControls.syncControl) ||
 			syncControl;
-		onSyncAll = options.onSyncAll || function () {};
+		onSyncAll = options.onSyncAll || (() => {});
 		if (flagCore && typeof flagCore.onChange === "function") {
 			flagCore.onChange(updateAllModelReadiness);
 		}

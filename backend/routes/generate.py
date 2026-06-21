@@ -6,9 +6,9 @@
 - POST /api/generate/cancel   → {canceled}
 """
 
-from backend.context import AppContext
-from backend.http import Request, Response
-from backend.services import generate_service
+from ..context import AppContext
+from ..http import Request, Response
+from ..services import generate_service
 
 
 def generate(request: Request, response: Response, ctx: AppContext) -> None:

@@ -5,9 +5,9 @@
 - GET  /api/remote-tunnel/status
 """
 
-from backend.context import AppContext
-from backend.http import Request, Response, sanitize_error
-from backend.services import tunnel_service
+from ..context import AppContext
+from ..http import Request, Response, sanitize_error
+from ..services import tunnel_service
 
 
 def start(request: Request, response: Response, ctx: AppContext) -> None:

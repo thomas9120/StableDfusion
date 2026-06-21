@@ -10,9 +10,9 @@ Each entry carries name, relative path, size, and mtime (PLAN.md §13).
 import urllib.parse
 from pathlib import Path
 
-from backend.context import AppContext
-from backend.http import Request, Response
-from backend.services import file_picker_service, model_storage_service
+from ..context import AppContext
+from ..http import Request, Response
+from ..services import file_picker_service, model_storage_service
 
 MODEL_EXTS = (".safetensors", ".ckpt", ".pth", ".pt", ".gguf", ".sft", ".bin")
 

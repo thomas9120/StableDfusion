@@ -168,6 +168,31 @@ window.SDGui.MODEL_TYPE_BUNDLES = [
 		},
 	},
 	{
+		// Ideogram 4 (stable-diffusion.cpp): needs a main diffusion model,
+		// a SEPARATE unconditional diffusion model used for CFG, a Qwen3-VL
+		// text encoder, and the FLUX.2 VAE. See docs/ideogram4.md upstream.
+		value: "ideogram4",
+		label: "Ideogram 4",
+		fields: [
+			{ key: "diffusion_model", purpose: "diffusion_model", required: true },
+			{
+				key: "uncond_diffusion_model",
+				purpose: "diffusion_model",
+				required: true,
+			},
+			{ key: "llm", purpose: "llm", required: true },
+			{ key: "vae", purpose: "vae", required: true },
+		],
+		defaults: {
+			mode: "img_gen",
+			width: 1024,
+			height: 1024,
+			flow_shift: 1.0, // matches upstream default_flow_shift = 1.0
+			diffusion_fa: true,
+			offload_to_cpu: true,
+		},
+	},
+	{
 		value: "custom",
 		label: "Custom (show all fields)",
 		fields: [],

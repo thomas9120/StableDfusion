@@ -15,8 +15,8 @@ import urllib.parse
 from pathlib import Path
 from typing import Any
 
-from backend.context import AppContext
-from backend.http import Request, Response
+from ..context import AppContext
+from ..http import Request, Response
 
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _.-]{0,79}$")
 _KEY_RE = re.compile(r"^[A-Za-z0-9_.-]{1,96}$")

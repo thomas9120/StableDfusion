@@ -3,9 +3,9 @@
 - POST /api/select-file
 """
 
-from backend.context import AppContext
-from backend.http import Request, Response
-from backend.services import file_picker_service
+from ..context import AppContext
+from ..http import Request, Response
+from ..services import file_picker_service
 
 
 def select_file(request: Request, response: Response, ctx: AppContext) -> None:

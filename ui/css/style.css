@@ -994,6 +994,13 @@ textarea {
 	width: auto;
 }
 
+.gen-bundle-help {
+	margin-bottom: var(--space-3);
+}
+.gen-bundle-help .help-text {
+	margin: 0.15rem 0;
+}
+
 .gen-model-field {
 	margin-bottom: var(--space-3);
 }

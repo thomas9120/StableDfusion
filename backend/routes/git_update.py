@@ -4,9 +4,9 @@
 - POST /api/app-update
 """
 
-from backend.context import AppContext
-from backend.http import Request, Response
-from backend.services import git_update_service
+from ..context import AppContext
+from ..http import Request, Response
+from ..services import git_update_service
 
 
 def get_status(request: Request, response: Response, ctx: AppContext) -> None:

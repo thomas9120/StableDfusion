@@ -5,9 +5,9 @@ available backend variants for this platform. Drives the Install tab + the
 sidebar version badge.
 """
 
-from backend.context import AppContext
-from backend.http import Request, Response, sanitize_error
-from backend.services import sdcpp_manager
+from ..context import AppContext
+from ..http import Request, Response, sanitize_error
+from ..services import sdcpp_manager
 
 
 def get_status(request: Request, response: Response, ctx: AppContext) -> None:

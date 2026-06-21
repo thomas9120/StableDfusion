@@ -14,9 +14,9 @@ Endpoints:
 
 import threading
 
-from backend.context import AppContext
-from backend.http import Request, Response, sanitize_error
-from backend.services import process_manager, sdcpp_manager
+from ..context import AppContext
+from ..http import Request, Response, sanitize_error
+from ..services import process_manager, sdcpp_manager
 
 RELEASE_RESPONSE_LIMIT = 30
 

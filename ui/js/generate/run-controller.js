@@ -16,29 +16,24 @@ window.SDGui.generateRunController = (() => {
 	var previewProgress = null;
 	var results = null;
 	var runningSection = null;
-	var activeConfig = function () {
-		return {
-			running: "Generating... your image will appear here.",
-		};
-	};
-	var getActiveSection = function () {
-		return "generate-image";
-	};
-	var sectionForMode = function (mode) {
-		return mode === "vid_gen"
+	var activeConfig = () => ({
+		running: "Generating... your image will appear here.",
+	});
+	var getActiveSection = () => "generate-image";
+	var sectionForMode = (mode) =>
+		mode === "vid_gen"
 			? "generate-video"
 			: mode === "upscale"
 				? "upscale"
 				: mode === "convert"
 					? "convert"
 					: "generate-image";
-	};
-	var onRunStart = function () {};
-	var onRunProgress = function () {};
-	var onRunPreview = function () {};
-	var onRunDone = function () {};
-	var syncFromState = function () {};
-	var updateModeSections = function () {};
+	var onRunStart = () => {};
+	var onRunProgress = () => {};
+	var onRunPreview = () => {};
+	var onRunDone = () => {};
+	var syncFromState = () => {};
+	var updateModeSections = () => {};
 
 	function init(options) {
 		options = options || {};
@@ -112,7 +107,8 @@ window.SDGui.generateRunController = (() => {
 	async function poll() {
 		try {
 			var snap = await window.SDGui.fetchJson("/api/generate/status");
-			var section = runningSection || sectionForMode(snap.mode || flagCore.getMode());
+			var section =
+				runningSection || sectionForMode(snap.mode || flagCore.getMode());
 			onRunProgress(section, snap);
 			updateGenBtnFromSnap(snap);
 			if (snap.state === "running") {
@@ -162,6 +158,20 @@ window.SDGui.generateRunController = (() => {
 		pollTimer = setInterval(poll, 400);
 	}
 
+	// Lightweight JSON check: true only when the trimmed prompt starts with
+	// { or [ and parses cleanly. Used to keep LoRA tags out of structured
+	// (Ideogram 4) prompts that go through --prompt as a JSON object.
+	function looksLikeJson(text) {
+		var s = String(text || "").trim();
+		if (!s || (s[0] !== "{" && s[0] !== "[")) return false;
+		try {
+			JSON.parse(s);
+			return true;
+		} catch (e) {
+			return false;
+		}
+	}
+
 	function selectedLoras(vals) {
 		var entries = Array.isArray(vals.lora_files) ? vals.lora_files : [];
 		entries = entries
@@ -202,7 +212,20 @@ window.SDGui.generateRunController = (() => {
 
 		var vals = Object.assign({}, flagCore.getFlagValues());
 		var loras = selectedLoras(vals);
-		if (loras.length) {
+		// Defensive JSON guard: if the prompt parses as JSON (e.g. a user
+		// pasted a structured Ideogram 4 payload under a non-ideogram4
+		// bundle), appending <lora:name:strength> tags would corrupt it.
+		// The ideogram4 bundle itself is hard-blocked from LoRAs in
+		// flagCore.requiredInputError(), so it never reaches here with a
+		// LoRA selected.
+		var jsonPrompt = looksLikeJson(vals.prompt);
+		if (loras.length && jsonPrompt) {
+			window.SDGui.toast(
+				"LoRA prompt tags skipped: prompt is JSON.",
+				"warning",
+			);
+		}
+		if (loras.length && !jsonPrompt) {
 			var loraTags = loras.map((entry) => {
 				return (
 					"<lora:" +
@@ -212,7 +235,11 @@ window.SDGui.generateRunController = (() => {
 					">"
 				);
 			});
-			vals.prompt = ((vals.prompt || "").trim() + " " + loraTags.join(" ")).trim();
+			vals.prompt = (
+				(vals.prompt || "").trim() +
+				" " +
+				loraTags.join(" ")
+			).trim();
 			var promptPair = result.args.find(
 				(pair) => pair[0] === "--prompt" || pair[0] === "-p",
 			);
@@ -221,7 +248,8 @@ window.SDGui.generateRunController = (() => {
 			} else {
 				result.args.push(["--prompt", vals.prompt]);
 			}
-			var loraDir = vals.lora_model_dir || fmt.loraFolderFromPath(loras[0].path);
+			var loraDir =
+				vals.lora_model_dir || fmt.loraFolderFromPath(loras[0].path);
 			vals.lora_model_dir = loraDir;
 			if (!result.args.some((pair) => pair[0] === "--lora-model-dir")) {
 				result.args.push(["--lora-model-dir", loraDir]);

@@ -6,9 +6,9 @@
 - POST /api/hf/download-cancel
 """
 
-from backend.context import AppContext
-from backend.http import Request, Response
-from backend.services import hf_download_service
+from ..context import AppContext
+from ..http import Request, Response
+from ..services import hf_download_service
 
 
 def list_repo_files(request: Request, response: Response, ctx: AppContext) -> None:
