@@ -7,12 +7,16 @@
 """
 
 from backend.context import AppContext
-from backend.http import Request, Response
+from backend.http import Request, Response, sanitize_error
 from backend.services import generate_service
 
 
 def generate(request: Request, response: Response, ctx: AppContext) -> None:
-    result = generate_service.run(ctx, request.body or {})
+    try:
+        result = generate_service.run(ctx, request.body or {})
+    except Exception as exc:
+        response.error(sanitize_error(exc, 500), 500)
+        return
     if "error" in result:
         response.error(result["error"], 400)
         return
@@ -20,7 +24,10 @@ def generate(request: Request, response: Response, ctx: AppContext) -> None:
 
 
 def get_status(request: Request, response: Response, ctx: AppContext) -> None:
-    response.json(generate_service.status(ctx))
+    try:
+        response.json(generate_service.status(ctx))
+    except Exception as exc:
+        response.error(sanitize_error(exc, 500), 500)
 
 
 def get_preview(request: Request, response: Response, ctx: AppContext) -> None:

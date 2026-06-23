@@ -399,7 +399,7 @@ def _run_job(
         ctx.state.generation.update(
             state="error",
             message="Failed to start sd-cli",
-            error=str(launch["error"]),
+            error=str(launch["error"])[:500],
             finished_at=time.time(),
         )
         print(f"[generate] launch failed: {launch['error']}", flush=True)
@@ -481,8 +481,8 @@ def _run_job(
             state="error",
             message=f"sd-cli exited with code {rc}.",
             error=f"exit {rc}",
-            stdout_tail=stdout_tail,
-            stderr_tail=stderr_tail,
+            stdout_tail=stdout_tail[-2000:],
+            stderr_tail=stderr_tail[-2000:],
             finished_at=time.time(),
         )
         print(f"[generate] sd-cli exit {rc} for {job_id}", flush=True)

@@ -50,7 +50,7 @@ class BackendServices:
     binary_suffix: str = ""
     current_arch: str = "unknown"
     current_platform: str = "unknown"
-    find_tool_executable: Callable[[str], Path] = _missing_service
+    find_tool_executable: Callable[..., Any] = _missing_service
     get_platform_label: Callable[[], str] = _missing_service
     get_tool_filename: Callable[[str], str] = _missing_service
     is_process_running: Callable[[], bool] = _missing_service

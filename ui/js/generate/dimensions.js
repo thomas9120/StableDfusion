@@ -16,6 +16,10 @@ window.SDGui.generateDimensions = (() => {
 	// Last shape the user engaged with, so the size row stays stable when
 	// the current ratio is custom (no bucket highlight).
 	var lastShape = "1:1";
+	// M27 — track the shape the size buttons were last rendered for so we
+	// only rebuild them when the shape actually changes (not on every
+	// per-keystroke updateAffordances call).
+	var renderedShape = null;
 
 	var flagCore = null;
 	var onSyncAll = function () {};
@@ -112,8 +116,12 @@ window.SDGui.generateDimensions = (() => {
 		});
 
 		// Size buttons for the active shape, then highlight the matching bucket
-		// — or Custom when the size is off-bucket.
-		renderDimensionSizes(lastShape);
+		// — or Custom when the size is off-bucket. Only rebuild when the shape
+		// actually changes (M27: avoid per-keystroke DOM rebuild).
+		if (renderedShape !== lastShape) {
+			renderDimensionSizes(lastShape);
+			renderedShape = lastShape;
+		}
 		document.querySelectorAll("#gen-dim-sizes .dim-size").forEach((btn) => {
 			var on = bucket
 				? Number(btn.getAttribute("data-w")) === w &&

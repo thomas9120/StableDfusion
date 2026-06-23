@@ -261,15 +261,10 @@ def remove_runtime(ctx: AppContext, tag: str, backend: str) -> dict[str, Any]:
                 if child.is_file():
                     removed_files += 1
             shutil.rmtree(path, ignore_errors=True)
-    if active_identity == target:
-        legacy = legacy_runtime_bin_dir(ctx, tag, backend)
-        if legacy and legacy.exists():
-            for child in legacy.rglob("*"):
-                if child.is_file():
-                    removed_files += 1
-            shutil.rmtree(legacy, ignore_errors=True)
-            ctx.paths.sdcpp_bin.mkdir(parents=True, exist_ok=True)
-            (ctx.paths.sdcpp_bin / ".gitkeep").touch()
+    # NOTE: the shared legacy ``sdcpp/bin`` is deliberately NOT removed here.
+    # It is a fallback location that other installed runtimes (or the new
+    # active runtime) may still depend on. Full cleanup of ``sdcpp/bin`` is the
+    # job of ``remove_sdcpp_files`` (the "Remove Binaries" action).
 
     installed = []
     for item in cfg.get("installed_backends") or []:
@@ -549,7 +544,7 @@ def validate_runtime_dependencies(
     required: set[str] = set()
 
     for tool in tools or ctx.services.sdcpp_tools:
-        exe_path = ctx.services.find_tool_executable(tool)
+        exe_path = ctx.services.find_tool_executable(ctx, tool)
         if not exe_path.exists():
             missing_executables.append(ctx.services.get_tool_filename(tool))
             continue
@@ -707,6 +702,20 @@ def install_release(
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
+def _latest_release_tag(releases: list[dict[str, Any]]) -> str | None:
+    """Return the newest non-prerelease tag, falling back to releases[0].
+
+    GitHub's ``/releases`` list is newest-first, but ``releases[0]`` may be a
+    prerelease. Prefer the latest stable release; if all are prereleases
+    (common for continuous-build repos like stable-diffusion.cpp), fall back to
+    the newest release overall.
+    """
+    for r in releases or []:
+        if not r.get("prerelease"):
+            return r.get("tag_name")
+    return releases[0]["tag_name"] if releases else None
+
+
 def update_runtime(
     ctx: AppContext,
     tag: str,
@@ -714,7 +723,7 @@ def update_runtime(
     backend_specs: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, Any]:
     releases = get_releases(ctx)
-    latest = releases[0]["tag_name"] if releases else None
+    latest = _latest_release_tag(releases)
     if not latest:
         set_download_progress(ctx, status="error", message="No releases found.")
         return {"status": "error", "error": "No releases found."}

@@ -155,7 +155,14 @@ window.SDGui.confirmAction = (title, message, confirmText) => {
 				return;
 			}
 			if (e.key === "Enter") {
-				finish(true);
+				// M18 — Enter confirms only when OK (or nothing specific) is
+				// focused. If Cancel is focused, honor that focus and cancel
+				// instead of confirming.
+				if (cancelBtn && document.activeElement === cancelBtn) {
+					finish(false);
+				} else {
+					finish(true);
+				}
 				return;
 			}
 			// F5 — trap Tab focus within the dialog.
@@ -190,6 +197,7 @@ window.SDGui.manager = (() => {
 	var installPollStartTime = null;
 	var installPollFailCount = 0;
 	var installPollInFlight = false;
+	var statusInFlight = false;
 	var latestStatus = null;
 	var latestAppUpdateStatus = null;
 
@@ -410,6 +418,9 @@ window.SDGui.manager = (() => {
 	}
 
 	async function checkStatus() {
+		// M22 — guard against overlapping status fetches from the 5s poller.
+		if (statusInFlight) return null;
+		statusInFlight = true;
 		try {
 			var status = await fetchJson("/api/status");
 			if (!status) return null;
@@ -418,6 +429,8 @@ window.SDGui.manager = (() => {
 			return status;
 		} catch (e) {
 			return null;
+		} finally {
+			statusInFlight = false;
 		}
 	}
 
@@ -595,6 +608,12 @@ window.SDGui.manager = (() => {
 			}
 			info.appendChild(empty);
 			renderRuntimeList(status, info);
+		}
+		// M22 — the 5s status poll rebuilds the runtime list (re-enabling
+		// action buttons). If an install/repair/update is in progress, keep
+		// them disabled so the user can't trigger a concurrent mutation.
+		if (installPollTimer) {
+			setInstallButtonsDisabled(true);
 		}
 	}
 

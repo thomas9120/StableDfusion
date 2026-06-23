@@ -124,111 +124,111 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` fixed
 
 ### M1 — `launch_process` holds `process_lock` across `validate_runtime_dependencies` + `Popen`
 - **File:** `backend/services/process_manager.py:94-145`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M2 — `stop_process` holds `process_lock` across `proc.wait(timeout=5)`
 - **File:** `backend/services/process_manager.py:152-172`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M3 — `server_mode_service.start` holds `sd_server_lock` across validate + Popen
 - **File:** `backend/services/server_mode_service.py:218-288`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M4 — `tunnel_service.start` holds `remote_tunnel_lock` across cloudflared download
 - **File:** `backend/services/tunnel_service.py:137-169`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M5 — `_append_log` read-modify-write race between the two tunnel stream threads
 - **File:** `backend/services/tunnel_service.py:90-105`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M6 — `proxy` connects to raw `0.0.0.0`/`::` listen host instead of normalized `127.0.0.1`
 - **File:** `backend/services/server_mode_service.py:346-349`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M7 — `_tokenize_extra` bypasses the curated-flag allowlist
 - **File:** `backend/services/server_mode_service.py:143-152`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M8 — `validate_hf_filename` regex rejects legitimate HF filenames (spaces, parens, `+`)
 - **File:** `backend/services/hf_download_service.py:44`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M9 — `update_runtime` treats `releases[0]` as "latest" without checking `prerelease`
 - **File:** `backend/services/sdcpp_manager.py:688-689`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M10 — `remove_runtime` rmtree's the shared legacy `sdcpp/bin` when removing an active runtime
 - **File:** `backend/services/sdcpp_manager.py:264-272`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M11 — `find_tool_executable` ignores caller's `ctx`, resolves against global `APP_CONTEXT`
 - **File:** `backend/app.py:121-124`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M12 — `generate_service` pushes raw `stderr_tail`/`stdout_tail`/`error` into client-facing status
 - **File:** `backend/services/generate_service.py:477-498,528-529,560-561,566`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M13 — `update_app_from_git` has no lock around `git pull` + `pip install`
 - **File:** `backend/services/git_update_service.py:254-309`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M14 — `list_models` / `generate` / `file_picker` / `git_update` routes have missing exception handling
 - **File:** `backend/routes/models.py:44-79`, `generate.py:14-19`, `file_picker.py`, `git_update.py`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M15 — `serve_image` reads entire file into memory, no Range support
 - **File:** `backend/routes/images.py:65-80`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M16 — Install thread `finally` has no `except` → stuck "downloading" state on pre-try exceptions
 - **File:** `backend/routes/install.py:98-104,146-158,166-172`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M17 — `run-controller.poll()` has no in-flight guard → overlapping polls double-add history
 - **File:** `ui/js/generate/run-controller.js:112-151,160-163`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M18 — `confirmAction` Enter confirms even when Cancel is focused
 - **File:** `ui/js/manager.js:151-159`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M19 — Configure inputs go stale after history-restore / bundle-switch
 - **File:** `ui/js/config-flags-ui.js:193-197`, `ui/js/generate/history.js:158-167`, `ui/js/generate-ui.js:436-451`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M20 — Configure number inputs persist `NaN` into shared state
 - **File:** `ui/js/config-flags-ui.js:58-63`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M21 — HF download poller never stops on transient errors; not registered with `panelLifecycle`
 - **File:** `ui/js/hf-download-ui.js:272-320,354-393`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M22 — 5s `refreshStatusBadge` does full Install DOM rebuild with no in-flight guard; re-enables runtime buttons mid-repair
 - **File:** `ui/js/app.js:229`, `ui/js/manager.js:412-599,1043-1046`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M23 — Shared `#generate-workbench`: a running job in one mode corrupts other sections' button/result UI
 - **File:** `ui/js/generate/run-controller.js:95-101`, `ui/js/generate-ui.js:232-242,354-367`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M24 — `sendToImg2img` double-prefixes `output/`
 - **File:** `ui/js/generate-ui.js:333-335`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M25 — `convert` required-input check rejects `diffusion_model`-only bundles
 - **File:** `ui/js/flag-core.js:157-161`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M26 — `.webp` always rendered as `<video>`, breaking static webp images
 - **File:** `ui/js/gallery-rendering.js:28,35-37`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### M27 — Per-keystroke full `syncFromState` + dimension-button rebuild
 - **File:** `ui/js/generate-ui.js:584-588`, `ui/js/generate/dimensions.js:116`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ---
 

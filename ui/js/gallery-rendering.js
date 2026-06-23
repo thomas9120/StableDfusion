@@ -21,11 +21,13 @@ window.SDGui.gallery = (() => {
 		return "/api/image/" + encodeURIComponent(name) + "/thumbnail";
 	}
 
-	// Video file extensions sd-cli can emit for vid_gen (.avi/.webm/animated
-	// .webp). Only the Generate Video tab produces these, so branching here keeps
-	// gallery changes specific to video results — image files still render as
-	// <img> exactly as before.
-	var VIDEO_EXTS = { ".webm": true, ".avi": true, ".webp": true };
+	// Video file extensions sd-cli can emit for vid_gen (.avi/.webm). Only the
+	// Generate Video tab produces these, so branching here keeps gallery
+	// changes specific to video results — image files still render as <img>.
+	// M26 — .webp is NOT treated as video: static webp images are common, and
+	// animated webp plays correctly inside an <img> element in all browsers, so
+	// rendering it as <img> handles both static and animated cases.
+	var VIDEO_EXTS = { ".webm": true, ".avi": true };
 
 	function fileExt(name) {
 		var i = String(name || "").lastIndexOf(".");

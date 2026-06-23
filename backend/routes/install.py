@@ -12,6 +12,7 @@ Endpoints:
 - POST /api/sdcpp/remove
 """
 
+import sys
 import threading
 
 from backend.context import AppContext
@@ -102,6 +103,9 @@ def start_install(request: Request, response: Response, ctx: AppContext) -> None
     def _install(tag_value, backend_value):
         try:
             sdcpp_manager.install_release(ctx, tag_value, backend_value, ctx.services.backend_specs)
+        except Exception as exc:
+            print(f"[install] unhandled error: {exc}", file=sys.stderr, flush=True)
+            sdcpp_manager.set_download_progress(ctx, status="error", message=str(exc))
         finally:
             _finish_install_operation(ctx)
 
@@ -166,6 +170,9 @@ def repair_runtime(request: Request, response: Response, ctx: AppContext) -> Non
                 ctx.services.backend_specs,
                 set_active=should_activate,
             )
+        except Exception as exc:
+            print(f"[repair] unhandled error: {exc}", file=sys.stderr, flush=True)
+            sdcpp_manager.set_download_progress(ctx, status="error", message=str(exc))
         finally:
             _finish_install_operation(ctx)
 
@@ -180,6 +187,9 @@ def start_runtime_update(tag: str, backend: str, response: Response, ctx: AppCon
     def _update(tag_value, backend_value):
         try:
             sdcpp_manager.update_runtime(ctx, tag_value, backend_value, ctx.services.backend_specs)
+        except Exception as exc:
+            print(f"[update] unhandled error: {exc}", file=sys.stderr, flush=True)
+            sdcpp_manager.set_download_progress(ctx, status="error", message=str(exc))
         finally:
             _finish_install_operation(ctx)
 

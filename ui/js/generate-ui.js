@@ -332,7 +332,12 @@ window.SDGui.generateUi = (() => {
 
 	function sendToImg2img(name) {
 		if (!name) return;
-		var initPath = "output/" + String(name).replace(/^\/+/, "");
+		// M24 — strip a leading "output/" if already present so we don't
+		// double-prefix into "output/output/<name>".
+		var cleaned = String(name)
+			.replace(/^\/+/, "")
+			.replace(/^output\/+/i, "");
+		var initPath = "output/" + cleaned;
 		window.SDGui.flagCore.setFlagValue("init_img", initPath);
 		if (window.SDGui.flagCore.getMode() !== "img_gen") {
 			window.SDGui.flagCore.setMode("img_gen");
@@ -364,6 +369,14 @@ window.SDGui.generateUi = (() => {
 		syncAll();
 		setActiveHistoryFilter();
 		renderWorkspaceState();
+		// M23 — sync the shared generate/cancel buttons to this section's run
+		// state so a running job in another section doesn't corrupt them.
+		if (
+			window.SDGui.generateRunController &&
+			typeof window.SDGui.generateRunController.syncForActiveSection === "function"
+		) {
+			window.SDGui.generateRunController.syncForActiveSection(section);
+		}
 	}
 
 	function initModules() {
@@ -583,7 +596,14 @@ window.SDGui.generateUi = (() => {
 
 	function bindStateSync() {
 		window.SDGui.flagCore.onChange(() => {
-			syncFromState(false);
+			// M27 — light refresh on shared-state changes only: sync control
+			// values + the bundle selector. Skip the expensive
+			// updateModeSections (which rebuilds dimension buttons) — mode and
+			// bundle changes already call it explicitly through their own
+			// handlers, so a value-only change (e.g. typing in a dimension
+			// field) must not trigger a full rebuild per keystroke.
+			syncSelectorsFromState();
+			syncAll();
 		});
 	}
 

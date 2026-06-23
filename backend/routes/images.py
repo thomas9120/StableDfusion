@@ -70,11 +70,9 @@ def serve_image(request: Request, response: Response, ctx: AppContext) -> None:
     if image_path is None:
         response.error("Image not found.", 404)
         return
+    headers = {"Cache-Control": "no-cache, must-revalidate"}
     try:
-        data = image_path.read_bytes()
+        response.file(image_path, content_type=_content_type(image_path), headers=headers)
     except OSError as exc:
         response.error("Could not read image.", 500)
         print(f"[images] read failed for {name}: {exc}", flush=True)
-        return
-    headers = {"Cache-Control": "no-cache, must-revalidate"}
-    response.bytes(data, content_type=_content_type(image_path), headers=headers)

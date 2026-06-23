@@ -59,6 +59,9 @@ window.SDGui.configFlagsUi = (() => {
 				var val = input.value;
 				if (flag.type === "int") val = parseInt(val, 10);
 				else if (flag.type === "float") val = parseFloat(val);
+				// M20 — don't persist NaN into shared state (empty/invalid
+				// input). The flag keeps its previous value.
+				if (Number.isNaN(val)) return;
 				window.SDGui.flagCore.setFlagValue(flag.id, val);
 			});
 			wrap.appendChild(input);
@@ -190,11 +193,18 @@ window.SDGui.configFlagsUi = (() => {
 		if (btnExpand) btnExpand.addEventListener("click", expandAll);
 		var btnCollapse = document.getElementById("btn-collapse-all");
 		if (btnCollapse) btnCollapse.addEventListener("click", collapseAll);
-		// Re-render when shared state changes (e.g. Generate edits the same flag).
+		// Re-render when shared state changes (e.g. Generate edits the same flag,
+		// history restore, or bundle switch). M19 — do a full rebuild so inputs
+		// reflect the new values, unless the user is actively editing a Configure
+		// input (don't clobber focused fields mid-typing).
 		window.SDGui.flagCore.onChange(() => {
-			// Avoid clobbering focused inputs: only refresh preview + visibility,
-			// and rebuild only the non-focused controls via a light refresh.
-			renderPreview();
+			var container = document.getElementById("configure-flags");
+			var focused = container && container.contains(document.activeElement);
+			if (focused) {
+				renderPreview();
+			} else {
+				render();
+			}
 		});
 		// Full render whenever the user navigates to Configure (handled by app.js
 		// tab switch indirectly via the periodic refresh); render once now.

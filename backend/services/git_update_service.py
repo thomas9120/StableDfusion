@@ -252,6 +252,23 @@ def start_update(ctx: AppContext) -> dict[str, Any]:
 
 
 def update_app_from_git(ctx: AppContext) -> dict[str, Any]:
+    # Guard the working tree so two concurrent update requests can't race on
+    # git pull + pip install.
+    with ctx.state.app_update_lock:
+        if ctx.state.app_update_in_progress:
+            return {
+                "updated": False,
+                "error": "An app update is already in progress.",
+            }
+        ctx.state.app_update_in_progress = True
+    try:
+        return _do_update_app_from_git(ctx)
+    finally:
+        with ctx.state.app_update_lock:
+            ctx.state.app_update_in_progress = False
+
+
+def _do_update_app_from_git(ctx: AppContext) -> dict[str, Any]:
     base_dir = ctx.paths.root
     status = get_app_update_status(ctx, fetch=True)
     if not status.get("available"):

@@ -97,6 +97,29 @@ def sanitize_error(exc, status: int = 500) -> str:
     return detail
 
 
+def _parse_byte_range(range_header: str | None, size: int) -> tuple[int, int] | None:
+    if not range_header or not range_header.startswith("bytes="):
+        return None
+    spec = range_header[len("bytes=") :].strip()
+    if "," in spec or "-" not in spec:
+        raise ValueError("Unsupported byte range.")
+    first, last = spec.split("-", 1)
+    if not first and not last:
+        raise ValueError("Invalid byte range.")
+    if first:
+        start = int(first)
+        end = int(last) if last else size - 1
+    else:
+        suffix_length = int(last)
+        if suffix_length <= 0:
+            raise ValueError("Invalid byte range.")
+        start = max(size - suffix_length, 0)
+        end = size - 1
+    if start < 0 or end < start or start >= size:
+        raise ValueError("Requested range not satisfiable.")
+    return start, min(end, size - 1)
+
+
 class Request:
     def __init__(self, method, path, query, headers, body, params):
         self.method = method
@@ -149,6 +172,57 @@ class Response:
         self.handler.send_header("Content-Length", str(len(body)))
         self.handler.end_headers()
         self.handler.wfile.write(body)
+
+    def file(self, path, content_type: str = "application/octet-stream", headers=None):
+        """Stream a file from disk with HTTP Range support.
+
+        Avoids reading the entire file into memory — only ``CHUNK`` bytes are
+        buffered at a time. Honors the ``Range`` request header so browsers can
+        seek large video outputs.
+        """
+        size = path.stat().st_size
+        start = 0
+        end = size - 1
+        status = 200
+        range_header = None
+        headers_obj = getattr(self.handler, "headers", None)
+        if headers_obj is not None:
+            _get = getattr(headers_obj, "get", None)
+            if callable(_get):
+                range_header = _get("Range")
+        if range_header and range_header.startswith("bytes="):
+            try:
+                start, end = _parse_byte_range(range_header, size)
+            except ValueError:
+                self.error("Requested range not satisfiable", 416)
+                return
+            status = 206
+        length = end - start + 1
+        self.handler.send_response(status)
+        self.handler.send_header("Content-Type", content_type)
+        self.handler.send_header("Accept-Ranges", "bytes")
+        if status == 206:
+            self.handler.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.handler.send_header("Content-Length", str(length))
+        self.handler.send_header(
+            "Access-Control-Allow-Origin", self.handler.get_access_control_origin()
+        )
+        for key, value in (headers or {}).items():
+            self.handler.send_header(key, value)
+        self.handler.end_headers()
+        # HEAD requests have no body; only stream for GET.
+        command = getattr(self.handler, "command", "GET")
+        if command == "HEAD":
+            return
+        with open(path, "rb") as f:
+            f.seek(start)
+            remaining = length
+            while remaining > 0:
+                chunk = f.read(min(65536, remaining))
+                if not chunk:
+                    break
+                self.handler.wfile.write(chunk)
+                remaining -= len(chunk)
 
     def sse_headers(self, status: int = 200):
         self.handler.send_response(status)

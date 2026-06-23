@@ -20,7 +20,7 @@ def get_status(request: Request, response: Response, ctx: AppContext) -> None:
         executables: dict[str, bool] = {}
         for tool in services.sdcpp_tools:
             name = services.get_tool_filename(tool)
-            executables[name] = services.find_tool_executable(tool).exists()
+            executables[name] = services.find_tool_executable(ctx, tool).exists()
 
         runtime_health = sdcpp_manager.validate_runtime_dependencies(ctx)
         missing_runtime_files = runtime_health.get("missing_runtime_files") or []

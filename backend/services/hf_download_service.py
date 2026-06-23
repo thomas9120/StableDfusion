@@ -40,8 +40,12 @@ _REPO_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*?/[A-Za-z0-9][A-Za-z0-9._-
 
 # Filename: must be relative (no parent refs, no absolute paths). Allow
 # forward-slash subdirectory paths since HF supports e.g. "sub/dir/file.gguf",
-# but reject `..`, leading `/`, backslashes, and control chars.
-_SAFE_FILENAME_RE = re.compile(r"^[A-Za-z0-9._\-]+(?:/[A-Za-z0-9._\-]+)*$")
+# but reject `..`, leading `/`, backslashes, and control chars. Each segment
+# permits any printable non-separator char so legitimate HF filenames with
+# spaces, parentheses, `+`, etc. (e.g. "model (v1.0).safetensors") are
+# accepted. Path-traversal safety is enforced separately by the `..` and
+# absolute-path checks in `validate_hf_filename`.
+_SAFE_FILENAME_RE = re.compile(r"^[^\x00-\x1f\x7f/\\]+(?:/[^\x00-\x1f\x7f/\\]+)*$")
 
 # Revision: branch/tag/commit-ish. Git ref chars (incl. `/` for branch
 # hierarchies like "feature/foo") + max 200.
