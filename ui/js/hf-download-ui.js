@@ -175,12 +175,23 @@ window.SDGui.hfDownloadUi = (() => {
 			if (state.files.length > 0 && state.files.length <= 3) {
 				state.files.forEach((f) => state.selected.add(f.name));
 			} else if (state.files.length > 3) {
-				// Default-select files matching common "main" quant suffixes.
+				// Default-select one common "main" weight format. Prefer GGUF
+				// quant/f16 names, then fall back to safetensors only if no GGUF
+				// candidate was selected.
+				var selectedGguf = false;
 				state.files.forEach((f) => {
-					if (/(q4_0|q5_0|q5_1|q8_0|fp8|fp16|f16|safetensors)/i.test(f.name)) {
+					if (/(q4_0|q5_0|q5_1|q8_0|fp8|fp16|f16).*\.gguf$/i.test(f.name)) {
 						state.selected.add(f.name);
+						selectedGguf = true;
 					}
 				});
+				if (!selectedGguf) {
+					state.files.forEach((f) => {
+						if (/\.safetensors$/i.test(f.name)) {
+							state.selected.add(f.name);
+						}
+					});
+				}
 			}
 			renderFileList();
 			var msg =

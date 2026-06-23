@@ -37,7 +37,10 @@ def _validate_name(value: Any) -> str:
             "Preset name must start with a letter or number and use only letters, "
             "numbers, spaces, dots, underscores, and hyphens."
         )
-    if name.upper() in {"CON", "PRN", "AUX", "NUL"}:
+    reserved_stem = name.split(".", 1)[0].upper()
+    if reserved_stem in {"CON", "PRN", "AUX", "NUL"} or re.fullmatch(
+        r"(COM[1-9]|LPT[1-9])", reserved_stem
+    ):
         raise ValueError("Preset name is reserved on this platform.")
     return name
 
