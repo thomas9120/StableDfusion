@@ -14,6 +14,7 @@ Endpoints:
 
 import sys
 import threading
+import urllib.parse
 
 from backend.context import AppContext
 from backend.http import Request, Response, sanitize_error
@@ -70,7 +71,8 @@ def _finish_install_operation(ctx: AppContext) -> None:
 
 def get_releases(request: Request, response: Response, ctx: AppContext) -> None:
     # ?force=1 bypasses the short-term cache (manual refresh).
-    force = "force" in (request.query or "")
+    query = urllib.parse.parse_qs(request.query or "", keep_blank_values=True)
+    force = query.get("force", [""])[-1].lower() in {"1", "true", "yes"}
     try:
         releases = sdcpp_manager.get_releases(ctx, force=force)
         result = []

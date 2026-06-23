@@ -270,6 +270,10 @@ window.SDGui.generateRunController = (() => {
 			if (!result.args.some((pair) => pair[0] === "--lora-model-dir")) {
 				result.args.push(["--lora-model-dir", loraDir]);
 			}
+			if (!vals.disable_image_metadata) {
+				vals.disable_image_metadata = true;
+				result.args.push(["--disable-image-metadata"]);
+			}
 		}
 		var body = {
 			mode: flagCore.getMode(),

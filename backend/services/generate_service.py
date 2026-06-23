@@ -220,7 +220,7 @@ def build_argv(
 
 
 def _utc_timestamp() -> str:
-    return datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%S")
+    return datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%S%f")
 
 
 def _safe_label(value: Any, default: str) -> str:
@@ -370,7 +370,8 @@ def _collect_results(output_path: Path, base_name: str) -> list[Path]:
     out_dir = output_path.parent
     if not out_dir.exists():
         return []
-    matches = [p for p in out_dir.glob(f"{base_name}*") if p.is_file()]
+    pattern = re.compile(rf"^{re.escape(base_name)}(?:$|[_.-])")
+    matches = [p for p in out_dir.iterdir() if p.is_file() and pattern.match(p.stem)]
     # Most recent first (gallery shows newest first).
     matches.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     return matches

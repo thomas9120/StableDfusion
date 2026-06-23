@@ -244,6 +244,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def dispatch(self, method, parsed, body=None):
         match = API_ROUTER.match(method, parsed.path)
         if match is None:
+            allowed = API_ROUTER.allowed_methods(parsed.path)
+            if allowed:
+                self.send_response(405)
+                self.send_header("Allow", ", ".join(allowed))
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
             self.send_error(404)
             return
         request = Request(
@@ -306,21 +313,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         if is_v1_proxy_path(parsed.path):
+            if not is_safe_request_origin(self.headers, self.get_allowed_request_origins()):
+                self.send_error(403)
+                return
             body = self.read_raw_body()
             if body is None:
                 self.send_error(413, "Request body too large")
                 return
-            if not is_safe_request_origin(self.headers, self.get_allowed_request_origins()):
-                self.send_error(403)
-                return
             self.proxy_to_sd_server("POST", parsed, body)
+            return
+        if not is_safe_request_origin(self.headers, self.get_allowed_request_origins()):
+            self.send_error(403)
             return
         body = self.read_body()
         if body is None:
             self.send_error(400, "Invalid or malformed JSON body")
-            return
-        if not is_safe_request_origin(self.headers, self.get_allowed_request_origins()):
-            self.send_error(403)
             return
         self.dispatch("POST", parsed, body)
 
@@ -336,7 +343,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return
             self.proxy_to_sd_server("DELETE", parsed, body)
             return
-        self.dispatch("DELETE", parsed, self.read_body())
+        body = self.read_body()
+        if body is None:
+            self.send_error(400, "Invalid or malformed JSON body")
+            return
+        self.dispatch("DELETE", parsed, body)
 
     def do_PUT(self):
         parsed = urllib.parse.urlparse(self.path)

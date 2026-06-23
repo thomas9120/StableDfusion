@@ -517,6 +517,7 @@ window.SDGui.SD_CLI_FLAGS = [
 		desc: "Deprecated alias of --llm.",
 		default: "",
 		mode: "all",
+		aliasOf: "llm",
 	},
 	{
 		id: "qwen2vl_vision",
@@ -527,6 +528,7 @@ window.SDGui.SD_CLI_FLAGS = [
 		desc: "Deprecated alias of --llm_vision.",
 		default: "",
 		mode: "all",
+		aliasOf: "llm_vision",
 	},
 	{
 		id: "taesd",
@@ -547,6 +549,7 @@ window.SDGui.SD_CLI_FLAGS = [
 		desc: "Alias of --taesd.",
 		default: "",
 		mode: "all",
+		aliasOf: "taesd",
 	},
 	{
 		id: "control_net",

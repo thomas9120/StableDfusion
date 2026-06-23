@@ -77,8 +77,8 @@ def stream_output(ctx: AppContext, pipe, is_stderr: bool = False) -> None:
                         ctx.state.output_buffer.append(line.rstrip("\n\r"))
                         if len(ctx.state.output_buffer) > config.PROCESS_OUTPUT_LIMIT:
                             del ctx.state.output_buffer[: config.PROCESS_OUTPUT_TRIM]
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"[process] output stream reader stopped: {exc}", file=sys.stderr, flush=True)
 
 
 def launch_process(ctx: AppContext, tool: str, args_list: Iterable[Any] | None) -> dict[str, Any]:

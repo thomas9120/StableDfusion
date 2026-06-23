@@ -9,6 +9,7 @@
 
 import json
 import re
+import urllib.parse
 
 from backend.context import AppContext
 from backend.http import Request, Response
@@ -63,7 +64,7 @@ def _content_type(path) -> str:
 
 
 def serve_image(request: Request, response: Response, ctx: AppContext) -> None:
-    name = request.params.get("name", "")
+    name = urllib.parse.unquote(request.params.get("name", ""))
     if name.endswith("/thumbnail"):
         name = name[: -len("/thumbnail")]
     image_path = _resolve_image(ctx, name)

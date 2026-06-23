@@ -4,13 +4,16 @@
 - POST /api/app-update
 """
 
+import urllib.parse
+
 from backend.context import AppContext
 from backend.http import Request, Response, sanitize_error
 from backend.services import git_update_service
 
 
 def get_status(request: Request, response: Response, ctx: AppContext) -> None:
-    fetch = (request.query or "").lower().find("fetch=true") >= 0
+    query = urllib.parse.parse_qs(request.query or "", keep_blank_values=True)
+    fetch = query.get("fetch", [""])[-1].lower() == "true"
     try:
         response.json(git_update_service.get_status(ctx, fetch=fetch))
     except NotImplementedError:

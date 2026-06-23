@@ -236,68 +236,68 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` fixed
 
 ### L1 — `get_releases` / `get_status` use substring matching for query params
 - **File:** `backend/routes/install.py:63`, `backend/routes/git_update.py:13`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### L2 — `serve_image` does not URL-decode `name`
 - **File:** `backend/routes/images.py:66`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### L3 — `do_POST` parses body before origin check (minor DoS amplification)
 - **File:** `backend/app.py:301-308`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### L4 — `_validate_name` misses Windows reserved `COM1-9` / `LPT1-9`
 - **File:** `backend/routes/presets.py:40-42`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### L5 — `do_DELETE` silently turns invalid JSON body into `{}` (vs `do_POST` 400)
 - **File:** `backend/app.py:322`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### L6 — `dispatch` returns 404 for wrong-method (should be 405)
 - **File:** `backend/app.py:228-231`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### L7 — "already running" returns 400 (should be 409) for generate + HF download
 - **File:** `backend/routes/generate.py:14-19`, `backend/routes/hf_download.py:38-44`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### L8 — `infer_subdir_for_filename` greedy keyword order misroutes ambiguous filenames
 - **File:** `backend/services/model_storage_service.py:102-134`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### L9 — `parse_step_progress` only fires after `\n` (sampling end); live stdout step signal dead
 - **File:** `backend/services/generate_service.py:116-132`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### L10 — `stream_output` bare `except Exception: pass`
 - **File:** `backend/services/process_manager.py:80-81`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### L11 — `_collect_results` glob `base_name*` can cross-pollute same-second jobs
 - **File:** `backend/services/generate_service.py:373`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### L12 — `applyBundleDefaults` changes mode without saving/restoring per-mode prompts
 - **File:** `ui/js/flag-core.js:52-62`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### L13 — `getSnapshot` / `getFlagValues` return live `flagValues` reference
 - **File:** `ui/js/flag-core.js:38-45,302`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### L14 — `validateFlagDefinitions` defined but never called at startup
 - **File:** `ui/js/flag-validation.js:6`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### L15 — Deprecated alias flags (`--tae`, `--qwen2vl`) can be emitted alongside primaries
 - **File:** `ui/js/flags/definitions.js:511-550`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### L16 — `<lora:…>` tags baked into PNG metadata via `--prompt`
 - **File:** `ui/js/generate/run-controller.js:204-223`
-- **Status:** `[ ]`
+- **Status:** `[x]`
 
 ### L17 — HF default-selection regex pre-checks both GGUF and safetensors
 - **File:** `ui/js/hf-download-ui.js:176`
-- **Status:** `[ ]`
+- **Status:** `[x]`

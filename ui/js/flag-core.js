@@ -35,12 +35,20 @@ window.SDGui.flagCore = (() => {
 		return vals;
 	}
 
+	function cloneFlagValues(vals) {
+		try {
+			return JSON.parse(JSON.stringify(vals || {}));
+		} catch (e) {
+			return Object.assign({}, vals || {});
+		}
+	}
+
 	function getSnapshot() {
 		return {
 			mode: state.mode,
 			bundle: state.bundle,
 			tool: state.tool,
-			flagValues: state.flagValues,
+			flagValues: cloneFlagValues(state.flagValues),
 		};
 	}
 
@@ -53,12 +61,16 @@ window.SDGui.flagCore = (() => {
 		var bundle = window.SDGui.getBundle(bundleValue);
 		if (!bundle || !bundle.defaults) return;
 		var incoming = Object.assign({}, bundle.defaults);
+		var modeChanged = false;
 		if (typeof incoming.mode === "string" && incoming.mode) {
+			modeChanged = incoming.mode !== state.mode;
+			if (modeChanged) savePromptForMode(state.mode);
 			state.mode = incoming.mode;
-			state.flagValues.run_mode = incoming.mode;
+			state.flagValues.run_mode = state.mode;
 			delete incoming.mode;
 		}
 		state.flagValues = Object.assign({}, state.flagValues, incoming);
+		if (modeChanged) restorePromptForMode(state.mode);
 	}
 
 	// Shell-like tokenizer for the custom-args string. Honors single/double
@@ -195,6 +207,7 @@ window.SDGui.flagCore = (() => {
 			if (!modeMatches(f)) return;
 			if (f.backendOwned) return;
 			if (isSuppressedForMode(f)) return;
+			if (f.aliasOf && vals[f.aliasOf]) return;
 
 			var v = vals[f.id];
 			if (v === undefined || v === null) return;
@@ -301,7 +314,7 @@ window.SDGui.flagCore = (() => {
 			notify();
 		},
 		getTool: () => state.tool,
-		getFlagValues: () => state.flagValues,
+		getFlagValues: () => cloneFlagValues(state.flagValues),
 		setFlagValue: (id, value) => {
 			state.flagValues[id] = value;
 			notify();

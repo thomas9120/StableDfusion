@@ -166,6 +166,12 @@ window.SDGui.panelLifecycle = (() => {
 	}
 
 	function initModules() {
+		if (typeof window.SDGui.validateFlagDefinitions === "function") {
+			var validation = window.SDGui.validateFlagDefinitions();
+			if (validation && validation.warnings && validation.warnings.length) {
+				console.warn("Flag definition warnings:", validation.warnings);
+			}
+		}
 		[
 			window.SDGui.configFlagsUi,
 			window.SDGui.manager,

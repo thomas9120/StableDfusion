@@ -39,7 +39,8 @@ def start_download(request: Request, response: Response, ctx: AppContext) -> Non
     body = request.body or {}
     result = hf_download_service.start_download(ctx, body)
     if "error" in result:
-        response.error(result["error"], 400)
+        status = 409 if result["error"] == "A download is already in progress" else 400
+        response.error(result["error"], status)
         return
     response.json(result)
 

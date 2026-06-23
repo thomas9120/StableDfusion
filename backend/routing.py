@@ -34,3 +34,10 @@ class Router:
             if method == route_method and path.startswith(prefix):
                 return RouteMatch(route_handler, {param_name: path[len(prefix) :]})
         return None
+
+    def allowed_methods(self, path: str) -> list[str]:
+        methods = {method for method, route_path in self._exact if route_path == path}
+        for route_method, prefix, _param_name, _route_handler in self._prefixes:
+            if path.startswith(prefix):
+                methods.add(route_method)
+        return sorted(methods)

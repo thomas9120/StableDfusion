@@ -104,14 +104,28 @@ def infer_subdir_for_filename(filename: str) -> str:
     lowered = (filename or "").replace("\\", "/").lower()
     parts = [p for p in lowered.split("/") if p]
     leaf = parts[-1] if parts else lowered
+    dirs = parts[:-1]
     joined = "/".join(parts)
 
-    if any(token in joined for token in ("lora", "loras", "lycoris")):
+    # Prefer explicit folder intent before broad filename keywords. Some repos
+    # include model-family words in every filename, while paths such as
+    # text_encoder/model.safetensors identify the actual component.
+    if any(part in {"lora", "loras", "lycoris"} for part in dirs):
         return MODEL_SUBDIRS["loras"]
-    if any(token in joined for token in ("upscaler", "upscale", "esrgan", "realesrgan")):
+    if any(part in {"upscaler", "upscalers", "upscale", "esrgan", "realesrgan"} for part in dirs):
+        return MODEL_SUBDIRS["upscalers"]
+    if any(part in {"vae", "taesd"} for part in dirs):
+        return MODEL_SUBDIRS["vae"]
+    if any(
+        part in {"text_encoder", "text-encoder", "text-encoders", "clip", "t5", "llm"}
+        for part in dirs
+    ):
+        return MODEL_SUBDIRS["text_encoders"]
+
+    if any(token in leaf for token in ("upscaler", "upscale", "esrgan", "realesrgan")):
         return MODEL_SUBDIRS["upscalers"]
     if (
-        "vae" in joined
+        "vae" in leaf
         or leaf in {"ae.safetensors", "ae.gguf", "taesd.safetensors"}
         or leaf.startswith("ae.")
     ):
@@ -131,6 +145,8 @@ def infer_subdir_for_filename(filename: str) -> str:
         )
     ):
         return MODEL_SUBDIRS["text_encoders"]
+    if any(token in leaf for token in ("lora", "lycoris")):
+        return MODEL_SUBDIRS["loras"]
     return MODEL_SUBDIRS["diffusion"]
 
 

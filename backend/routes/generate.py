@@ -18,7 +18,8 @@ def generate(request: Request, response: Response, ctx: AppContext) -> None:
         response.error(sanitize_error(exc, 500), 500)
         return
     if "error" in result:
-        response.error(result["error"], 400)
+        status = 409 if result["error"] == "A generation is already running" else 400
+        response.error(result["error"], status)
         return
     response.json(result)
 
