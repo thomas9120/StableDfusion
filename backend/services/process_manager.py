@@ -189,7 +189,7 @@ def stop_process(ctx: AppContext) -> bool:
     with ctx.state.process_lock:
         if ctx.state.process is proc:
             ctx.state.process = None
-        ctx.state.active_process_tool = None
+            ctx.state.active_process_tool = None
     return True
 
 

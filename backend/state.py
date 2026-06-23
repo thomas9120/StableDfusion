@@ -133,6 +133,7 @@ class ServerState:
         default_factory=lambda: AtomicDict(default_remote_tunnel_state())
     )
     remote_tunnel_lock: threading.Lock = field(default_factory=threading.Lock)
+    remote_tunnel_install_lock: threading.Lock = field(default_factory=threading.Lock)
     # Dedicated lock for the tunnel log read-modify-write so the two stream
     # threads (stdout/stderr) can't lose append interleaves.
     remote_tunnel_log_lock: threading.Lock = field(default_factory=threading.Lock)

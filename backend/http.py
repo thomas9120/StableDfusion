@@ -97,6 +97,29 @@ def sanitize_error(exc, status: int = 500) -> str:
     return detail
 
 
+def _parse_byte_range(range_header: str | None, size: int) -> tuple[int, int] | None:
+    if not range_header or not range_header.startswith("bytes="):
+        return None
+    spec = range_header[len("bytes=") :].strip()
+    if "," in spec or "-" not in spec:
+        raise ValueError("Unsupported byte range.")
+    first, last = spec.split("-", 1)
+    if not first and not last:
+        raise ValueError("Invalid byte range.")
+    if first:
+        start = int(first)
+        end = int(last) if last else size - 1
+    else:
+        suffix_length = int(last)
+        if suffix_length <= 0:
+            raise ValueError("Invalid byte range.")
+        start = max(size - suffix_length, 0)
+        end = size - 1
+    if start < 0 or end < start or start >= size:
+        raise ValueError("Requested range not satisfiable.")
+    return start, min(end, size - 1)
+
+
 class Request:
     def __init__(self, method, path, query, headers, body, params):
         self.method = method
@@ -169,16 +192,10 @@ class Response:
                 range_header = _get("Range")
         if range_header and range_header.startswith("bytes="):
             try:
-                spec = range_header[len("bytes=") :].split("-")
-                start = int(spec[0]) if spec[0] else 0
-                end = int(spec[1]) if len(spec) > 1 and spec[1] else size - 1
-            except (ValueError, IndexError):
-                start = 0
-                end = size - 1
-            if start > end or start >= size:
+                start, end = _parse_byte_range(range_header, size)
+            except ValueError:
                 self.error("Requested range not satisfiable", 416)
                 return
-            end = min(end, size - 1)
             status = 206
         length = end - start + 1
         self.handler.send_response(status)

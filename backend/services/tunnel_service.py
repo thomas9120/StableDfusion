@@ -143,10 +143,11 @@ def start(ctx: AppContext, port: int) -> dict:
         if proc is not None and proc.poll() is None:
             return ctx.state.remote_tunnel.snapshot()
 
-    # Download cloudflared OUTSIDE the lock (can take a while on first run);
-    # holding the lock across a multi-MB download would block stop/status.
+    # Download/install cloudflared OUTSIDE the lifecycle lock (can take a while
+    # on first run), but serialize the shared temp/executable writes.
     try:
-        exe = _ensure_cloudflared(ctx)
+        with ctx.state.remote_tunnel_install_lock:
+            exe = _ensure_cloudflared(ctx)
     except (OSError, URLError, RuntimeError) as exc:
         with ctx.state.remote_tunnel_lock:
             ctx.state.remote_tunnel.update(
