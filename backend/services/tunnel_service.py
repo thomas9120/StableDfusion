@@ -90,19 +90,22 @@ def _ensure_cloudflared(ctx: AppContext) -> Path:
 def _append_log(ctx: AppContext, line: str) -> None:
     if not line:
         return
-    snap = ctx.state.remote_tunnel.snapshot()
-    text = (snap.get("log") or "") + line
-    if len(text) > config.TUNNEL_LOG_LIMIT:
-        text = text[-config.TUNNEL_LOG_LIMIT :]
-    updates: dict[str, Any] = {"log": text}
-    match = _TRY_URL_RE.search(line)
-    if match:
-        updates.update(
-            status="running",
-            url=match.group(0),
-            message=f"Tunnel running at {match.group(0)}",
-        )
-    ctx.state.remote_tunnel.update(**updates)
+    # The two stream threads (stdout/stderr) call this concurrently; the
+    # read-modify-write on ``log`` must be atomic to avoid lost appends.
+    with ctx.state.remote_tunnel_log_lock:
+        snap = ctx.state.remote_tunnel.snapshot()
+        text = (snap.get("log") or "") + line
+        if len(text) > config.TUNNEL_LOG_LIMIT:
+            text = text[-config.TUNNEL_LOG_LIMIT :]
+        updates: dict[str, Any] = {"log": text}
+        match = _TRY_URL_RE.search(line)
+        if match:
+            updates.update(
+                status="running",
+                url=match.group(0),
+                message=f"Tunnel running at {match.group(0)}",
+            )
+        ctx.state.remote_tunnel.update(**updates)
 
 
 def _stream(ctx: AppContext, pipe) -> None:
@@ -134,6 +137,28 @@ def start(ctx: AppContext, port: int) -> dict:
     if port < 1 or port > 65535:
         raise ValueError("Tunnel target port must be between 1 and 65535.")
 
+    # Fast pre-check under the lock: refuse if already running.
+    with ctx.state.remote_tunnel_lock:
+        proc = ctx.state.remote_tunnel_process
+        if proc is not None and proc.poll() is None:
+            return ctx.state.remote_tunnel.snapshot()
+
+    # Download cloudflared OUTSIDE the lock (can take a while on first run);
+    # holding the lock across a multi-MB download would block stop/status.
+    try:
+        exe = _ensure_cloudflared(ctx)
+    except (OSError, URLError, RuntimeError) as exc:
+        with ctx.state.remote_tunnel_lock:
+            ctx.state.remote_tunnel.update(
+                status="error",
+                message=f"Failed to start Cloudflare tunnel: {exc}",
+            )
+        raise
+
+    args = [str(exe), "tunnel", "--url", f"http://127.0.0.1:{port}"]
+
+    # Re-acquire the lock to spawn + record. Re-check in case another start won
+    # the race during the download.
     with ctx.state.remote_tunnel_lock:
         proc = ctx.state.remote_tunnel_process
         if proc is not None and proc.poll() is None:
@@ -145,8 +170,6 @@ def start(ctx: AppContext, port: int) -> dict:
             log="",
         )
         try:
-            exe = _ensure_cloudflared(ctx)
-            args = [str(exe), "tunnel", "--url", f"http://127.0.0.1:{port}"]
             proc = subprocess.Popen(
                 args,
                 stdout=subprocess.PIPE,
@@ -156,7 +179,7 @@ def start(ctx: AppContext, port: int) -> dict:
                 cwd=str(ctx.paths.root),
                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
             )
-        except (OSError, URLError, RuntimeError) as exc:
+        except OSError as exc:
             ctx.state.remote_tunnel.update(
                 status="error",
                 message=f"Failed to start Cloudflare tunnel: {exc}",

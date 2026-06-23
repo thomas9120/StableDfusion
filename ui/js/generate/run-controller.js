@@ -11,6 +11,7 @@ window.SDGui.generateRunController = (() => {
 	var pollTimer = null;
 	var lastPreviewMtime = 0;
 	var generating = false;
+	var pollInFlight = false;
 
 	var flagCore = null;
 	var previewProgress = null;
@@ -109,7 +110,33 @@ window.SDGui.generateRunController = (() => {
 		setGenBtnBusy(!!on);
 	}
 
+	// M23 — sync the shared generate/cancel buttons to the active section's
+	// run state. The workbench is shared across Generate/Video/Upscale/Convert,
+	// so switching sections while a job runs in another must not leave the
+	// buttons stuck in "generating" for the idle section.
+	function syncForActiveSection(section) {
+		var isRunningHere = generating && runningSection === section;
+		var genBtn = $("btn-generate");
+		var cancelBtn = $("btn-generate-cancel");
+		if (isRunningHere) {
+			if (genBtn) genBtn.disabled = true;
+			if (cancelBtn) cancelBtn.classList.remove("hidden");
+			setGenBtnBusy(true);
+		} else {
+			// No job is running in this section (one may be running elsewhere,
+			// but its UI belongs to that section's workspace state, not the
+			// shared buttons). Show the idle button + hide cancel.
+			if (genBtn) genBtn.disabled = false;
+			if (cancelBtn) cancelBtn.classList.add("hidden");
+			setGenBtnBusy(false);
+		}
+	}
+
 	async function poll() {
+		// M17 — guard against overlapping polls when the status endpoint is
+		// slow (setInterval fires every 400ms regardless of in-flight state).
+		if (pollInFlight) return;
+		pollInFlight = true;
 		try {
 			var snap = await window.SDGui.fetchJson("/api/generate/status");
 			var section = runningSection || sectionForMode(snap.mode || flagCore.getMode());
@@ -147,6 +174,8 @@ window.SDGui.generateRunController = (() => {
 			runningSection = null;
 		} catch (e) {
 			/* transient network - keep polling */
+		} finally {
+			pollInFlight = false;
 		}
 	}
 
@@ -333,6 +362,7 @@ window.SDGui.generateRunController = (() => {
 	return {
 		init: init,
 		setGenerating: setGenerating,
+		syncForActiveSection: syncForActiveSection,
 		poll: poll,
 		startPolling: startPolling,
 		stopPolling: stopPolling,

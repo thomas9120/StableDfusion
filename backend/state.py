@@ -133,6 +133,9 @@ class ServerState:
         default_factory=lambda: AtomicDict(default_remote_tunnel_state())
     )
     remote_tunnel_lock: threading.Lock = field(default_factory=threading.Lock)
+    # Dedicated lock for the tunnel log read-modify-write so the two stream
+    # threads (stdout/stderr) can't lose append interleaves.
+    remote_tunnel_log_lock: threading.Lock = field(default_factory=threading.Lock)
 
     # One-shot sd-cli generation job state (Phase 2).
     generation: AtomicDict = field(default_factory=lambda: AtomicDict(default_generation_state()))
@@ -141,6 +144,11 @@ class ServerState:
 
     # Preset JSON CRUD (Phase 4).
     preset_lock: threading.Lock = field(default_factory=threading.Lock)
+
+    # Git auto-update (git pull + pip install) — guarded so two concurrent
+    # update requests can't race on the working tree.
+    app_update_lock: threading.Lock = field(default_factory=threading.Lock)
+    app_update_in_progress: bool = False
 
     # Persistent sd-server process (Phase 5). Independent lock so a running
     # server does not block the one-shot generator.

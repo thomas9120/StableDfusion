@@ -118,10 +118,10 @@ def get_tool_filename(tool: str) -> str:
     return f"{tool}{BINARY_SUFFIX}"
 
 
-def find_tool_executable(tool: str):
+def find_tool_executable(ctx, tool: str):
     from .services import sdcpp_manager
 
-    return sdcpp_manager.get_active_runtime_bin(APP_CONTEXT) / get_tool_filename(tool)
+    return sdcpp_manager.get_active_runtime_bin(ctx) / get_tool_filename(tool)
 
 
 def is_process_running() -> bool:

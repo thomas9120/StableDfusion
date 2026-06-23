@@ -154,11 +154,13 @@ window.SDGui.flagCore = (() => {
 					);
 				}
 				return null;
-			case "convert":
-				if (!vals.model) {
-					return "No source model selected. Convert mode needs a --model to read.";
-				}
-				return null;
+		case "convert":
+			// M25 — accept --diffusion-model as a source too; some bundles
+			// (flux1, sd3, wan, ltx, z_image) use diffusion_model, not model.
+			if (!vals.model && !vals.diffusion_model) {
+				return "No source model selected. Convert mode needs a --model or --diffusion-model to read.";
+			}
+			return null;
 			case "upscale":
 				if (!vals.init_img) {
 					return "No input image selected. Upscale mode needs an init image.";

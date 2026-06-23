@@ -26,6 +26,10 @@ window.SDGui.hfDownloadUi = (() => {
 		downloading: false,
 		lastStatus: null,
 	};
+	// M21 — consecutive-failure counter so the poller gives up (instead of
+	// spinning forever) when the server is permanently unreachable.
+	var pollFailCount = 0;
+	var POLL_MAX_FAILS = 8;
 
 	function $(id) {
 		return document.getElementById(id);
@@ -272,6 +276,7 @@ window.SDGui.hfDownloadUi = (() => {
 	async function pollStatus() {
 		try {
 			var snap = await window.SDGui.fetchJson("/api/hf/download-status");
+			pollFailCount = 0;
 			state.lastStatus = snap;
 			var status = snap.status || "idle";
 			if (status === "downloading" || status === "starting") {
@@ -310,12 +315,25 @@ window.SDGui.hfDownloadUi = (() => {
 				showProgress(false);
 			}
 		} catch (e) {
-			/* transient — keep polling */
+			// M21 — stop after N consecutive failures instead of polling
+			// forever against a dead server.
+			pollFailCount++;
+			if (pollFailCount >= POLL_MAX_FAILS) {
+				stopPolling();
+				setDownloading(false);
+				showProgress(false);
+				setStatus(
+					"Lost contact with the server during download.",
+					"error",
+				);
+			}
+			/* transient — otherwise keep polling */
 		}
 	}
 
 	function startPolling() {
 		stopPolling();
+		pollFailCount = 0;
 		state.pollTimer = setInterval(pollStatus, 500);
 	}
 
@@ -375,6 +393,18 @@ window.SDGui.hfDownloadUi = (() => {
 			});
 
 		updateSelectionSummary();
+
+		// M21 — register with panelLifecycle so the poller pauses when the HF
+		// Download tab is not visible and resumes when it becomes active again.
+		if (window.SDGui.panelLifecycle) {
+			window.SDGui.panelLifecycle.register(
+				"hf-download",
+				() => {
+					if (state.downloading) startPolling();
+				},
+				() => stopPolling(),
+			);
+		}
 
 		// If a download is in progress (page reload), resume polling.
 		window.SDGui.fetchJson("/api/hf/download-status")

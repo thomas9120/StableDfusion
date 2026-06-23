@@ -38,14 +38,31 @@ def test_build_argv_strips_listener_from_curated_pairs_and_extra_args():
                 ["--diffusion-model", "models/diffusion/model.gguf"],
                 ["--steps", "12"],
             ],
-            "extra_args": "--listen-ip 1.2.3.4 --cache-mode easycache",
+            # --listen-ip is server-owned → stripped from extra args.
+            # --verbose is a curated bool flag → passes through.
+            "extra_args": "--listen-ip 1.2.3.4 --verbose",
         }
     )
 
     assert result["args"][:4] == ["--listen-ip", "0.0.0.0", "--listen-port", "8123"]
     assert "9999" not in result["args"]
     assert "1.2.3.4" not in result["args"]
-    assert "--cache-mode" in result["args"]
+    assert "--verbose" in result["args"]
+
+
+def test_build_argv_rejects_non_curated_flag_in_extra_args():
+    """M7 — _tokenize_extra must enforce the curated-flag allowlist."""
+    try:
+        server_mode_service.build_argv(
+            {
+                "args": [["--model", "models/sd15.gguf"]],
+                "extra_args": "--cache-mode easycache",
+            }
+        )
+    except ValueError as exc:
+        assert "Unsupported server flag" in str(exc)
+    else:
+        raise AssertionError("non-curated extra flag was accepted")
 
 
 def test_build_argv_rejects_unknown_curated_flag():

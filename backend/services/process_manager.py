@@ -88,36 +88,48 @@ def launch_process(ctx: AppContext, tool: str, args_list: Iterable[Any] | None) 
     stdout/stderr into the shared output buffer via background threads. On
     Windows the process gets its own process group so it can be stopped with
     CTRL_BREAK_EVENT.
+
+    The expensive validation (``validate_runtime_dependencies`` runs ``otool -L``
+    on macOS) happens OUTSIDE ``process_lock`` so the status poller / stop_process
+    are not blocked. The lock is only held for the "already running" check and
+    the ``Popen`` + state assignment (both fast).
     """
     from . import sdcpp_manager
 
+    # Fast pre-check under the lock: refuse if a process is already running.
     with ctx.state.process_lock:
         if ctx.state.process and ctx.state.process.poll() is None:
             return {"error": "A process is already running"}
 
-        allowed_tools = ctx.services.sdcpp_tools or ()
-        if tool not in allowed_tools:
-            return {"error": f"Unknown tool: {tool!r}"}
+    allowed_tools = ctx.services.sdcpp_tools or ()
+    if tool not in allowed_tools:
+        return {"error": f"Unknown tool: {tool!r}"}
 
-        exe_name = ctx.services.get_tool_filename(tool)
-        exe_path = ctx.services.find_tool_executable(tool)
-        if not exe_path.exists():
-            return {"error": f"{exe_name} not found. Install stable-diffusion.cpp first."}
+    exe_name = ctx.services.get_tool_filename(tool)
+    exe_path = ctx.services.find_tool_executable(ctx, tool)
+    if not exe_path.exists():
+        return {"error": f"{exe_name} not found. Install stable-diffusion.cpp first."}
 
-        runtime_health = sdcpp_manager.validate_runtime_dependencies(ctx, [tool])
-        missing_runtime_files = runtime_health.get("missing_runtime_files") or []
-        if missing_runtime_files:
-            missing = ", ".join(str(name) for name in missing_runtime_files)
-            plural = "libraries" if len(missing_runtime_files) != 1 else "library"
-            return {
-                "error": (
-                    f"Missing stable-diffusion.cpp runtime {plural}: {missing}. "
-                    "Use Repair Install to reinstall binaries."
-                )
-            }
+    runtime_health = sdcpp_manager.validate_runtime_dependencies(ctx, [tool])
+    missing_runtime_files = runtime_health.get("missing_runtime_files") or []
+    if missing_runtime_files:
+        missing = ", ".join(str(name) for name in missing_runtime_files)
+        plural = "libraries" if len(missing_runtime_files) != 1 else "library"
+        return {
+            "error": (
+                f"Missing stable-diffusion.cpp runtime {plural}: {missing}. "
+                "Use Repair Install to reinstall binaries."
+            )
+        }
 
-        args = [str(exe_path), *flatten_launch_args(args_list)]
-        env = _build_process_env(ctx)
+    args = [str(exe_path), *flatten_launch_args(args_list)]
+    env = _build_process_env(ctx)
+
+    # Re-acquire the lock to spawn + record the process. Re-check "already
+    # running" in case another launch won the race during validation.
+    with ctx.state.process_lock:
+        if ctx.state.process and ctx.state.process.poll() is None:
+            return {"error": "A process is already running"}
 
         with ctx.state.output_buffer_lock:
             ctx.state.output_buffer.clear()
@@ -148,28 +160,37 @@ def launch_process(ctx: AppContext, tool: str, args_list: Iterable[Any] | None) 
 
 
 def stop_process(ctx: AppContext) -> bool:
-    """Terminate the running process gracefully, then force-kill if needed."""
+    """Terminate the running process gracefully, then force-kill if needed.
+
+    The blocking ``terminate``/``wait`` run OUTSIDE ``process_lock`` so the
+    status poller and ``is_process_running`` are not blocked for up to 5s.
+    """
     with ctx.state.process_lock:
         proc = ctx.state.process
         if not proc or proc.poll() is not None:
             ctx.state.active_process_tool = None
             return False
+    # terminate/wait OUTSIDE the lock so status polls aren't blocked.
+    try:
+        if sys.platform == "win32":
+            proc.send_signal(signal.CTRL_BREAK_EVENT)
+        else:
+            proc.terminate()
         try:
-            if sys.platform == "win32":
-                proc.send_signal(signal.CTRL_BREAK_EVENT)
-            else:
-                proc.terminate()
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+    except Exception:
+        try:
+            proc.kill()
         except Exception:
-            try:
-                proc.kill()
-            except Exception:
-                pass
+            pass
+    # Only clear if a new process hasn't been started in the meantime.
+    with ctx.state.process_lock:
+        if ctx.state.process is proc:
+            ctx.state.process = None
         ctx.state.active_process_tool = None
-        return True
+    return True
 
 
 def send_input(ctx: AppContext, text: str) -> bool:

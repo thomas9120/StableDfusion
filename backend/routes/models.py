@@ -11,7 +11,7 @@ import urllib.parse
 from pathlib import Path
 
 from backend.context import AppContext
-from backend.http import Request, Response
+from backend.http import Request, Response, sanitize_error
 from backend.services import file_picker_service, model_storage_service
 
 MODEL_EXTS = (".safetensors", ".ckpt", ".pth", ".pt", ".gguf", ".sft", ".bin")
@@ -42,38 +42,43 @@ def _extensions_for_type(purpose: str) -> tuple[str, ...]:
 
 
 def list_models(request: Request, response: Response, ctx: AppContext) -> None:
-    query = urllib.parse.parse_qs(request.query or "")
-    purpose = model_storage_service.normalize_purpose(query.get("type", [""])[0])
-    exts = _extensions_for_type(purpose) if purpose else MODEL_EXTS
-    allowed = {_norm_ext(e) for e in exts}
+    try:
+        query = urllib.parse.parse_qs(request.query or "")
+        purpose = model_storage_service.normalize_purpose(query.get("type", [""])[0])
+        exts = _extensions_for_type(purpose) if purpose else MODEL_EXTS
+        allowed = {_norm_ext(e) for e in exts}
 
-    files = []
-    seen: set[Path] = set()
-    for root in model_storage_service.roots_for_listing(ctx, purpose):
-        if not root.exists():
-            continue
-        iterator = root.rglob("*") if root != ctx.paths.models or not purpose else root.glob("*")
-        for path in sorted(iterator):
-            if not path.is_file():
+        files = []
+        seen: set[Path] = set()
+        for root in model_storage_service.roots_for_listing(ctx, purpose):
+            if not root.exists():
                 continue
-            if path.name == ".gitkeep":
-                continue
-            if _norm_ext(path.suffix) not in allowed:
-                continue
-            resolved = path.resolve()
-            if resolved in seen:
-                continue
-            seen.add(resolved)
-            stat = path.stat()
-            files.append(
-                {
-                    "name": path.name,
-                    "relative": path.relative_to(ctx.paths.models).as_posix(),
-                    "folder": path.parent.relative_to(ctx.paths.models).as_posix()
-                    if path.parent != ctx.paths.models
-                    else "",
-                    "size": stat.st_size,
-                    "mtime": int(stat.st_mtime),
-                }
+            iterator = (
+                root.rglob("*") if root != ctx.paths.models or not purpose else root.glob("*")
             )
-    response.json({"models": files})
+            for path in sorted(iterator):
+                if not path.is_file():
+                    continue
+                if path.name == ".gitkeep":
+                    continue
+                if _norm_ext(path.suffix) not in allowed:
+                    continue
+                resolved = path.resolve()
+                if resolved in seen:
+                    continue
+                seen.add(resolved)
+                stat = path.stat()
+                files.append(
+                    {
+                        "name": path.name,
+                        "relative": path.relative_to(ctx.paths.models).as_posix(),
+                        "folder": path.parent.relative_to(ctx.paths.models).as_posix()
+                        if path.parent != ctx.paths.models
+                        else "",
+                        "size": stat.st_size,
+                        "mtime": int(stat.st_mtime),
+                    }
+                )
+        response.json({"models": files})
+    except Exception as exc:
+        response.error(sanitize_error(exc, 500), 500)

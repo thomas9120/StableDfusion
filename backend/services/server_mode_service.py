@@ -148,8 +148,29 @@ def _tokenize_extra(extra_args: Any) -> list[str]:
         tokens = shlex.split(raw)
     except ValueError as exc:
         raise ValueError(f"Invalid extra server args: {exc}") from exc
-    validated = [_validate_token(tok) for tok in tokens]
-    return _strip_owned(validated)
+    allowed_flags = CURATED_SERVER_VALUE_FLAGS | CURATED_SERVER_BOOL_FLAGS
+    validated: list[str] = []
+    i = 0
+    while i < len(tokens):
+        tok = _validate_token(tokens[i])
+        if tok in SERVER_OWNED_FLAGS:
+            # Owned flags always take a value — skip both.
+            i += 2
+            continue
+        if not tok.startswith("-"):
+            raise ValueError(f"Unexpected value without a flag in extra args: {tok}")
+        if tok not in allowed_flags:
+            raise ValueError(f"Unsupported server flag in extra args: {tok}")
+        validated.append(tok)
+        if tok in CURATED_SERVER_VALUE_FLAGS:
+            if i + 1 >= len(tokens):
+                raise ValueError(f"{tok} requires a value in extra args.")
+            validated.append(_validate_token(tokens[i + 1]))
+            i += 2
+        else:
+            # Bool flag — no value follows.
+            i += 1
+    return validated
 
 
 def _has_startup_model(args: list[str]) -> bool:
@@ -215,32 +236,43 @@ def start(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
     except ValueError as exc:
         return {"error": str(exc), "status": 400}
 
+    # Fast pre-check under the lock: refuse if already running.
     with ctx.state.sd_server_lock:
         proc = ctx.state.sd_server_process
         if proc is not None and proc.poll() is None:
             return {"error": "sd-server is already running.", "status": 409}
 
-        exe_path = ctx.services.find_tool_executable("sd-server")
-        if not exe_path.exists():
-            return {
-                "error": "sd-server not found. Install stable-diffusion.cpp first.",
-                "status": 400,
-            }
+    # Expensive validation (otool -L on macOS) runs OUTSIDE the lock so status
+    # polls / stop are not blocked.
+    exe_path = ctx.services.find_tool_executable(ctx, "sd-server")
+    if not exe_path.exists():
+        return {
+            "error": "sd-server not found. Install stable-diffusion.cpp first.",
+            "status": 400,
+        }
 
-        runtime_health = sdcpp_manager.validate_runtime_dependencies(ctx, ["sd-server"])
-        missing_runtime_files = runtime_health.get("missing_runtime_files") or []
-        if missing_runtime_files:
-            missing = ", ".join(str(name) for name in missing_runtime_files)
-            return {
-                "error": (
-                    "Missing stable-diffusion.cpp runtime libraries: "
-                    f"{missing}. Use Repair Install to reinstall binaries."
-                ),
-                "status": 400,
-            }
+    runtime_health = sdcpp_manager.validate_runtime_dependencies(ctx, ["sd-server"])
+    missing_runtime_files = runtime_health.get("missing_runtime_files") or []
+    if missing_runtime_files:
+        missing = ", ".join(str(name) for name in missing_runtime_files)
+        return {
+            "error": (
+                "Missing stable-diffusion.cpp runtime libraries: "
+                f"{missing}. Use Repair Install to reinstall binaries."
+            ),
+            "status": 400,
+        }
 
-        command = [str(exe_path), *prepared["args"]]
-        env = process_manager._build_process_env(ctx)
+    command = [str(exe_path), *prepared["args"]]
+    env = process_manager._build_process_env(ctx)
+
+    # Re-acquire the lock to spawn + record. Re-check in case another start won
+    # the race during validation.
+    with ctx.state.sd_server_lock:
+        proc = ctx.state.sd_server_process
+        if proc is not None and proc.poll() is None:
+            return {"error": "sd-server is already running.", "status": 409}
+
         with ctx.state.sd_server_log_lock:
             ctx.state.sd_server_log.clear()
 
@@ -345,8 +377,11 @@ def proxy(
         )
     host = str(snap.get("host") or config.SD_SERVER_HOST)
     port = int(snap.get("port") or config.SD_SERVER_PORT)
+    # Normalize wildcard listen hosts to loopback for the outbound proxy
+    # connection (connecting to 0.0.0.0/:: is unreliable on many platforms).
+    connect_host = "127.0.0.1" if host in {"0.0.0.0", "::", ""} else host
     target_path = path + (f"?{query}" if query else "")
-    conn = http.client.HTTPConnection(host, port, timeout=120)
+    conn = http.client.HTTPConnection(connect_host, port, timeout=120)
     forward_headers = {
         key: value
         for key, value in headers.items()

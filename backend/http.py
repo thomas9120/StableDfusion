@@ -150,6 +150,63 @@ class Response:
         self.handler.end_headers()
         self.handler.wfile.write(body)
 
+    def file(self, path, content_type: str = "application/octet-stream", headers=None):
+        """Stream a file from disk with HTTP Range support.
+
+        Avoids reading the entire file into memory — only ``CHUNK`` bytes are
+        buffered at a time. Honors the ``Range`` request header so browsers can
+        seek large video outputs.
+        """
+        size = path.stat().st_size
+        start = 0
+        end = size - 1
+        status = 200
+        range_header = None
+        headers_obj = getattr(self.handler, "headers", None)
+        if headers_obj is not None:
+            _get = getattr(headers_obj, "get", None)
+            if callable(_get):
+                range_header = _get("Range")
+        if range_header and range_header.startswith("bytes="):
+            try:
+                spec = range_header[len("bytes=") :].split("-")
+                start = int(spec[0]) if spec[0] else 0
+                end = int(spec[1]) if len(spec) > 1 and spec[1] else size - 1
+            except (ValueError, IndexError):
+                start = 0
+                end = size - 1
+            if start > end or start >= size:
+                self.error("Requested range not satisfiable", 416)
+                return
+            end = min(end, size - 1)
+            status = 206
+        length = end - start + 1
+        self.handler.send_response(status)
+        self.handler.send_header("Content-Type", content_type)
+        self.handler.send_header("Accept-Ranges", "bytes")
+        if status == 206:
+            self.handler.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.handler.send_header("Content-Length", str(length))
+        self.handler.send_header(
+            "Access-Control-Allow-Origin", self.handler.get_access_control_origin()
+        )
+        for key, value in (headers or {}).items():
+            self.handler.send_header(key, value)
+        self.handler.end_headers()
+        # HEAD requests have no body; only stream for GET.
+        command = getattr(self.handler, "command", "GET")
+        if command == "HEAD":
+            return
+        with open(path, "rb") as f:
+            f.seek(start)
+            remaining = length
+            while remaining > 0:
+                chunk = f.read(min(65536, remaining))
+                if not chunk:
+                    break
+                self.handler.wfile.write(chunk)
+                remaining -= len(chunk)
+
     def sse_headers(self, status: int = 200):
         self.handler.send_response(status)
         self._base_headers("text/event-stream")
