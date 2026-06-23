@@ -35,10 +35,19 @@ def _runtime_payload(request: Request, response: Response, ctx: AppContext):
     if not tag or not backend:
         response.error("tag and backend required", 400)
         return None
+    tag, backend = str(tag), str(backend)
+    # Validate before any use: tag is later interpolated into a GitHub API URL
+    # and used to build filesystem paths. Strict regex prevents URL/path
+    # injection (H5) and path traversal.
+    if not sdcpp_manager.INSTALL_ID_RE.fullmatch(tag) or not sdcpp_manager.INSTALL_ID_RE.fullmatch(
+        backend
+    ):
+        response.error("Invalid tag or backend.", 400)
+        return None
     if backend not in ctx.services.backend_specs:
         response.error(f"Unsupported backend: {backend}", 400)
         return None
-    return str(tag), str(backend)
+    return tag, backend
 
 
 def _begin_install_operation(response: Response, ctx: AppContext) -> bool:
@@ -83,15 +92,10 @@ def get_download_progress(request: Request, response: Response, ctx: AppContext)
 
 
 def start_install(request: Request, response: Response, ctx: AppContext) -> None:
-    body = request.body or {}
-    tag = body.get("tag")
-    backend = body.get("backend")
-    if not tag or not backend:
-        response.error("tag and backend required", 400)
+    payload = _runtime_payload(request, response, ctx)
+    if payload is None:
         return
-    if backend not in ctx.services.backend_specs:
-        response.error(f"Unsupported backend: {backend}", 400)
-        return
+    tag, backend = payload
     if not _begin_install_operation(response, ctx):
         return
 
@@ -126,12 +130,22 @@ def set_active_runtime(request: Request, response: Response, ctx: AppContext) ->
         response.error("Stop running process first", 400)
         return
     tag, backend = payload
-    try:
-        response.json({"active_install": sdcpp_manager.set_active_runtime(ctx, tag, backend)})
-    except ValueError as exc:
-        response.error(str(exc), 400)
-    except Exception as exc:
-        response.error(sanitize_error(exc, 500), 500)
+    # Guard install state: refuse while an install/repair/update is running and
+    # hold install_lock across the mutation so it cannot race a concurrent
+    # install thread writing config.json or extracting into sdcpp/.
+    with ctx.state.install_lock:
+        if ctx.state.install_in_progress:
+            response.error("Installation already in progress", 409)
+            return
+        try:
+            result = sdcpp_manager.set_active_runtime(ctx, tag, backend)
+        except ValueError as exc:
+            response.error(str(exc), 400)
+            return
+        except Exception as exc:
+            response.error(sanitize_error(exc, 500), 500)
+            return
+    response.json({"active_install": result})
 
 
 def repair_runtime(request: Request, response: Response, ctx: AppContext) -> None:
@@ -189,19 +203,32 @@ def remove_runtime(request: Request, response: Response, ctx: AppContext) -> Non
         response.error("Stop running process first", 400)
         return
     tag, backend = payload
-    try:
-        response.json(sdcpp_manager.remove_runtime(ctx, tag, backend))
-    except ValueError as exc:
-        response.error(str(exc), 400)
-    except Exception as exc:
-        response.error(sanitize_error(exc, 500), 500)
+    with ctx.state.install_lock:
+        if ctx.state.install_in_progress:
+            response.error("Installation already in progress", 409)
+            return
+        try:
+            result = sdcpp_manager.remove_runtime(ctx, tag, backend)
+        except ValueError as exc:
+            response.error(str(exc), 400)
+            return
+        except Exception as exc:
+            response.error(sanitize_error(exc, 500), 500)
+            return
+    response.json(result)
 
 
 def cleanup_sdcpp(request: Request, response: Response, ctx: AppContext) -> None:
     if _runtime_process_running(ctx):
         response.error("Stop running process first", 400)
         return
-    try:
-        response.json({"removed_files": sdcpp_manager.remove_sdcpp_files(ctx)})
-    except Exception as exc:
-        response.error(sanitize_error(exc, 500), 500)
+    with ctx.state.install_lock:
+        if ctx.state.install_in_progress:
+            response.error("Installation already in progress", 409)
+            return
+        try:
+            removed = sdcpp_manager.remove_sdcpp_files(ctx)
+        except Exception as exc:
+            response.error(sanitize_error(exc, 500), 500)
+            return
+    response.json({"removed_files": removed})

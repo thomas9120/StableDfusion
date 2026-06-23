@@ -174,14 +174,18 @@ def stop(ctx: AppContext) -> bool:
 
 
 def stop_remote_tunnel(ctx: AppContext) -> bool:
-    proc = ctx.state.remote_tunnel_process
-    if proc is None or proc.poll() is not None:
-        ctx.state.remote_tunnel_process = None
-        ctx.state.remote_tunnel.update(
-            status="idle", url="", message="Remote tunnel is not running."
-        )
-        return False
-    ctx.state.remote_tunnel.update(status="stopping", message="Stopping remote tunnel...")
+    # Take the lock to read/mutate remote_tunnel_process consistently with
+    # start() and _monitor(). The blocking terminate/wait run *outside* the
+    # lock so start/get_snapshot are not blocked for up to 5s.
+    with ctx.state.remote_tunnel_lock:
+        proc = ctx.state.remote_tunnel_process
+        if proc is None or proc.poll() is not None:
+            ctx.state.remote_tunnel_process = None
+            ctx.state.remote_tunnel.update(
+                status="idle", url="", message="Remote tunnel is not running."
+            )
+            return False
+        ctx.state.remote_tunnel.update(status="stopping", message="Stopping remote tunnel...")
     try:
         proc.terminate()
         try:
@@ -193,8 +197,11 @@ def stop_remote_tunnel(ctx: AppContext) -> bool:
             proc.kill()
         except Exception:
             pass
-    ctx.state.remote_tunnel_process = None
-    ctx.state.remote_tunnel.update(status="idle", url="", message="Remote tunnel stopped.")
+    # Only clear if a new tunnel hasn't been started in the meantime.
+    with ctx.state.remote_tunnel_lock:
+        if ctx.state.remote_tunnel_process is proc:
+            ctx.state.remote_tunnel_process = None
+            ctx.state.remote_tunnel.update(status="idle", url="", message="Remote tunnel stopped.")
     return True
 
 

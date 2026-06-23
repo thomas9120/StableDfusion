@@ -158,9 +158,14 @@ window.SDGui.generateHistory = (() => {
 	function restoreFromHistory(entry) {
 		if (!entry || !entry.params) return;
 		var fc = flagCore || window.SDGui.flagCore;
-		fc.setMultipleFlagValues(entry.params);
-		if (entry.bundle) fc.setBundle(entry.bundle);
+		// Order matters: setMode first (saves the current prompt for the old
+		// mode and swaps in the target mode's saved prompt), THEN overwrite
+		// with the history entry's params. Doing setMultipleFlagValues before
+		// setMode would let setMode's restorePromptForMode clobber the restored
+		// prompt — matching applyPreset's (setMode-first) ordering.
 		if (entry.mode) fc.setMode(entry.mode);
+		if (entry.bundle) fc.setBundle(entry.bundle);
+		fc.setMultipleFlagValues(entry.params);
 		if (entry.mode) switchToModeSection(entry.mode);
 		syncFromState(true);
 		window.SDGui.toast("Restored settings from history.", "info");

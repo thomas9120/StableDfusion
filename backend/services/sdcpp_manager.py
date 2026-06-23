@@ -476,6 +476,24 @@ def _extract_zip_flat(zf: zipfile.ZipFile, dest_dir: pathlib.Path) -> None:
         out_path = dest_dir / fname
         with zf.open(info, "r") as src, open(out_path, "wb") as dst:
             shutil.copyfileobj(src, dst)
+        # Restore Unix permission bits stored in the entry's external_attr
+        # (shifted left 16 bits). Without this, extracted sd-cli / sd-server
+        # binaries land with mode 0644 and fail with PermissionError on
+        # Linux/macOS. If the archive was created on Windows (mode == 0) and
+        # the file looks like an executable, default to 0755 so the runtime is
+        # usable regardless of how the zip was authored.
+        mode = (info.external_attr >> 16) & 0o777
+        if not mode:
+            base = fname.lower()
+            if base.endswith(".exe") or "/" not in info.filename:
+                # Heuristic: top-level binaries in these release zips are
+                # executables or shared libs; default to executable.
+                mode = 0o755
+        if mode:
+            try:
+                out_path.chmod(mode)
+            except OSError:
+                pass
 
 
 def extract_archive_flat(archive_path: pathlib.Path, dest_dir: pathlib.Path) -> None:
@@ -649,15 +667,25 @@ def install_release(
 
         set_download_progress(ctx, status="extracting", message="Extracting binaries...")
 
+        # Extract into a staging dir inside tmpdir first, then swap into place.
+        # This way a failed extraction (corrupt zip, disk full, OSError) leaves
+        # any previously-installed runtime intact instead of bricking the install.
         target_bin = runtime_bin_dir(ctx, tag, backend)
-        if target_bin.exists():
-            shutil.rmtree(target_bin)
-        target_bin.mkdir(parents=True, exist_ok=True)
-        (target_bin / ".gitkeep").touch()
+        staging = tmpdir / "extract"
+        staging.mkdir(parents=True, exist_ok=True)
+        (staging / ".gitkeep").touch()
 
-        extract_archive_flat(archive_path, target_bin)
+        extract_archive_flat(archive_path, staging)
         for extra in companion_archives:
-            extract_archive_flat(extra, target_bin)
+            extract_archive_flat(extra, staging)
+
+        # All archives extracted successfully — now replace the target. The
+        # rmtree+move is not perfectly atomic but the new tree is already fully
+        # built, so the previous runtime survives any pre-swap failure.
+        if target_bin.exists():
+            shutil.rmtree(target_bin, ignore_errors=True)
+        target_bin.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(staging), str(target_bin))
 
         # Invalidate the releases cache timestamp-wise is unnecessary; config is
         # the source of truth for "installed".
