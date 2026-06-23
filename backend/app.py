@@ -217,7 +217,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", 0))
         except (TypeError, ValueError):
             return None
-        if length <= 0:
+        if length < 0:
+            return None
+        if length == 0:
             return {}
         if length > 10 * 1024 * 1024:
             return None
@@ -231,7 +233,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", 0))
         except (TypeError, ValueError):
             return None
-        if length <= 0:
+        if length < 0:
+            return None
+        if length == 0:
             return b""
         if length > 10 * 1024 * 1024:
             return None

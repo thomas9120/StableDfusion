@@ -162,6 +162,17 @@ window.SDGui.generateRunController = (() => {
 		pollTimer = setInterval(poll, 400);
 	}
 
+	function looksLikeJson(text) {
+		var s = String(text || "").trim();
+		if (!s || (s[0] !== "{" && s[0] !== "[")) return false;
+		try {
+			JSON.parse(s);
+			return true;
+		} catch (e) {
+			return false;
+		}
+	}
+
 	function selectedLoras(vals) {
 		var entries = Array.isArray(vals.lora_files) ? vals.lora_files : [];
 		entries = entries
@@ -202,7 +213,11 @@ window.SDGui.generateRunController = (() => {
 
 		var vals = Object.assign({}, flagCore.getFlagValues());
 		var loras = selectedLoras(vals);
-		if (loras.length) {
+		var jsonPrompt = looksLikeJson(vals.prompt);
+		if (loras.length && jsonPrompt) {
+			window.SDGui.toast("LoRA prompt tags skipped: prompt is JSON.", "warning");
+		}
+		if (loras.length && !jsonPrompt) {
 			var loraTags = loras.map((entry) => {
 				return (
 					"<lora:" +
