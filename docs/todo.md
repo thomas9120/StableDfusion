@@ -1,10 +1,31 @@
-# TODO
+# StableDfusion Polish Todo
 
-- Revisit Ideogram 4 LoRA support. The model itself appears to support LoRAs,
-  and upstream stable-diffusion.cpp documents general LoRA support alongside
-  Ideogram 4 support. Our current UI blocks LoRAs for the `ideogram4` bundle
-  because LoRA tags are appended to the prompt, while Ideogram 4 uses a
-  structured JSON prompt; appending `<lora:name:strength>` after the JSON object
-  would corrupt the prompt. Before enabling this, test `sd-cli` directly and
-  decide where to inject LoRA tags safely, likely inside a JSON string field such
-  as `high_level_description` or `style_description`.
+Quick wins for making the app feel nicer, clearer, and more user-friendly.
+
+## Generate
+
+- [x] Move Model setup above optional image references and metadata so the required model selection is easier to find.
+- [x] Make the Generate action easier to reach after editing settings.
+- [x] Add a clearer first-run empty state in the preview/result panel.
+- [x] Collapse Inspect metadata by default so it feels like a utility, not part of the main generation path.
+- [x] Add model readiness/status chips near required model fields.
+
+## Hugging Face Download
+
+- [x] Make the disabled Download button visibly disabled.
+- [x] Group fetched files by destination/type: Diffusion, VAE, Text Encoders, LoRAs, Other.
+
+## Server & API
+
+- [x] Collapse advanced server/model fields by default.
+- [x] Add a compact server configuration summary.
+- [x] Sync sd-server model/component/runtime settings with Generate and Configure shared state.
+
+## Install
+
+- [x] Polish the Installed block with compact badges for version, backend, and executable health.
+
+## General Visual Polish
+
+- [ ] Add consistent icons to common action buttons: Refresh, Browse, Copy, Download, Open Folder, Delete.
+- [x] Improve surface hierarchy between tool panels, image frames, and settings cards.

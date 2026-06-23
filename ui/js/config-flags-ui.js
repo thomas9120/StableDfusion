@@ -82,9 +82,10 @@ window.SDGui.configFlagsUi = (() => {
 	}
 
 	function renderCategory(cat) {
-		var flags = window.SDGui.getFlagsByCategory(cat.id).filter(
-			flagMatchesSearch,
-		);
+		var flags = window.SDGui
+			.getFlagsByCategory(cat.id)
+			.filter((f) => !f.backendOwned)
+			.filter(flagMatchesSearch);
 		if (!flags.length) return null;
 
 		var panel = el("div", "cfg-category");

@@ -10,8 +10,8 @@
 import json
 import re
 
-from ..context import AppContext
-from ..http import Request, Response
+from backend.context import AppContext
+from backend.http import Request, Response
 
 # Filenames only — no path separators, no parent refs (path-traversal guard).
 _NAME_RE = re.compile(r"^[A-Za-z0-9_.\-]+$")

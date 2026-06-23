@@ -138,35 +138,6 @@ window.SDGui.flagCore = (() => {
 	// file-pickers populated before sd-cli will run; surface that as a clear
 	// error rather than letting sd-cli bail with an opaque message.
 	function requiredInputError(vals) {
-		// Bundle-specific: Ideogram 4 takes a structured JSON prompt, so there
-		// is nowhere to emit <lora:name:strength> LoRA tags. Block generate
-		// with a clear error instead of silently ignoring a selected LoRA.
-		// (Runs before the switch because every mode case returns on its own.)
-		if (state.bundle === "ideogram4") {
-			var loraSelected =
-				(Array.isArray(vals.lora_files) &&
-					vals.lora_files.some((e) => e && e.path)) ||
-				vals.lora_file;
-			if (loraSelected) {
-				return "LoRAs are not supported with the Ideogram 4 bundle. Clear the LoRA selection (or switch to a different model type bundle) before generating.";
-			}
-			var requiredIdeogram4 = [
-				["diffusion_model", "diffusion model"],
-				["uncond_diffusion_model", "unconditional diffusion model"],
-				["llm", "LLM text encoder"],
-				["vae", "VAE"],
-			];
-			var missingIdeogram4 = requiredIdeogram4
-				.filter((entry) => !vals[entry[0]])
-				.map((entry) => entry[1]);
-			if (missingIdeogram4.length) {
-				return (
-					"Ideogram 4 needs these files before generating: " +
-					missingIdeogram4.join(", ") +
-					"."
-				);
-			}
-		}
 		switch (state.mode) {
 			case "img_gen":
 			case "vid_gen":
@@ -248,9 +219,7 @@ window.SDGui.flagCore = (() => {
 
 			if (f.type === "int" || f.type === "float") {
 				if (v === "" || Number.isNaN(Number(v))) {
-					warnings.push(
-						"Invalid number for " + f.id + ": " + JSON.stringify(v),
-					);
+					warnings.push("Invalid number for " + f.id + ": " + JSON.stringify(v));
 					return;
 				}
 				args.push([f.flag, String(v)]);
@@ -287,7 +256,10 @@ window.SDGui.flagCore = (() => {
 				prompt: state.flagValues.prompt || "",
 				negative_prompt: state.flagValues.negative_prompt || "",
 			};
-			localStorage.setItem(PROMPT_STORAGE_PREFIX + mode, JSON.stringify(data));
+			localStorage.setItem(
+				PROMPT_STORAGE_PREFIX + mode,
+				JSON.stringify(data),
+			);
 		} catch (e) {
 			/* quota - ignore */
 		}

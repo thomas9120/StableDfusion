@@ -37,16 +37,24 @@ def get_cors_methods(path: str) -> str:
 
 
 def is_safe_request_origin(headers, allowed_origins) -> bool:
-    """Allow loopback origins and any explicitly-allowed host (LAN / tunnel)."""
+    """Allow loopback origins and any explicitly-allowed origin (LAN / tunnel).
+
+    ``allowed_origins`` is a set of *full origin strings* (e.g.
+    ``http://127.0.0.1:5250``, ``https://abc.trycloudflare.com``) as produced by
+    ``get_allowed_request_origins``. The request's ``Origin`` header is itself a
+    full origin, so we compare full-to-full first, then fall back to a loopback
+    hostname check (which tolerates ``localhost`` vs ``127.0.0.1`` mismatches).
+    """
     origin = headers.get("Origin", "")
     if not origin:
+        return True
+    if origin in allowed_origins:
         return True
     try:
         parsed = urllib.parse.urlparse(origin)
     except ValueError:
         return False
-    host = parsed.hostname or ""
-    return _loopback_host(host) or host.lower() in allowed_origins
+    return _loopback_host(parsed.hostname or "")
 
 
 def get_allowed_request_origins(

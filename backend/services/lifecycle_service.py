@@ -6,13 +6,10 @@ and subprocesses don't leak.
 """
 
 import os
-import socket
 import subprocess
 import sys
 import threading
-import time
 
-from .. import config
 from ..context import AppContext
 
 
@@ -55,54 +52,37 @@ def cleanup_gui_server(ctx: AppContext) -> None:
         ctx.state.gui_server = None
 
 
-def _wait_for_port_release(
-    gui_host: str, gui_port: int, startup_delay: float, wait_attempts: int, wait_seconds: float
-) -> bool:
-    time.sleep(startup_delay)
-    for i in range(wait_attempts):
-        sock = None
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.bind((gui_host, gui_port))
-            return True
-        except OSError:
-            if i < wait_attempts - 1:
-                time.sleep(wait_seconds)
-        finally:
-            if sock is not None:
-                sock.close()
-    return False
-
-
 def restart_gui_server(ctx: AppContext) -> bool:
-    """Re-exec server.py in a detached child, then exit this process."""
+    """Re-exec server.py in a detached child, then exit this process.
+
+    The replacement is spawned *before* this instance shuts down. The new
+    process receives ``SD_GUI_RESTART=1`` so its ``main()`` retries binding for
+    a few seconds while we release the port. If the spawn itself fails, this
+    server stays alive instead of leaving the user with no backend.
+    """
     server = ctx.state.gui_server
     if server is None:
         return False
 
+    restart_script = ctx.paths.root / "server.py"
+    # Pre-flight: refuse to restart if the replacement can't be launched at all.
+    if not restart_script.exists() or not os.path.exists(sys.executable):
+        print(
+            "ERROR: restart target missing (server.py or python executable); aborting restart.",
+            file=sys.stderr,
+        )
+        return False
+
     stop_runtime_services(ctx)
-    restart_script = str(ctx.paths.root / "server.py")
-    gui_host = ctx.config.gui_host
-    gui_port = ctx.config.gui_port
 
     def _restart() -> None:
         try:
-            port_free = _wait_for_port_release(
-                gui_host,
-                gui_port,
-                config.RESTART_STARTUP_DELAY_SECONDS,
-                config.RESTART_PORT_WAIT_ATTEMPTS,
-                config.RESTART_PORT_WAIT_SECONDS,
-            )
-            if not port_free:
-                print(
-                    f"WARNING: Port {gui_port} still in use after waiting; "
-                    "attempting restart anyway",
-                    file=sys.stderr,
-                )
+            env = dict(os.environ)
+            env["SD_GUI_RESTART"] = "1"
             subprocess.Popen(
-                [sys.executable, restart_script],
+                [sys.executable, str(restart_script)],
                 cwd=str(ctx.paths.root),
+                env=env,
                 creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
                 if sys.platform == "win32"
                 else 0,
@@ -113,11 +93,16 @@ def restart_gui_server(ctx: AppContext) -> bool:
             import traceback
 
             traceback.print_exc()
+            # Do NOT shut down — keep the current server alive.
             return
+        # Replacement spawned successfully: release the port and exit.
+        try:
+            server.shutdown()
+        except Exception:
+            pass
         os._exit(0)
 
     threading.Thread(target=_restart, daemon=False).start()
-    threading.Thread(target=server.shutdown, daemon=True).start()
     return True
 
 

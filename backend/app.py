@@ -188,8 +188,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
     def get_allowed_request_origins(self):
+        tunnel_url = None
+        try:
+            tunnel_url = STATE.remote_tunnel.snapshot().get("url") or None
+        except Exception:
+            tunnel_url = None
         return get_allowed_request_origins(
-            None,
+            tunnel_url,
             config.GUI_HOST,
             config.GUI_PORT,
             request_host=self.headers.get("Host", ""),
@@ -208,8 +213,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
     def read_body(self):
-        length = int(self.headers.get("Content-Length", 0))
-        if length == 0:
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+        except (TypeError, ValueError):
+            return None
+        if length <= 0:
             return {}
         if length > 10 * 1024 * 1024:
             return None
@@ -219,10 +227,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return None
 
     def read_raw_body(self):
-        length = int(self.headers.get("Content-Length", 0))
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+        except (TypeError, ValueError):
+            return None
+        if length <= 0:
+            return b""
         if length > 10 * 1024 * 1024:
             return None
-        return self.rfile.read(length) if length else b""
+        return self.rfile.read(length)
 
     def dispatch(self, method, parsed, body=None):
         match = API_ROUTER.match(method, parsed.path)
@@ -414,10 +427,26 @@ def main() -> None:
             (http.server.ThreadingHTTPServer,),
             {"address_family": socket.AF_INET6},
         )
-    try:
-        STATE.gui_server = server_class((config.GUI_HOST, port), Handler)
-    except OSError as exc:
-        print(f"ERROR: Could not start server on port {port}: {exc}")
+    # When spawned as a restart target, retry binding briefly while the previous
+    # instance releases the port (see lifecycle_service.restart_gui_server).
+    import os as _os
+    import time as _time
+
+    restart_bind = _os.environ.get("SD_GUI_RESTART") == "1"
+    max_attempts = 20 if restart_bind else 1
+    bound = False
+    for attempt in range(max_attempts):
+        try:
+            STATE.gui_server = server_class((config.GUI_HOST, port), Handler)
+            bound = True
+            break
+        except OSError as exc:
+            if attempt + 1 < max_attempts:
+                _time.sleep(0.5)
+                continue
+            print(f"ERROR: Could not start server on port {port}: {exc}")
+            sys.exit(1)
+    if not bound:
         sys.exit(1)
 
     print(f"StableDfusion running at http://{config.GUI_HOST}:{port}")
