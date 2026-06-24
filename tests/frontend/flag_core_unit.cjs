@@ -136,6 +136,37 @@ check("Z-Image style llm equal to diffusion model blocks launch", () => {
 	assert(!flatPairs(result.args).join(" ").includes("--llm"));
 });
 
+check("Krea 2 Turbo bundle applies the official inference recipe", () => {
+	flagCore.resetToDefaults();
+	flagCore.setBundle("krea2", true);
+	flagCore.setMultipleFlagValues({
+		diffusion_model: "models/diffusion/krea-2-turbo.gguf",
+		vae: "models/vae/wan-2.1-vae.safetensors",
+		llm: "models/text-encoders/qwen3-vl-4b.gguf",
+	});
+	const values = flagCore.getFlagValues();
+	const result = flagCore.getLaunchArgs();
+	const flat = flatPairs(result.args);
+
+	assert.equal(values.width, 2048);
+	assert.equal(values.height, 2048);
+	assert.equal(values.steps, 8);
+	assert.equal(values.cfg_scale, 0);
+	assert.equal(values.flow_shift, 1.15);
+	assert.equal(values.sampling_method, "euler");
+	assert.equal(values.diffusion_fa, true);
+	assert.equal(values.offload_to_cpu, true);
+	assert.equal(values.vae_tiling, true);
+	assert.equal(result.error, null);
+	assert(flat.includes("--steps=8"));
+	assert(flat.includes("--cfg-scale=0"));
+	assert(flat.includes("--flow-shift=1.15"));
+	assert(flat.includes("--sampling-method=euler"));
+	assert(flat.includes("--diffusion-fa"));
+	assert(flat.includes("--offload-to-cpu"));
+	assert(flat.includes("--vae-tiling"));
+});
+
 console.log(
 	`\n${failures.length === 0 ? "ALL FLAG CORE UNIT CHECKS PASSED" : failures.length + " CHECK(S) FAILED"}`,
 );

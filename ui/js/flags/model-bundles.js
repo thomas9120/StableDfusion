@@ -95,6 +95,31 @@ window.SDGui.MODEL_TYPE_BUNDLES = [
 		defaults: { mode: "img_gen", width: 1328, height: 1328 },
 	},
 	{
+		// Krea 2 Turbo is the recommended inference checkpoint. It uses a
+		// Krea 2 DiT, Wan 2.1 VAE, and Qwen3-VL 4B text encoder. Krea's
+		// official recipe is 8 Euler steps, CFG disabled, and mu/flow shift
+		// 1.15 at 2048 square.
+		value: "krea2",
+		label: "Krea 2 (Turbo)",
+		fields: [
+			{ key: "diffusion_model", purpose: "diffusion_model", required: true },
+			{ key: "vae", purpose: "vae", required: true },
+			{ key: "llm", purpose: "llm", required: true },
+		],
+		defaults: {
+			mode: "img_gen",
+			width: 2048,
+			height: 2048,
+			steps: 8,
+			cfg_scale: 0.0,
+			flow_shift: 1.15,
+			sampling_method: "euler",
+			diffusion_fa: true,
+			offload_to_cpu: true,
+			vae_tiling: true,
+		},
+	},
+	{
 		value: "qwen_image_edit",
 		label: "Qwen-Image Edit",
 		fields: [
