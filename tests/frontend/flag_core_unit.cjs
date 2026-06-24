@@ -8,7 +8,7 @@ const vm = require("node:vm");
 
 const ROOT = path.resolve(__dirname, "..", "..");
 
-function loadFlagCore() {
+function loadSdGui() {
 	const context = vm.createContext({
 		console,
 		window: { SDGui: {} },
@@ -16,6 +16,7 @@ function loadFlagCore() {
 	context.window.window = context.window;
 
 	for (const rel of [
+		"ui/js/app-data.js",
 		"ui/js/flags/options.js",
 		"ui/js/flags/model-bundles.js",
 		"ui/js/flags/definitions.js",
@@ -27,14 +28,15 @@ function loadFlagCore() {
 			filename: file,
 		});
 	}
-	return context.window.SDGui.flagCore;
+	return context.window.SDGui;
 }
 
 function flatPairs(args) {
 	return (args || []).map((pair) => pair.join("="));
 }
 
-const flagCore = loadFlagCore();
+const SDGui = loadSdGui();
+const flagCore = SDGui.flagCore;
 const failures = [];
 
 function check(name, fn) {
@@ -136,7 +138,7 @@ check("Z-Image style llm equal to diffusion model blocks launch", () => {
 	assert(!flatPairs(result.args).join(" ").includes("--llm"));
 });
 
-check("Krea 2 Turbo bundle applies the official inference recipe", () => {
+check("Krea 2 Turbo bundle applies its configured inference defaults", () => {
 	flagCore.resetToDefaults();
 	flagCore.setBundle("krea2", true);
 	flagCore.setMultipleFlagValues({
@@ -151,20 +153,45 @@ check("Krea 2 Turbo bundle applies the official inference recipe", () => {
 	assert.equal(values.width, 2048);
 	assert.equal(values.height, 2048);
 	assert.equal(values.steps, 8);
-	assert.equal(values.cfg_scale, 0);
-	assert.equal(values.flow_shift, 1.15);
+	assert.equal(values.cfg_scale, 1);
+	assert.equal(values.flow_shift, 0);
 	assert.equal(values.sampling_method, "euler");
 	assert.equal(values.diffusion_fa, true);
 	assert.equal(values.offload_to_cpu, true);
 	assert.equal(values.vae_tiling, true);
 	assert.equal(result.error, null);
 	assert(flat.includes("--steps=8"));
-	assert(flat.includes("--cfg-scale=0"));
-	assert(flat.includes("--flow-shift=1.15"));
+	assert(flat.includes("--cfg-scale=1"));
+	assert(flat.includes("--flow-shift=0"));
 	assert(flat.includes("--sampling-method=euler"));
 	assert(flat.includes("--diffusion-fa"));
 	assert(flat.includes("--offload-to-cpu"));
 	assert(flat.includes("--vae-tiling"));
+});
+
+check("Generate Image dimension buckets move minimum and maximum up one tier", () => {
+	assert.deepEqual(
+		JSON.parse(JSON.stringify(SDGui.DIMENSION_BUCKETS["1:1"])),
+		[
+			{ long: 768, width: 768, height: 768 },
+			{ long: 1024, width: 1024, height: 1024 },
+			{ long: 1536, width: 1536, height: 1536 },
+		],
+	);
+	assert.deepEqual(
+		JSON.parse(JSON.stringify(SDGui.DIMENSION_BUCKETS["16:9"])),
+		[
+			{ long: 1344, width: 1344, height: 768 },
+			{ long: 1536, width: 1536, height: 864 },
+		],
+	);
+	assert.deepEqual(
+		JSON.parse(JSON.stringify(SDGui.DIMENSION_BUCKETS["9:16"])),
+		[
+			{ long: 1344, width: 768, height: 1344 },
+			{ long: 1536, width: 864, height: 1536 },
+		],
+	);
 });
 
 console.log(

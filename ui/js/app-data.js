@@ -35,21 +35,21 @@ window.SDGui.QUICK_PROFILES = [
 ];
 
 window.SDGui.DIMENSION_PRESETS = [
-	{ value: "512x512", label: "1:1 - 512 x 512", width: 512, height: 512 },
 	{ value: "768x768", label: "1:1 - 768 x 768", width: 768, height: 768 },
 	{ value: "1024x1024", label: "1:1 - 1024 x 1024", width: 1024, height: 1024 },
-	{ value: "768x512", label: "3:2 - 768 x 512", width: 768, height: 512 },
+	{ value: "1536x1536", label: "1:1 - 1536 x 1536", width: 1536, height: 1536 },
 	{ value: "1152x768", label: "3:2 - 1152 x 768", width: 1152, height: 768 },
-	{ value: "512x768", label: "2:3 - 512 x 768", width: 512, height: 768 },
+	{ value: "1536x1024", label: "3:2 - 1536 x 1024", width: 1536, height: 1024 },
 	{ value: "768x1152", label: "2:3 - 768 x 1152", width: 768, height: 1152 },
-	{ value: "768x576", label: "4:3 - 768 x 576", width: 768, height: 576 },
+	{ value: "1024x1536", label: "2:3 - 1024 x 1536", width: 1024, height: 1536 },
 	{ value: "1024x768", label: "4:3 - 1024 x 768", width: 1024, height: 768 },
-	{ value: "576x768", label: "3:4 - 576 x 768", width: 576, height: 768 },
+	{ value: "1344x1008", label: "4:3 - 1344 x 1008", width: 1344, height: 1008 },
 	{ value: "768x1024", label: "3:4 - 768 x 1024", width: 768, height: 1024 },
-	{ value: "1024x576", label: "16:9 - 1024 x 576", width: 1024, height: 576 },
+	{ value: "1008x1344", label: "3:4 - 1008 x 1344", width: 1008, height: 1344 },
 	{ value: "1344x768", label: "16:9 - 1344 x 768", width: 1344, height: 768 },
-	{ value: "576x1024", label: "9:16 - 576 x 1024", width: 576, height: 1024 },
+	{ value: "1536x864", label: "16:9 - 1536 x 864", width: 1536, height: 864 },
 	{ value: "768x1344", label: "9:16 - 768 x 1344", width: 768, height: 1344 },
+	{ value: "864x1536", label: "9:16 - 864 x 1536", width: 864, height: 1536 },
 ];
 
 // ── Dimensions widget (Generate tab): "Aspect → Size" redesign ───────────
