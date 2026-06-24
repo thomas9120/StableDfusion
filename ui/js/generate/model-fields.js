@@ -366,7 +366,7 @@ window.SDGui.generateModelFields = (() => {
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
 					purpose: field.purpose,
-					title: fieldLabel(field.key),
+					title: field.label || fieldLabel(field.key),
 				}),
 			});
 			if (res && res.selected && res.path) {
@@ -408,6 +408,7 @@ window.SDGui.generateModelFields = (() => {
 			fieldList = fields.map((f) => ({
 				key: f.key,
 				purpose: f.purpose || f.key,
+				label: f.label || fieldLabel(f.key),
 				required: !!f.required,
 			}));
 		} else {
@@ -434,13 +435,14 @@ window.SDGui.generateModelFields = (() => {
 			].map((key) => ({
 				key: key,
 				purpose: (window.SDGui.BUNDLE_FIELD_PURPOSES || {})[key] || key,
+				label: fieldLabel(key),
 				required: false,
 			}));
 		}
 		fieldList.forEach((field) => {
 			var wrap = el("div", "gen-model-field");
 			var head = el("div", "field-head");
-			head.appendChild(el("span", "form-label", fieldLabel(field.key)));
+			head.appendChild(el("span", "form-label", field.label));
 			var chip = el("span", "model-status-chip");
 			chip.required = field.required;
 			readinessChips[field.key] = chip;
