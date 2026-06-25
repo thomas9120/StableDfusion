@@ -104,10 +104,12 @@ _STEP_RE = re.compile(r"step\s+(\d+)\s*/\s*(\d+)", re.IGNORECASE)
 _SAMPLING_STEP_RE = re.compile(r"(\d+)\s*/\s*(\d+)\s*-\s*[\d.]+\s*s/it")
 _SAVED_RE = re.compile(r"(\d+)\s*/\s*(\d+)\s+images?\s+saved", re.IGNORECASE)
 
-# Tokens may not contain control chars / newlines (defensive; subprocess uses a
-# list argv, never a shell, so injection is already impossible — this is belt
-# and braces).
+# General launch tokens may not contain control characters. Prompt values are
+# allowed to contain tabs and line breaks because subprocess receives an argv
+# list directly (never a shell), so the text remains one argument.
 _TOKEN_RE = re.compile(r"^[^\x00-\x1f\x7f]*$")
+_PROMPT_TOKEN_RE = re.compile(r"^[^\x00-\x08\x0b\x0c\x0e-\x1f\x7f]*$")
+_PROMPT_FLAGS = {"--prompt", "-p", "--negative-prompt", "-n"}
 
 _POLL_INTERVAL = 0.25
 _METADATA_STDOUT_LIMIT = 4000  # last N bytes of stdout to keep in the sidecar
@@ -172,12 +174,29 @@ def _strip_value_flags(tokens: list[str], flags: tuple[str, ...]) -> list[str]:
     return out
 
 
-def _validate_tokens(tokens: list[str]) -> None:
-    for tok in tokens:
-        if not isinstance(tok, str) or not _TOKEN_RE.match(tok):
-            raise ValueError(f"Rejected unsafe launch argument token: {tok!r}")
-        if len(tok) > 4096:
-            raise ValueError("Launch argument token too long")
+def _validate_token(token: Any, *, allow_prompt_whitespace: bool = False) -> None:
+    if not isinstance(token, str):
+        raise ValueError(f"Rejected unsafe launch argument token: {token!r}")
+    pattern = _PROMPT_TOKEN_RE if allow_prompt_whitespace else _TOKEN_RE
+    if not pattern.match(token):
+        raise ValueError(f"Rejected unsafe launch argument token: {token!r}")
+    if len(token) > 4096:
+        raise ValueError("Launch argument token too long")
+
+
+def _validate_user_args(user_args: list[Any]) -> None:
+    """Validate structured launch pairs while allowing multiline prompt values."""
+    for entry in user_args:
+        if isinstance(entry, (list, tuple)):
+            if not entry:
+                continue
+            flag = entry[0]
+            _validate_token(flag)
+            is_prompt = isinstance(flag, str) and flag in _PROMPT_FLAGS
+            for index, token in enumerate(entry[1:], start=1):
+                _validate_token(token, allow_prompt_whitespace=is_prompt and index == 1)
+        else:
+            _validate_token(entry)
 
 
 def build_argv(
@@ -198,8 +217,8 @@ def build_argv(
         raise ValueError(f"Invalid mode: {mode!r}")
 
     stripped = _strip_owned_pairs(user_args, BACKEND_OWNED_VALUE_FLAGS)
+    _validate_user_args(stripped)
     flat = process_manager.flatten_launch_args(stripped)
-    _validate_tokens(flat)
     cleaned = _strip_value_flags(flat, BACKEND_OWNED_VALUE_FLAGS)
 
     argv: list[str] = [
