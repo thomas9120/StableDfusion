@@ -74,14 +74,57 @@ def test_build_argv_rejects_invalid_mode():
     raise AssertionError("expected ValueError for invalid mode")
 
 
-def test_build_argv_rejects_unsafe_token():
+def test_build_argv_preserves_multiline_prompts_and_colons():
+    prompt = "Scene:\n\nA quiet room:\nsoft lighting"
+    negative_prompt = "Avoid:\r\n\tblur:1.2"
+    argv = generate_service.build_argv(
+        [["--prompt", prompt], ["--negative-prompt", negative_prompt]],
+        "img_gen",
+        Path("o.png"),
+        Path("p.png"),
+    )
+
+    assert argv[argv.index("--prompt") + 1] == prompt
+    assert argv[argv.index("--negative-prompt") + 1] == negative_prompt
+
+
+def test_build_argv_preserves_colons_without_newlines():
+    prompt = "portrait: dramatic lighting, detail:1.5"
+    argv = generate_service.build_argv(
+        [["--prompt", prompt]], "img_gen", Path("o.png"), Path("p.png")
+    )
+    assert argv[argv.index("--prompt") + 1] == prompt
+
+
+def test_build_argv_rejects_nul_in_prompt():
     try:
         generate_service.build_argv(
-            [["--prompt", "line\nbreak"]], "img_gen", Path("o.png"), Path("p.png")
+            [["--prompt", "line\0break"]], "img_gen", Path("o.png"), Path("p.png")
         )
     except ValueError:
         return
-    raise AssertionError("expected ValueError for newline token")
+    raise AssertionError("expected ValueError for NUL in prompt")
+
+
+def test_build_argv_rejects_newline_in_non_prompt_value():
+    try:
+        generate_service.build_argv(
+            [["--model", "models/model\nname.gguf"]],
+            "img_gen",
+            Path("o.png"),
+            Path("p.png"),
+        )
+    except ValueError:
+        return
+    raise AssertionError("expected ValueError for newline in model path")
+
+
+def test_build_argv_rejects_newline_in_custom_argument():
+    try:
+        generate_service.build_argv([["--custom\nflag"]], "img_gen", Path("o.png"), Path("p.png"))
+    except ValueError:
+        return
+    raise AssertionError("expected ValueError for newline in custom argument")
 
 
 def test_prepare_rewrites_legacy_flat_model_path(tmp_path):

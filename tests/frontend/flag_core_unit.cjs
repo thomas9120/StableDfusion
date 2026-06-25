@@ -73,6 +73,28 @@ check("getLaunchArgs emits model and custom args after canonical args", () => {
 	assert.equal(JSON.stringify(result.args.slice(-2)), JSON.stringify([["--eta"], ["0.25 value"]]));
 });
 
+check("getLaunchArgs preserves multiline prompts and colons", () => {
+	const prompt = "Scene:\n\nA quiet room:\nsoft lighting:1.2";
+	const negativePrompt = "Avoid:\n\tblur:1.2";
+	flagCore.resetToDefaults();
+	flagCore.setMode("img_gen");
+	flagCore.setMultipleFlagValues({
+		model: "models/diffusion/sd15.gguf",
+		prompt,
+		negative_prompt: negativePrompt,
+	});
+	const result = flagCore.getLaunchArgs();
+	assert.equal(result.error, null);
+	assert.equal(
+		JSON.stringify(result.args.find((pair) => pair[0] === "--prompt")),
+		JSON.stringify(["--prompt", prompt]),
+	);
+	assert.equal(
+		JSON.stringify(result.args.find((pair) => pair[0] === "--negative-prompt")),
+		JSON.stringify(["--negative-prompt", negativePrompt]),
+	);
+});
+
 check("backend-owned output and run mode flags are never emitted", () => {
 	flagCore.resetToDefaults();
 	flagCore.setMode("img_gen");

@@ -663,7 +663,10 @@ function findChromiumExecutable() {
 				refreshedGenerateModels.seed === 12345 &&
 				refreshedGenerateModels.loraCount === 2,
 		);
-		await page.fill("#gen-prompt", "a cat");
+		await page.fill(
+			"#gen-prompt",
+			"Scene:\n\nA quiet room:\nsoft lighting:1.2",
+		);
 		await page.dispatchEvent("#gen-prompt", "input");
 
 		// 5. Click Generate -> posts + polls.
@@ -740,10 +743,17 @@ function findChromiumExecutable() {
 			.map((p) => p.join("="))
 			.join(" ");
 		check(
-			"Generate POST injected LoRA prompt tag",
+			"Generate POST preserved multiline prompt and injected LoRA tags",
 			postedArgs.includes(
-				"--prompt=a cat <lora:style-test:0.75> <lora:detail-test:0.4>",
+				"--prompt=Scene:\n\nA quiet room:\nsoft lighting:1.2 <lora:style-test:0.75> <lora:detail-test:0.4>",
 			),
+		);
+		check(
+			"Generate POST params preserved multiline prompt exactly",
+			generatePosted &&
+				generatePosted.params &&
+				generatePosted.params.prompt ===
+					"Scene:\n\nA quiet room:\nsoft lighting:1.2 <lora:style-test:0.75> <lora:detail-test:0.4>",
 		);
 		check(
 			"Generate POST included LoRA model dir",
@@ -760,7 +770,7 @@ function findChromiumExecutable() {
 		);
 		check(
 			"history persisted to localStorage",
-			!!stored && stored.includes("a cat"),
+			!!stored && stored.includes("Scene:") && stored.includes("soft lighting:1.2"),
 		);
 
 		// 9b. History UI: count badge updates, each item has the 5-action
