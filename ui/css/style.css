@@ -1061,6 +1061,10 @@ textarea {
 	min-width: 140px;
 	flex: 1 1 160px;
 }
+.gen-model-field .lora-row .lora-strength-input {
+	width: 86px;
+	flex: 0 0 86px;
+}
 .lora-strength-value {
 	min-width: 40px;
 	text-align: right;
