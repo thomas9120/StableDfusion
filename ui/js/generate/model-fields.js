@@ -30,6 +30,10 @@ window.SDGui.generateModelFields = (() => {
 	var readinessChips = {};
 	var loraOptionsCache = null;
 	var MAX_LORA_ROWS = 5;
+	var LORA_SLIDER_MIN = -1;
+	var LORA_SLIDER_MAX = 2;
+	var LORA_INPUT_MIN = -100;
+	var LORA_INPUT_MAX = 100;
 	// Re-sync a single control after its dropdown has been populated.
 	var syncControl = function () {};
 	// Called after a local state mutation so the coordinator can refresh
@@ -235,6 +239,18 @@ window.SDGui.generateModelFields = (() => {
 			});
 	}
 
+	function clampLoraStrength(value, min, max) {
+		var n = Number(value);
+		if (!Number.isFinite(n)) n = 1;
+		return Math.min(max, Math.max(min, n));
+	}
+
+	function sliderValueForLoraStrength(value) {
+		return fmt.formatLoraStrength(
+			clampLoraStrength(value, LORA_SLIDER_MIN, LORA_SLIDER_MAX),
+		);
+	}
+
 	async function refreshLoraOptions() {
 		await fetchLoraOptions();
 		refreshRenderedLoraSelects();
@@ -287,17 +303,29 @@ window.SDGui.generateModelFields = (() => {
 
 				var slider = el("input");
 				slider.type = "range";
-				slider.min = "-1";
-				slider.max = "2";
+				slider.min = String(LORA_SLIDER_MIN);
+				slider.max = String(LORA_SLIDER_MAX);
 				slider.step = "0.05";
-				slider.value = fmt.formatLoraStrength(entry.strength);
+				slider.value = sliderValueForLoraStrength(entry.strength);
+				var strengthInput = el("input");
+				strengthInput.type = "number";
+				strengthInput.className = "lora-strength-input";
+				strengthInput.min = String(LORA_INPUT_MIN);
+				strengthInput.max = String(LORA_INPUT_MAX);
+				strengthInput.step = "0.05";
+				strengthInput.value = fmt.formatLoraStrength(entry.strength);
+				strengthInput.setAttribute("aria-label", "LoRA strength");
 				var valueLabel = el(
 					"span",
 					"help-text lora-strength-value",
-					fmt.formatLoraStrength(slider.value),
+					fmt.formatLoraStrength(entry.strength),
 				);
-				slider.addEventListener("input", () => {
-					var value = Number(fmt.formatLoraStrength(slider.value));
+
+				function commitStrength(value, updateSlider) {
+					value = clampLoraStrength(value, LORA_INPUT_MIN, LORA_INPUT_MAX);
+					value = Number(fmt.formatLoraStrength(value));
+					if (updateSlider) slider.value = sliderValueForLoraStrength(value);
+					strengthInput.value = fmt.formatLoraStrength(value);
 					valueLabel.textContent = fmt.formatLoraStrength(value);
 					var next = normalizeLoraEntries(flagCore.getFlagValues());
 					while (next.length <= index) {
@@ -306,6 +334,17 @@ window.SDGui.generateModelFields = (() => {
 					if (!next[index].path && !select.value) return;
 					next[index] = { path: next[index].path || select.value, strength: value };
 					setLoraEntries(next);
+				}
+
+				slider.addEventListener("input", () => {
+					commitStrength(slider.value, false);
+				});
+				strengthInput.addEventListener("input", () => {
+					if (!Number.isFinite(Number(strengthInput.value))) return;
+					commitStrength(strengthInput.value, true);
+				});
+				strengthInput.addEventListener("change", () => {
+					commitStrength(strengthInput.value, true);
 				});
 
 				var remove = el("button", "btn btn-sm", "Remove");
@@ -324,6 +363,7 @@ window.SDGui.generateModelFields = (() => {
 
 				row.appendChild(select);
 				row.appendChild(slider);
+				row.appendChild(strengthInput);
 				row.appendChild(valueLabel);
 				row.appendChild(remove);
 				list.appendChild(row);

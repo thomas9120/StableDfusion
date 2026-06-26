@@ -606,18 +606,32 @@ function findChromiumExecutable() {
 				slider.value = "0.4";
 				slider.dispatchEvent(new Event("input", { bubbles: true }));
 			});
+		await page
+			.locator("#gen-model-components .lora-row .lora-strength-input")
+			.nth(1)
+			.fill("50");
+		await page
+			.locator("#gen-model-components .lora-row .lora-strength-input")
+			.nth(1)
+			.dispatchEvent("change");
 		const loraUi = await page.evaluate(() => {
 			const ranges = Array.from(
 				document.querySelectorAll("#gen-model-components .lora-row input[type='range']"),
+			);
+			const inputs = Array.from(
+				document.querySelectorAll("#gen-model-components .lora-row .lora-strength-input"),
 			);
 			const state = window.SDGui.flagCore.getFlagValues().lora_files || [];
 			return (
 				ranges.length >= 2 &&
 				ranges.every((input) => input.min === "-1" && input.max === "2") &&
-				state.length === 2
+				inputs.length >= 2 &&
+				inputs.every((input) => input.min === "-100" && input.max === "100") &&
+				state.length === 2 &&
+				state[1].strength === 50
 			);
 		});
-		check("LoRA strength slider is rendered with expected range", loraUi);
+		check("LoRA strength controls support typed high values", loraUi);
 
 		await page
 			.locator("#gen-model-components .gen-model-field select")
@@ -745,7 +759,7 @@ function findChromiumExecutable() {
 		check(
 			"Generate POST preserved multiline prompt and injected LoRA tags",
 			postedArgs.includes(
-				"--prompt=Scene:\n\nA quiet room:\nsoft lighting:1.2 <lora:style-test:0.75> <lora:detail-test:0.4>",
+				"--prompt=Scene:\n\nA quiet room:\nsoft lighting:1.2 <lora:style-test:0.75> <lora:detail-test:50>",
 			),
 		);
 		check(
@@ -753,7 +767,7 @@ function findChromiumExecutable() {
 			generatePosted &&
 				generatePosted.params &&
 				generatePosted.params.prompt ===
-					"Scene:\n\nA quiet room:\nsoft lighting:1.2 <lora:style-test:0.75> <lora:detail-test:0.4>",
+					"Scene:\n\nA quiet room:\nsoft lighting:1.2 <lora:style-test:0.75> <lora:detail-test:50>",
 		);
 		check(
 			"Generate POST included LoRA model dir",
