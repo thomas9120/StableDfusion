@@ -42,6 +42,21 @@ DEFAULT_GUI_PORT = 5250  # distinct from LLama-GUI's 5240 so both can run togeth
 SD_SERVER_HOST = "127.0.0.1"
 SD_SERVER_PORT = 1234
 
+# Per-request timeout for the /v1 /sdapi /sdcpp proxy to sd-server. Generation
+# requests block until the image is done — CPU txt2img on a large model can
+# take well over 20 minutes, so the default is generous.
+DEFAULT_SD_SERVER_PROXY_TIMEOUT = 1800.0  # seconds
+
+
+def parse_proxy_timeout(value: object, default: float = DEFAULT_SD_SERVER_PROXY_TIMEOUT) -> float:
+    try:
+        timeout = float(str(value or "").strip())
+    except (TypeError, ValueError):
+        return default
+    if timeout <= 0:
+        return default
+    return timeout
+
 
 def parse_gui_host(value: object, default: str = DEFAULT_GUI_HOST) -> str:
     host = str(value or "").strip()
@@ -78,6 +93,7 @@ def parse_gui_allowed_hosts(value: object) -> tuple[str, ...]:
 GUI_HOST = parse_gui_host(os.environ.get("SD_GUI_HOST"), DEFAULT_GUI_HOST)
 GUI_PORT = parse_gui_port(os.environ.get("SD_GUI_PORT"), DEFAULT_GUI_PORT)
 GUI_ALLOWED_HOSTS = parse_gui_allowed_hosts(os.environ.get("SD_GUI_ALLOWED_HOSTS"))
+SD_SERVER_PROXY_TIMEOUT = parse_proxy_timeout(os.environ.get("SD_GUI_PROXY_TIMEOUT"))
 
 # GitHub releases for leejet/stable-diffusion.cpp are continuous builds
 # (tags like master-709-92a3b73); asset names embed the commit short-hash, so

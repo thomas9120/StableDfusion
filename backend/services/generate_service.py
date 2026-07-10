@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from ..context import AppContext
+from ..state import default_generation_state
 from . import model_storage_service, process_manager
 
 SD_MODES = ("img_gen", "vid_gen", "convert", "upscale", "metadata")
@@ -401,6 +402,26 @@ def _run_job(
     job_id: str,
     prepared: dict[str, Any],
 ) -> None:
+    """Thread entrypoint. Any unhandled exception must transition the shared
+    generation state out of "running", otherwise the job slot is wedged until
+    restart (every new /api/generate would 409)."""
+    try:
+        _run_job_inner(ctx, job_id, prepared)
+    except Exception as exc:
+        ctx.state.generation.update(
+            state="error",
+            message="Generation failed unexpectedly.",
+            error=str(exc)[:500],
+            finished_at=time.time(),
+        )
+        print(f"[generate] {job_id} unexpected error: {exc!r}", flush=True)
+
+
+def _run_job_inner(
+    ctx: AppContext,
+    job_id: str,
+    prepared: dict[str, Any],
+) -> None:
     mode = prepared["mode"]
     argv = prepared["argv"]
     output_path = prepared["output_path"]
@@ -598,20 +619,20 @@ def run(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
         if ctx.state.generation.snapshot().get("state") == "running":
             return {"error": "A generation is already running"}
         job_id = prepared["base_name"]
-        ctx.state.generation.update(
-            state="running",
-            job_id=job_id,
-            mode=prepared["mode"],
-            step=0,
-            total_steps=prepared["total_steps"],
-            percent=0,
-            message="Queued.",
-            started_at=time.time(),
-            finished_at=0.0,
-            preview_mtime=0,
-            result_files=[],
-            seed=prepared["seed"],
-            error="",
+        # replace() (not update()) so keys added dynamically by the previous
+        # job — warnings, stderr_tail, stdout_excerpt, ... — don't leak into
+        # this job's status payload.
+        ctx.state.generation.replace(
+            {
+                **default_generation_state(),
+                "state": "running",
+                "job_id": job_id,
+                "mode": prepared["mode"],
+                "total_steps": prepared["total_steps"],
+                "message": "Queued.",
+                "started_at": time.time(),
+                "seed": prepared["seed"],
+            }
         )
 
     ctx.state.generation_cancel.clear()

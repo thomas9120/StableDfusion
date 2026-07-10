@@ -199,6 +199,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             config.GUI_PORT,
             request_host=self.headers.get("Host", ""),
             allow_request_host_origin=config.GUI_HOST in WILDCARD_BIND_HOSTS,
+            extra_hosts=config.GUI_ALLOWED_HOSTS,
         )
 
     def get_access_control_origin(self):

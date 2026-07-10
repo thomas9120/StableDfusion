@@ -192,7 +192,7 @@ def test_start_download_dispatches_thread_and_reaches_done(tmp_path, monkeypatch
     walks starting → downloading → done and records completed_files."""
     ctx = _ctx(tmp_path)
 
-    def fake_download_one(ctx, repo_id, filename, dest, token):
+    def fake_download_one(ctx, repo_id, filename, dest, token, revision="main"):
         # Simulate ~25 KB progress with cancel polling.
         total = 25 * 1024
         for i in range(1, 26):
@@ -230,7 +230,7 @@ def test_start_download_cancel_marks_state_canceled(tmp_path, monkeypatch):
 
     cancel_flag = {"hit": False}
 
-    def slow_download_one(ctx, repo_id, filename, dest, token):
+    def slow_download_one(ctx, repo_id, filename, dest, token, revision="main"):
         for _ in range(50):
             if ctx.state.model_download_cancel.is_set():
                 cancel_flag["hit"] = True
@@ -260,8 +260,8 @@ def test_start_download_dedups_files(tmp_path, monkeypatch):
 
     seen = []
 
-    def recorder(ctx, repo_id, filename, dest, token):
-        seen.append(filename)
+    def recorder(ctx, repo_id, filename, dest, token, revision="main"):
+        seen.append((filename, revision))
 
     monkeypatch.setattr(hf_download_service, "_download_one", recorder)
     monkeypatch.setattr(
@@ -275,10 +275,13 @@ def test_start_download_dedups_files(tmp_path, monkeypatch):
         {
             "repo_id": "owner/repo",
             "files": ["a.gguf", "a.gguf", "b.safetensors"],
+            "revision": "refs/pr/7",
         },
     )
     _wait_for_state(ctx, {"done"}, timeout=3.0)
-    assert seen == ["a.gguf", "b.safetensors"]
+    # The user-selected revision must reach the per-file downloader (it used to
+    # be validated, threaded through, then silently dropped → always "main").
+    assert seen == [("a.gguf", "refs/pr/7"), ("b.safetensors", "refs/pr/7")]
 
 
 def test_start_download_rejects_when_already_running(tmp_path):

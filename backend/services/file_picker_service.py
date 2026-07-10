@@ -7,6 +7,7 @@ initial-directory rules (model-component purposes default to ``models/``).
 import json
 import platform
 import subprocess
+import threading
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,12 @@ from ..context import AppContext
 from . import model_storage_service
 
 FileTypes = Sequence[tuple[str, str]]
+
+# tkinter is not thread-safe and each request runs on its own
+# ThreadingHTTPServer worker thread — two concurrent pickers would create two
+# Tk roots and can crash the interpreter. Serialize all native dialogs; a
+# second request simply waits until the first dialog is closed.
+_DIALOG_LOCK = threading.Lock()
 
 # purpose -> (filetypes, title) for the native dialog. SD model components come
 # in several weight formats (.safetensors/.ckpt/.gguf/.sft/.bin/.pth).
@@ -139,24 +146,25 @@ def select_file_in_native_dialog(
     except Exception as exc:
         raise RuntimeError(f"Native file picker unavailable: {exc}") from exc
 
-    root = tk.Tk()
-    root.withdraw()
-    try:
-        root.attributes("-topmost", True)
-    except Exception:
-        pass
+    with _DIALOG_LOCK:
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            root.attributes("-topmost", True)
+        except Exception:
+            pass
 
-    dialog_options: dict[str, Any] = {"title": title, "parent": root}
-    if initial_dir:
-        dialog_options["initialdir"] = str(initial_dir)
-    if filetypes:
-        dialog_options["filetypes"] = filetypes
+        dialog_options: dict[str, Any] = {"title": title, "parent": root}
+        if initial_dir:
+            dialog_options["initialdir"] = str(initial_dir)
+        if filetypes:
+            dialog_options["filetypes"] = filetypes
 
-    try:
-        root.update()
-        return filedialog.askopenfilename(**dialog_options) or ""
-    finally:
-        root.destroy()
+        try:
+            root.update()
+            return filedialog.askopenfilename(**dialog_options) or ""
+        finally:
+            root.destroy()
 
 
 def select_directory_with_osascript(
@@ -198,22 +206,23 @@ def select_directory_in_native_dialog(
     except Exception as exc:
         raise RuntimeError(f"Native folder picker unavailable: {exc}") from exc
 
-    root = tk.Tk()
-    root.withdraw()
-    try:
-        root.attributes("-topmost", True)
-    except Exception:
-        pass
+    with _DIALOG_LOCK:
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            root.attributes("-topmost", True)
+        except Exception:
+            pass
 
-    dialog_options: dict[str, Any] = {"title": title, "parent": root, "mustexist": True}
-    if initial_dir:
-        dialog_options["initialdir"] = str(initial_dir)
+        dialog_options: dict[str, Any] = {"title": title, "parent": root, "mustexist": True}
+        if initial_dir:
+            dialog_options["initialdir"] = str(initial_dir)
 
-    try:
-        root.update()
-        return filedialog.askdirectory(**dialog_options) or ""
-    finally:
-        root.destroy()
+        try:
+            root.update()
+            return filedialog.askdirectory(**dialog_options) or ""
+        finally:
+            root.destroy()
 
 
 def get_select_file_options(

@@ -407,3 +407,64 @@ def test_prepare_vid_gen_uses_webm_output_and_preview(tmp_path):
     assert side["vace_strength"] == 0.6
     assert side["end_img"] == "output/last.png"
     assert side["mode"] == "vid_gen"
+
+
+# ── run()/_run_job lifecycle regressions ──────────────────────────────────
+
+
+def test_run_job_unexpected_exception_sets_error_state(tmp_path, monkeypatch):
+    """A crash in the worker must not leave state stuck at "running" (which
+    would 409 every subsequent /api/generate until restart)."""
+    ctx = _ctx(tmp_path)
+    ctx.state.generation.update(state="running", job_id="job1")
+
+    def boom(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(generate_service, "_run_job_inner", boom)
+    generate_service._run_job(ctx, "job1", {})
+
+    snap = ctx.state.generation.snapshot()
+    assert snap["state"] == "error"
+    assert "disk full" in snap["error"]
+    assert snap["finished_at"] > 0
+
+
+def test_run_resets_stale_fields_from_previous_job(tmp_path, monkeypatch):
+    """Keys added dynamically by a previous job (warnings, stderr_tail,
+    stdout_excerpt) must not leak into the next job's status payload."""
+    ctx = _ctx(tmp_path)
+    ctx.state.generation.update(
+        state="done",
+        warnings=["old warning"],
+        stderr_tail="old stderr",
+        stdout_tail="old stdout",
+        stdout_excerpt="old metadata",
+    )
+
+    # Don't actually spawn sd-cli — capture the reset state instead.
+    class _FakeThread:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(generate_service.threading, "Thread", _FakeThread)
+
+    result = generate_service.run(
+        ctx,
+        {
+            "mode": "img_gen",
+            "args": [["-m", "m.gguf"], ["--prompt", "cat"]],
+            "seed": 7,
+            "total_steps": 4,
+        },
+    )
+    assert "job_id" in result
+
+    snap = ctx.state.generation.snapshot()
+    assert snap["state"] == "running"
+    assert snap["seed"] == 7
+    for stale_key in ("warnings", "stderr_tail", "stdout_tail", "stdout_excerpt"):
+        assert stale_key not in snap
