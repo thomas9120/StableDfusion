@@ -90,3 +90,79 @@ def test_build_argv_rejects_missing_startup_model():
         assert "model" in str(exc)
     else:
         raise AssertionError("missing model was accepted")
+
+
+# ── startup readiness (port probe promotes "starting" → "running") ────────
+
+
+def _ctx():
+    from backend.context import AppContext
+
+    return AppContext()
+
+
+class _FakeAliveProc:
+    pid = 4242
+    returncode = None
+
+    def poll(self):
+        return None
+
+
+def test_probe_listening_true_for_listening_socket():
+    import socket as _socket
+
+    server = _socket.socket()
+    try:
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        port = server.getsockname()[1]
+        assert server_mode_service._probe_listening("127.0.0.1", port, timeout=1.0) is True
+    finally:
+        server.close()
+
+
+def test_probe_listening_false_for_closed_port():
+    import socket as _socket
+
+    # Bind then close to get a port that is (very likely) not listening.
+    probe = _socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+    assert server_mode_service._probe_listening("127.0.0.1", port, timeout=0.5) is False
+
+
+def test_monitor_promotes_starting_to_running_when_port_opens(monkeypatch):
+    ctx = _ctx()
+    proc = _FakeAliveProc()
+    ctx.state.sd_server_process = proc
+    ctx.state.sd_server.update(status="starting", pid=None, message="starting")
+
+    monkeypatch.setattr(server_mode_service, "_probe_listening", lambda *a, **kw: True)
+
+    observed = []
+
+    def fake_sleep(_seconds):
+        observed.append(ctx.state.sd_server.snapshot().get("status"))
+        # End the monitor loop once the promotion has been observed.
+        if "running" in observed:
+            proc.poll = lambda: 0
+            proc.returncode = 0
+
+    monkeypatch.setattr(server_mode_service.time, "sleep", fake_sleep)
+    server_mode_service._monitor(ctx, proc, "127.0.0.1", 1234)
+
+    assert "running" in observed
+    # Process "exited" with rc 0 at the end of the test → final state is idle.
+    assert ctx.state.sd_server.snapshot().get("status") == "idle"
+
+
+def test_proxy_503s_with_starting_message_while_loading():
+    ctx = _ctx()
+    ctx.state.sd_server_process = _FakeAliveProc()
+    ctx.state.sd_server.update(status="starting", pid=4242)
+
+    code, headers, payload = server_mode_service.proxy(ctx, "GET", "/v1/models", "", {}, b"")
+    assert code == 503
+    assert b"still starting" in payload

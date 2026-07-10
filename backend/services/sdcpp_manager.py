@@ -370,7 +370,8 @@ def get_releases(ctx: AppContext, force: bool = False) -> list[dict[str, Any]]:
     with _RELEASES_CACHE_LOCK:
         if not force and _RELEASES_CACHE["data"] is not None:
             if now - _RELEASES_CACHE["fetched_at"] < _RELEASES_CACHE_TTL:
-                return _RELEASES_CACHE["data"]
+                # Copy so callers can't mutate the shared cache entry.
+                return list(_RELEASES_CACHE["data"])
 
     req = urllib.request.Request(
         ctx.config.github_api,
@@ -381,7 +382,7 @@ def get_releases(ctx: AppContext, force: bool = False) -> list[dict[str, Any]]:
     with _RELEASES_CACHE_LOCK:
         _RELEASES_CACHE["data"] = data
         _RELEASES_CACHE["fetched_at"] = now
-    return data
+    return list(data)
 
 
 def get_release_by_tag(ctx: AppContext, tag: str) -> dict[str, Any]:
@@ -517,7 +518,23 @@ def parse_otool_rpath_libraries(output: str) -> list[str]:
     return libraries
 
 
+# otool -L output only changes when the binary changes, but the status route
+# polls validate_runtime_dependencies frequently — cache per (path, mtime) so
+# we don't spawn two subprocesses per status poll on macOS.
+_RPATH_CACHE: dict[str, tuple[float, list[str]]] = {}
+_RPATH_CACHE_LOCK = threading.Lock()
+
+
 def get_macos_rpath_libraries(executable: pathlib.Path) -> list[str]:
+    key = str(executable)
+    try:
+        mtime = executable.stat().st_mtime
+    except OSError:
+        mtime = -1.0
+    with _RPATH_CACHE_LOCK:
+        cached = _RPATH_CACHE.get(key)
+        if cached is not None and cached[0] == mtime:
+            return list(cached[1])
     result = subprocess.run(
         ["otool", "-L", str(executable)],
         check=True,
@@ -525,7 +542,10 @@ def get_macos_rpath_libraries(executable: pathlib.Path) -> list[str]:
         text=True,
         timeout=10,
     )
-    return parse_otool_rpath_libraries(result.stdout)
+    libraries = parse_otool_rpath_libraries(result.stdout)
+    with _RPATH_CACHE_LOCK:
+        _RPATH_CACHE[key] = (mtime, libraries)
+    return list(libraries)
 
 
 def validate_runtime_dependencies(
@@ -713,7 +733,7 @@ def _latest_release_tag(releases: list[dict[str, Any]]) -> str | None:
     for r in releases or []:
         if not r.get("prerelease"):
             return r.get("tag_name")
-    return releases[0]["tag_name"] if releases else None
+    return releases[0].get("tag_name") if releases else None
 
 
 def update_runtime(

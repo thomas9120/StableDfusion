@@ -141,18 +141,44 @@ def _strip_owned_pairs(pairs: list[Any], owned_flags: tuple[str, ...]) -> list[A
     Operates on the structured [flag, value] pair form so a user-supplied value
     that happens to equal a flag name (e.g. a prompt that starts with ``-o``)
     is never mistaken for a flag.
+
+    Custom launch args arrive as *single-token* pairs (``["-o"], ["evil.png"]``),
+    so when a stripped owned flag is a single, its value is the *next* single —
+    drop that too, otherwise an orphaned positional token reaches sd-cli.
     """
     flagset = set(owned_flags)
     out: list[Any] = []
+    skip_next_single = False
     for pair in pairs or []:
+        is_single = isinstance(pair, (list, tuple)) and len(pair) == 1
+        if skip_next_single:
+            skip_next_single = False
+            if is_single:
+                continue
         if not isinstance(pair, (list, tuple)) or not pair:
             out.append(pair)
             continue
         flag = str(pair[0])
         if flag in flagset:
+            skip_next_single = is_single
             continue
         out.append(pair)
     return out
+
+
+def _has_flag(pairs: list[Any], flag: str) -> bool:
+    """True if ``flag`` appears in a flag position (pair[0] / bare token).
+
+    Values inside multi-element pairs are never flag positions, so a prompt
+    that happens to equal ``--preview`` can't suppress backend injection.
+    """
+    for entry in pairs or []:
+        if isinstance(entry, (list, tuple)):
+            if entry and str(entry[0]) == flag:
+                return True
+        elif str(entry) == flag:
+            return True
+    return False
 
 
 def _strip_value_flags(tokens: list[str], flags: tuple[str, ...]) -> list[str]:
@@ -233,7 +259,7 @@ def build_argv(
     ]
 
     # Ensure a preview method is set so the preview callback writes the file.
-    if "--preview" not in cleaned:
+    if not _has_flag(stripped, "--preview"):
         method = preview_method or "vae"
         argv += ["--preview", method]
     return argv

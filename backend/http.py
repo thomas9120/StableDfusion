@@ -64,6 +64,36 @@ def _host_origin(host: str, port: int) -> str:
     return f"http://{host}:{port}"
 
 
+def is_trusted_request_host(host_header, gui_host, allowed_hosts=(), tunnel_host="") -> bool:
+    """DNS-rebinding guard: the request's ``Host`` must name this server.
+
+    A rebinding page is same-origin from the browser's view, so it sends no
+    ``Origin`` header — but its ``Host`` is the attacker's domain, which is the
+    signal we reject here. Wildcard binds keep the existing trust-the-Host
+    behavior (explicit LAN-exposure mode). A missing Host means a non-browser
+    client, which is not a rebinding vector, so it is allowed.
+    """
+    if gui_host in WILDCARD_BIND_HOSTS:
+        return True
+    raw = (host_header or "").strip()
+    if not raw:
+        return True
+    try:
+        # urlsplit lowercases the hostname and strips any port / IPv6 brackets.
+        hostname = urllib.parse.urlsplit(f"//{raw}").hostname or ""
+    except ValueError:
+        return False
+    if not hostname:
+        return False
+    if _loopback_host(hostname):
+        return True
+    if hostname == (gui_host or "").strip().lower():
+        return True
+    if hostname in {str(h).lower() for h in allowed_hosts or ()}:
+        return True
+    return bool(tunnel_host) and hostname == str(tunnel_host).lower()
+
+
 def get_allowed_request_origins(
     tunnel_url,
     gui_host,

@@ -4,6 +4,7 @@ import http.client
 import re
 import shlex
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -213,8 +214,38 @@ def _stream_log(ctx: AppContext, pipe) -> None:
         pass
 
 
+def _connect_host(host: str) -> str:
+    # Wildcard listen hosts are unreachable as connect targets on many
+    # platforms; probe/proxy via loopback instead.
+    return "127.0.0.1" if host in {"0.0.0.0", "::", ""} else host
+
+
+def _probe_listening(host: str, port: int, timeout: float = 1.0) -> bool:
+    try:
+        with socket.create_connection((_connect_host(host), port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
 def _monitor(ctx: AppContext, proc, host: str, port: int) -> None:
+    # While the process is alive but still "starting" (binaries loading the
+    # model can take minutes), probe the listen port and only then promote the
+    # status to "running" — so the UI and the /v1 proxy never claim a server
+    # that isn't accepting connections yet.
     while proc.poll() is None:
+        snap = ctx.state.sd_server.snapshot()
+        if snap.get("status") == "starting" and _probe_listening(host, port):
+            with ctx.state.sd_server_lock:
+                if (
+                    ctx.state.sd_server_process is proc
+                    and ctx.state.sd_server.snapshot().get("status") == "starting"
+                ):
+                    ctx.state.sd_server.update(
+                        status="running",
+                        pid=proc.pid,
+                        message=f"sd-server running at {_target_url(host, port)}",
+                    )
         time.sleep(_POLL_INTERVAL)
     with ctx.state.sd_server_lock:
         if ctx.state.sd_server_process is proc:
@@ -313,10 +344,12 @@ def start(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
             daemon=True,
             name=f"sd-server-{proc.pid}",
         ).start()
+        # Stay in "starting" — the monitor thread promotes to "running" once
+        # the listen port actually accepts connections (model load can take
+        # minutes, and the proxy 503s anything that isn't "running").
         return ctx.state.sd_server.update(
-            status="running",
             pid=proc.pid,
-            message=f"sd-server running at {prepared['target_url']}",
+            message="sd-server starting (loading model)...",
         )
 
 
@@ -352,7 +385,10 @@ def status(ctx: AppContext) -> dict[str, Any]:
     proc = ctx.state.sd_server_process
     if proc is not None and proc.poll() is None:
         if snap.get("status") not in {"running", "starting"}:
-            snap = ctx.state.sd_server.update(status="running", pid=proc.pid)
+            # Drift recovery: process alive but state says otherwise. Promote
+            # to "starting" — the monitor thread's port probe confirms
+            # "running" so we never report a server that isn't listening.
+            snap = ctx.state.sd_server.update(status="starting", pid=proc.pid)
     elif snap.get("status") in {"running", "starting", "stopping"}:
         snap = ctx.state.sd_server.update(
             status="idle", pid=None, message="sd-server is not running."
@@ -369,6 +405,12 @@ def proxy(
     body: bytes,
 ) -> tuple[int, dict[str, str], bytes]:
     snap = status(ctx)
+    if snap.get("status") == "starting":
+        return (
+            503,
+            {"Content-Type": "application/json; charset=utf-8"},
+            b'{"error":"sd-server is still starting (loading model). Try again shortly."}',
+        )
     if snap.get("status") != "running":
         return (
             503,
@@ -377,9 +419,7 @@ def proxy(
         )
     host = str(snap.get("host") or config.SD_SERVER_HOST)
     port = int(snap.get("port") or config.SD_SERVER_PORT)
-    # Normalize wildcard listen hosts to loopback for the outbound proxy
-    # connection (connecting to 0.0.0.0/:: is unreliable on many platforms).
-    connect_host = "127.0.0.1" if host in {"0.0.0.0", "::", ""} else host
+    connect_host = _connect_host(host)
     target_path = path + (f"?{query}" if query else "")
     conn = http.client.HTTPConnection(connect_host, port, timeout=config.SD_SERVER_PROXY_TIMEOUT)
     forward_headers = {
