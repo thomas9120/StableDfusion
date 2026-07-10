@@ -184,13 +184,14 @@ def _download_one(
     filename: str,
     dest: Path,
     token: str | None,
+    revision: str = "main",
 ) -> None:
     """Stream one file from HF to ``dest`` with progress + cancel polling."""
     from huggingface_hub import hf_hub_url
 
     # huggingface_hub >= 1.x: hf_hub_url does NOT accept ``token`` — token auth
     # is added as a Bearer header on the request below.
-    url = hf_hub_url(repo_id=repo_id, filename=filename)
+    url = hf_hub_url(repo_id=repo_id, filename=filename, revision=revision or "main")
     req = urllib.request.Request(
         url,
         headers={
@@ -337,7 +338,7 @@ def _run_downloads(
             )
 
             try:
-                _download_one(ctx, repo_id, filename, dest, token)
+                _download_one(ctx, repo_id, filename, dest, token, revision)
             except _DownloadCanceled:
                 ctx.state.model_download.update(
                     status="canceled",
