@@ -57,12 +57,29 @@ def is_safe_request_origin(headers, allowed_origins) -> bool:
     return _loopback_host(parsed.hostname or "")
 
 
+def _host_origin(host: str, port: int) -> str:
+    # IPv6 hosts need brackets inside an origin (http://[::1]:5250).
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    return f"http://{host}:{port}"
+
+
 def get_allowed_request_origins(
-    tunnel_url, gui_host, gui_port, request_host="", allow_request_host_origin=False
+    tunnel_url,
+    gui_host,
+    gui_port,
+    request_host="",
+    allow_request_host_origin=False,
+    extra_hosts=(),
 ):
+    """``extra_hosts`` are bare hostnames/IPs (SD_GUI_ALLOWED_HOSTS) allowed to
+    reach the GUI, e.g. a LAN address; each is admitted as an http origin on
+    the GUI port."""
     origins: set[str] = set()
     for host in (gui_host, "127.0.0.1", "localhost"):
-        origins.add(f"http://{host}:{gui_port}")
+        origins.add(_host_origin(host, gui_port))
+    for host in extra_hosts or ():
+        origins.add(_host_origin(host, gui_port))
     if tunnel_url:
         try:
             origins.add(tunnel_url.rstrip("/"))

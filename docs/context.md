@@ -53,7 +53,8 @@ Both binaries live in `sdcpp/bin/`. `process_manager._build_process_env()` prepe
 |---|---|---|
 | `SD_GUI_HOST` | `127.0.0.1` | GUI bind host (`0.0.0.0` / `*` for LAN; `*` trusts the request `Host` header origin) |
 | `SD_GUI_PORT` | `5250` | GUI port (distinct from LLama-GUI's 5240 so both run together) |
-| `SD_GUI_ALLOWED_HOSTS` | — | Comma-separated extra allowed origins (LAN/tunnel) |
+| `SD_GUI_ALLOWED_HOSTS` | — | Comma-separated extra allowed hosts (LAN IPs / hostnames), admitted as `http://<host>:<port>` origins |
+| `SD_GUI_PROXY_TIMEOUT` | `1800` | Timeout (seconds) per proxied `/v1` / `/sdapi` / `/sdcpp` request to sd-server |
 
 `sd-server` internal defaults: host `127.0.0.1`, port `1234` (overridable from the Server tab).
 

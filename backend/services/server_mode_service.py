@@ -381,7 +381,7 @@ def proxy(
     # connection (connecting to 0.0.0.0/:: is unreliable on many platforms).
     connect_host = "127.0.0.1" if host in {"0.0.0.0", "::", ""} else host
     target_path = path + (f"?{query}" if query else "")
-    conn = http.client.HTTPConnection(connect_host, port, timeout=120)
+    conn = http.client.HTTPConnection(connect_host, port, timeout=config.SD_SERVER_PROXY_TIMEOUT)
     forward_headers = {
         key: value
         for key, value in headers.items()

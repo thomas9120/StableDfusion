@@ -92,7 +92,8 @@ python server.py  →  backend/app.py  (stdlib ThreadingHTTPServer)
 |---|---|---|
 | `SD_GUI_HOST` | `127.0.0.1` | Bind host (`0.0.0.0` or `*` for LAN access) |
 | `SD_GUI_PORT` | `5250` | GUI port (distinct from LLama-GUI's 5240) |
-| `SD_GUI_ALLOWED_HOSTS` | — | Comma-separated extra allowed origins (LAN / tunnel) |
+| `SD_GUI_ALLOWED_HOSTS` | — | Comma-separated extra allowed hosts (LAN IPs / hostnames), admitted as `http://<host>:<port>` origins |
+| `SD_GUI_PROXY_TIMEOUT` | `1800` | Timeout (seconds) per proxied `/v1` / `/sdapi` / `/sdcpp` request to sd-server |
 
 Runtime layout (auto-created on boot): `models/`, `output/` (+ `.preview/`, `.gallery/`),
 `presets/`, `sdcpp/bin/`, `tools/cloudflared/`.
