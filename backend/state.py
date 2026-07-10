@@ -42,7 +42,7 @@ def default_remote_tunnel_state() -> dict[str, Any]:
 
 
 def default_generation_state() -> dict[str, Any]:
-    # One sd-cli run. state in: idle | queued | running | done | error | canceled
+    # One sd-cli run. state in: idle | running | done | error | canceled
     return {
         "state": "idle",
         "job_id": "",

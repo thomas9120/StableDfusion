@@ -468,3 +468,46 @@ def test_run_resets_stale_fields_from_previous_job(tmp_path, monkeypatch):
     assert snap["seed"] == 7
     for stale_key in ("warnings", "stderr_tail", "stdout_tail", "stdout_excerpt"):
         assert stale_key not in snap
+
+
+def test_build_argv_strips_orphaned_custom_arg_values():
+    """Custom launch args arrive as single-token pairs; stripping an owned flag
+    must also drop its following value token (no stray positional arg)."""
+    argv = generate_service.build_argv(
+        [["--prompt", "cat"], ["-o"], ["evil.png"], ["--vae-tiling"]],
+        "img_gen",
+        Path("out/real.png"),
+        Path("out/.preview/real.png"),
+    )
+    assert "evil.png" not in argv
+    assert "--vae-tiling" in argv
+    assert argv.count("-o") == 1
+    assert argv[argv.index("-o") + 1] == str(Path("out/real.png"))
+
+
+def test_build_argv_preview_value_in_prompt_does_not_suppress_injection():
+    """A prompt equal to "--preview" is a value, not a flag — the backend must
+    still inject its own --preview method."""
+    argv = generate_service.build_argv(
+        [["--prompt", "--preview"]],
+        "img_gen",
+        Path("out/x.png"),
+        Path("out/.preview/x.png"),
+        preview_method="tae",
+    )
+    # One occurrence as the prompt value, one injected as a flag with "tae".
+    assert argv.count("--preview") == 2
+    assert argv[argv.index("--prompt") + 1] == "--preview"
+    assert "tae" in argv
+
+
+def test_build_argv_custom_arg_preview_still_detected():
+    """--preview supplied as single custom-arg tokens must not be duplicated."""
+    argv = generate_service.build_argv(
+        [["--preview"], ["proj"]],
+        "img_gen",
+        Path("out/x.png"),
+        Path("out/.preview/x.png"),
+    )
+    assert argv.count("--preview") == 1
+    assert argv[argv.index("--preview") + 1] == "proj"

@@ -99,7 +99,7 @@ SD_SERVER_PROXY_TIMEOUT = parse_proxy_timeout(os.environ.get("SD_GUI_PROXY_TIMEO
 # (tags like master-709-92a3b73); asset names embed the commit short-hash, so
 # assets are matched by suffix pattern in services/sdcpp_manager.py.
 GITHUB_API = "https://api.github.com/repos/leejet/stable-diffusion.cpp/releases"
-APP_REPO_URL = "https://github.com/thomas9120/stable-d-gui.git"  # TODO: set real repo
+APP_REPO_URL = "https://github.com/thomas9120/StableDfusion.git"
 
 PROCESS_OUTPUT_LIMIT = 5000
 PROCESS_OUTPUT_TRIM = 1000

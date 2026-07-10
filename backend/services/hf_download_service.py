@@ -25,7 +25,13 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from huggingface_hub import HfApi  # imported at module level so tests can monkeypatch
+# Module-level attribute so tests can monkeypatch, but a missing/broken
+# huggingface_hub must not prevent the whole GUI from booting (this module is
+# imported transitively by backend.app) — HF features degrade to a clear error.
+try:
+    from huggingface_hub import HfApi
+except Exception:  # pragma: no cover - exercised only on broken installs
+    HfApi = None
 
 from ..context import AppContext
 from . import model_storage_service
@@ -102,6 +108,11 @@ def get_repo_files(
     ``HfApi.repo_info(files_metadata=True)`` call to populate sizes. Both are
     cached briefly by the library; we do not add our own cache here.
     """
+    if HfApi is None:
+        raise RepoListingError(
+            "huggingface_hub is not installed. Run the installer (or "
+            "`pip install -r requirements.txt`) to enable HF downloads."
+        )
     api = HfApi(token=token)
     try:
         names = api.list_repo_files(repo_id, revision=revision or "main", token=token)

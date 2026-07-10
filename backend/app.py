@@ -30,6 +30,7 @@ from .http import (
     get_cors_methods,
     is_safe_request_origin,
     is_static_ui_path,
+    is_trusted_request_host,
     is_v1_proxy_path,
 )
 from .routes import file_picker as file_picker_routes
@@ -73,6 +74,16 @@ CURRENT_PLATFORM = sys.platform
 BINARY_SUFFIX = ".exe" if CURRENT_PLATFORM == "win32" else ""
 
 SDCPP_TOOLS = ["sd-cli", "sd-server"]
+
+# /api JSON bodies are small control payloads; proxied sd-server requests
+# (/v1 /sdapi /sdcpp) carry base64-encoded images (img2img/inpaint) and need a
+# much larger allowance.
+API_BODY_LIMIT = 10 * 1024 * 1024
+PROXY_BODY_LIMIT = 200 * 1024 * 1024
+
+# Sentinel returned by read_body() for oversized payloads so callers can
+# answer 413 instead of a misleading 400 "malformed JSON".
+_BODY_TOO_LARGE = object()
 
 _PARTIAL_RE = re.compile(r"<!--\s*@partial\s+([\w-]+)\s*-->")
 
@@ -125,8 +136,9 @@ def find_tool_executable(ctx, tool: str):
 
 
 def is_process_running() -> bool:
-    proc = STATE.process
-    return proc is not None and proc.poll() is None
+    from .services import process_manager
+
+    return process_manager.is_process_running(APP_CONTEXT)
 
 
 def load_config() -> dict:
@@ -187,20 +199,40 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", self.get_access_control_origin())
         super().end_headers()
 
-    def get_allowed_request_origins(self):
-        tunnel_url = None
+    def _tunnel_url(self):
         try:
-            tunnel_url = STATE.remote_tunnel.snapshot().get("url") or None
+            return STATE.remote_tunnel.snapshot().get("url") or None
         except Exception:
-            tunnel_url = None
+            return None
+
+    def get_allowed_request_origins(self):
         return get_allowed_request_origins(
-            tunnel_url,
+            self._tunnel_url(),
             config.GUI_HOST,
             config.GUI_PORT,
             request_host=self.headers.get("Host", ""),
             allow_request_host_origin=config.GUI_HOST in WILDCARD_BIND_HOSTS,
             extra_hosts=config.GUI_ALLOWED_HOSTS,
         )
+
+    def is_request_allowed(self):
+        """Origin allow-list + Host validation (DNS-rebinding guard) for /api
+        and proxied sd-server paths."""
+        tunnel_host = ""
+        tunnel_url = self._tunnel_url()
+        if tunnel_url:
+            try:
+                tunnel_host = urllib.parse.urlsplit(tunnel_url).hostname or ""
+            except ValueError:
+                tunnel_host = ""
+        if not is_trusted_request_host(
+            self.headers.get("Host", ""),
+            config.GUI_HOST,
+            allowed_hosts=config.GUI_ALLOWED_HOSTS,
+            tunnel_host=tunnel_host,
+        ):
+            return False
+        return is_safe_request_origin(self.headers, self.get_allowed_request_origins())
 
     def get_access_control_origin(self):
         return get_access_control_origin(self.headers, self.get_allowed_request_origins())
@@ -214,6 +246,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
     def read_body(self):
+        """Parse a JSON /api body. Returns the parsed value, ``{}`` for empty,
+        ``_BODY_TOO_LARGE`` when over the limit, or ``None`` when malformed."""
         try:
             length = int(self.headers.get("Content-Length", 0))
         except (TypeError, ValueError):
@@ -222,14 +256,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return None
         if length == 0:
             return {}
-        if length > 10 * 1024 * 1024:
-            return None
+        if length > API_BODY_LIMIT:
+            return _BODY_TOO_LARGE
         try:
             return json.loads(self.rfile.read(length))
         except (json.JSONDecodeError, UnicodeDecodeError):
             return None
 
-    def read_raw_body(self):
+    def read_raw_body(self, limit=PROXY_BODY_LIMIT):
         try:
             length = int(self.headers.get("Content-Length", 0))
         except (TypeError, ValueError):
@@ -238,7 +272,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return None
         if length == 0:
             return b""
-        if length > 10 * 1024 * 1024:
+        if length > limit:
             return None
         return self.rfile.read(length)
 
@@ -291,7 +325,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         if is_v1_proxy_path(parsed.path):
-            if not is_safe_request_origin(self.headers, self.get_allowed_request_origins()):
+            if not self.is_request_allowed():
                 self.send_error(403)
                 return
             self.proxy_to_sd_server("GET", parsed)
@@ -304,7 +338,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_error(404, "index.html not found")
             return
         if parsed.path.startswith("/api/"):
-            if not is_safe_request_origin(self.headers, self.get_allowed_request_origins()):
+            if not self.is_request_allowed():
                 self.send_error(403)
                 return
             self.dispatch("GET", parsed)
@@ -314,7 +348,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         if is_v1_proxy_path(parsed.path):
-            if not is_safe_request_origin(self.headers, self.get_allowed_request_origins()):
+            if not self.is_request_allowed():
                 self.send_error(403)
                 return
             body = self.read_raw_body()
@@ -323,10 +357,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return
             self.proxy_to_sd_server("POST", parsed, body)
             return
-        if not is_safe_request_origin(self.headers, self.get_allowed_request_origins()):
+        if not self.is_request_allowed():
             self.send_error(403)
             return
         body = self.read_body()
+        if body is _BODY_TOO_LARGE:
+            self.send_error(413, "Request body too large")
+            return
         if body is None:
             self.send_error(400, "Invalid or malformed JSON body")
             return
@@ -334,7 +371,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_DELETE(self):
         parsed = urllib.parse.urlparse(self.path)
-        if not is_safe_request_origin(self.headers, self.get_allowed_request_origins()):
+        if not self.is_request_allowed():
             self.send_error(403)
             return
         if is_v1_proxy_path(parsed.path):
@@ -345,6 +382,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.proxy_to_sd_server("DELETE", parsed, body)
             return
         body = self.read_body()
+        if body is _BODY_TOO_LARGE:
+            self.send_error(413, "Request body too large")
+            return
         if body is None:
             self.send_error(400, "Invalid or malformed JSON body")
             return
@@ -355,7 +395,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not is_v1_proxy_path(parsed.path):
             self.send_error(404)
             return
-        if not is_safe_request_origin(self.headers, self.get_allowed_request_origins()):
+        if not self.is_request_allowed():
             self.send_error(403)
             return
         body = self.read_raw_body()
@@ -369,7 +409,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not is_v1_proxy_path(parsed.path):
             self.send_error(404)
             return
-        if not is_safe_request_origin(self.headers, self.get_allowed_request_origins()):
+        if not self.is_request_allowed():
             self.send_error(403)
             return
         body = self.read_raw_body()
