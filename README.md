@@ -6,6 +6,9 @@ bundler — just a Python stdlib HTTP server and vanilla JS.
 
 Video generation is still a work in progress, so you may encounter some errors.
 
+Looking for which diffusion model, VAE, and text-encoder files to download? See
+[Model weights](#model-weights).
+
 ## What it is
 
 A two-mode launcher for stable-diffusion.cpp:
@@ -109,6 +112,40 @@ install.sh / start.sh   (and -windows.bat variants)
 ```
 
 For the complete as-built reference, see [`docs/directory.md`](docs/directory.md).
+
+## Model weights
+
+Each model needs up to three files: a **diffusion model**, a **VAE**, and a **text
+encoder**. Diffusion models and text encoders are **GGUF**; the VAE is **safetensors**.
+Files download via the **HF Download** tab (or manually into `models/{diffusion,vae,
+text-encoders}/`), where they're auto-routed by purpose.
+
+Links are verified against the official `leejet/stable-diffusion.cpp` model docs.
+
+| Model | Diffusion (GGUF) | VAE (safetensors) | Text encoder (GGUF) |
+|---|---|---|---|
+| **Z-Image Turbo** | [leejet/Z-Image-Turbo-GGUF](https://huggingface.co/leejet/Z-Image-Turbo-GGUF) | `ae.safetensors` — [black-forest-labs/FLUX.1-schnell](https://huggingface.co/black-forest-labs/FLUX.1-schnell) | Qwen3-4B-Instruct-**2507** — [unsloth/Qwen3-4B-Instruct-2507-GGUF](https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF) |
+| **Z-Image Base** | [unsloth/Z-Image-GGUF](https://huggingface.co/unsloth/Z-Image-GGUF) | `ae.safetensors` — [black-forest-labs/FLUX.1-schnell](https://huggingface.co/black-forest-labs/FLUX.1-schnell) | Qwen3-4B-Instruct-**2507** — [unsloth/Qwen3-4B-Instruct-2507-GGUF](https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF) |
+| **Qwen Image Edit** | [QuantStack/Qwen-Image-Edit-GGUF](https://huggingface.co/QuantStack/Qwen-Image-Edit-GGUF) | `qwen_image_vae.safetensors` — [Comfy-Org/Qwen-Image_ComfyUI](https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/tree/main/split_files/vae) | Qwen2.5-VL-7B-Instruct — [mradermacher/Qwen2.5-VL-7B-Instruct-GGUF](https://huggingface.co/mradermacher/Qwen2.5-VL-7B-Instruct-GGUF) |
+| **FLUX.2 Klein 4B** | [leejet/FLUX.2-klein-4B-GGUF](https://huggingface.co/leejet/FLUX.2-klein-4B-GGUF) | `flux2_ae.safetensors` — [black-forest-labs/FLUX.2-dev](https://huggingface.co/black-forest-labs/FLUX.2-dev) | Qwen3-4B — [unsloth/Qwen3-4B-GGUF](https://huggingface.co/unsloth/Qwen3-4B-GGUF) |
+| **FLUX.2 Klein 9B** | [leejet/FLUX.2-klein-9B-GGUF](https://huggingface.co/leejet/FLUX.2-klein-9B-GGUF) | `flux2_ae.safetensors` — [black-forest-labs/FLUX.2-dev](https://huggingface.co/black-forest-labs/FLUX.2-dev) | Qwen3-8B — [unsloth/Qwen3-8B-GGUF](https://huggingface.co/unsloth/Qwen3-8B-GGUF) |
+
+### Variants & notes
+
+- **Qwen Image Edit variants** — three diffusion checkpoints exist, all sharing the
+  same VAE and text encoder above:
+  - 2509: [QuantStack/Qwen-Image-Edit-2509-GGUF](https://huggingface.co/QuantStack/Qwen-Image-Edit-2509-GGUF) — also wants the Qwen2.5-VL mmproj file (`Qwen2.5-VL-7B-Instruct.mmproj-Q8_0.gguf`, same mradermacher repo) as `--llm-vision`.
+  - 2511: [unsloth/Qwen-Image-Edit-2511-GGUF](https://huggingface.co/unsloth/Qwen-Image-Edit-2511-GGUF) — requires `--model-args qwen_image_zero_cond_t=true` (the `qwen_image_edit` bundle sets this by default).
+- **FLUX.2 Klein "base" variants** — each Klein model has a non-distilled **base**
+  sibling (cfg 4.0, ~20 steps instead of cfg 1.0, 4 steps), same VAE and text
+  encoder: [FLUX.2-klein-base-4B-GGUF](https://huggingface.co/leejet/FLUX.2-klein-base-4B-GGUF),
+  [FLUX.2-klein-base-9B-GGUF](https://huggingface.co/leejet/FLUX.2-klein-base-9B-GGUF).
+  An alternative lighter VAE is [black-forest-labs/FLUX.2-small-decoder](https://huggingface.co/black-forest-labs/FLUX.2-small-decoder)
+  (`full_encoder_small_decoder.safetensors`).
+- **Don't mix the Qwen3-4B encoders** — Z-Image uses `Qwen3-4B-Instruct-2507`,
+  while FLUX.2 Klein 4B uses the original `Qwen3-4B`. They are not interchangeable.
+- **Don't mix the FLUX VAEs** — Z-Image uses FLUX.1's `ae.safetensors`; FLUX.2 Klein
+  uses FLUX.2's `flux2_ae.safetensors`.
 
 ## License
 
