@@ -191,7 +191,6 @@ window.SDGui.MODEL_TYPE_BUNDLES = [
 				required: false,
 			},
 			{ key: "llm", purpose: "llm", label: "MiniMax Qwen3-VL", required: true },
-			{ key: "llm_vision", purpose: "llm_vision", required: false },
 		],
 		defaults: {
 			mode: "vid_gen",
