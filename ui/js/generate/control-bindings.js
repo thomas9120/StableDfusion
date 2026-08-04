@@ -1,5 +1,5 @@
 // Control binding registry (Generate tab): binds DOM controls (text,
-// number, enum, bool, slider+number compounds, path/file selects) to
+// number, enum, bool, repeatable paths, slider+number compounds, path/file selects) to
 // flagCore state and keeps them in sync. Owns the `controls` and
 // `controlMirrors` registries so model-field pickers, mode inputs, and
 // LoRA controls (Stage 4+) all register into one place.
@@ -45,6 +45,27 @@ window.SDGui.generateControls = (() => {
 		if (node)
 			node.addEventListener("input", () => {
 				flagCore.setFlagValue(flagId, node.value);
+			});
+	}
+
+	function bindPaths(id, flagId) {
+		var existing = controls[flagId];
+		if (existing && existing.kind === "paths" && existing.id !== id) {
+			if (!controlMirrors[flagId]) controlMirrors[flagId] = [];
+			if (!controlMirrors[flagId].includes(id)) controlMirrors[flagId].push(id);
+		} else {
+			controls[flagId] = { id: id, kind: "paths" };
+		}
+		var node = $(id);
+		if (node)
+			node.addEventListener("input", () => {
+				flagCore.setFlagValue(
+					flagId,
+					node.value
+						.split(/\r?\n/)
+						.map((path) => path.trim())
+						.filter(Boolean),
+				);
 			});
 	}
 
@@ -172,6 +193,8 @@ window.SDGui.generateControls = (() => {
 			// Don't clobber the control the user is currently editing.
 			if (document.activeElement === node) return;
 			if (entry.kind === "bool") node.checked = v === true;
+			else if (entry.kind === "paths")
+				node.value = (Array.isArray(v) ? v : [v]).filter(Boolean).join("\n");
 			else node.value = String(v);
 		};
 		applyToNode($(entry.id));
@@ -210,6 +233,7 @@ window.SDGui.generateControls = (() => {
 		controls: controls,
 		controlMirrors: controlMirrors,
 		bindText: bindText,
+		bindPaths: bindPaths,
 		bindNumber: bindNumber,
 		bindEnum: bindEnum,
 		bindPathSelect: bindPathSelect,

@@ -291,28 +291,72 @@ def build_backend_specs(current_platform: str, current_arch: str) -> dict[str, d
     asset — used for the CUDA runtime zip.
     """
     if current_platform == "win32" and current_arch == "x64":
-        # avx2 first = recommended default CPU choice.
+        # One dynamic CPU backend replaced the per-AVX release artifacts.
         return {
+            "cpu": {
+                "label": "CPU — recommended",
+                "asset_pattern": "*-bin-win-cpu-x64.zip",
+            },
             "cpu-avx2": {
                 "label": "CPU (AVX2) — recommended",
                 "asset_pattern": "*-bin-win-avx2-x64.zip",
+                "asset_patterns": [
+                    "*-bin-win-cpu-x64.zip",
+                    "*-bin-win-avx2-x64.zip",
+                ],
+                "hidden": True,
             },
-            "cpu-avx": {"label": "CPU (AVX)", "asset_pattern": "*-bin-win-avx-x64.zip"},
-            "cpu-avx512": {"label": "CPU (AVX512)", "asset_pattern": "*-bin-win-avx512-x64.zip"},
-            "cpu-noavx": {"label": "CPU (no AVX)", "asset_pattern": "*-bin-win-noavx-x64.zip"},
+            "cpu-avx": {
+                "label": "CPU (AVX)",
+                "asset_pattern": "*-bin-win-avx-x64.zip",
+                "asset_patterns": ["*-bin-win-cpu-x64.zip", "*-bin-win-avx-x64.zip"],
+                "hidden": True,
+            },
+            "cpu-avx512": {
+                "label": "CPU (AVX512)",
+                "asset_pattern": "*-bin-win-avx512-x64.zip",
+                "asset_patterns": [
+                    "*-bin-win-cpu-x64.zip",
+                    "*-bin-win-avx512-x64.zip",
+                ],
+                "hidden": True,
+            },
+            "cpu-noavx": {
+                "label": "CPU (no AVX)",
+                "asset_pattern": "*-bin-win-noavx-x64.zip",
+                "asset_patterns": [
+                    "*-bin-win-cpu-x64.zip",
+                    "*-bin-win-noavx-x64.zip",
+                ],
+                "hidden": True,
+            },
             "cuda12": {
                 "label": "CUDA 12 (NVIDIA)",
                 "asset_pattern": "*-bin-win-cuda12-x64.zip",
                 "companion": "cudart-sd-bin-win-cu12-x64.zip",
             },
             "vulkan": {"label": "Vulkan", "asset_pattern": "*-bin-win-vulkan-x64.zip"},
+            "rocm": {
+                "label": "ROCm (AMD)",
+                "asset_pattern": "*-bin-win-rocm-*-x64.zip",
+            },
             "rocm-7.1.1": {
                 "label": "ROCm 7.1.1 (AMD)",
                 "asset_pattern": "*-bin-win-rocm-7.1.1-x64.zip",
+                "asset_patterns": [
+                    "*-bin-win-rocm-*-x64.zip",
+                    "*-bin-win-rocm-7.1.1-x64.zip",
+                ],
+                "hidden": True,
             },
             "rocm-7.13.0": {
                 "label": "ROCm 7.13.0 (AMD)",
                 "asset_pattern": "*-bin-win-rocm-7.13.0-x64.zip",
+                "asset_patterns": [
+                    "*-bin-win-rocm-*-x64.zip",
+                    "*-bin-win-rocm-7.13.0-x64.zip",
+                ],
+                "hidden": True,
             },
         }
     if current_platform.startswith("linux") and current_arch == "x64":
@@ -325,13 +369,27 @@ def build_backend_specs(current_platform: str, current_arch: str) -> dict[str, d
                 "label": "Vulkan",
                 "asset_pattern": "*-bin-Linux-Ubuntu-24.04-x86_64-vulkan.zip",
             },
+            "rocm": {
+                "label": "ROCm (AMD)",
+                "asset_pattern": "*-bin-Linux-Ubuntu-24.04-x86_64-rocm-*.zip",
+            },
             "rocm-7.2.1": {
                 "label": "ROCm 7.2.1 (AMD)",
                 "asset_pattern": "*-bin-Linux-Ubuntu-24.04-x86_64-rocm-7.2.1.zip",
+                "asset_patterns": [
+                    "*-bin-Linux-Ubuntu-24.04-x86_64-rocm-*.zip",
+                    "*-bin-Linux-Ubuntu-24.04-x86_64-rocm-7.2.1.zip",
+                ],
+                "hidden": True,
             },
             "rocm-7.13.0": {
                 "label": "ROCm 7.13.0 (AMD)",
                 "asset_pattern": "*-bin-Linux-Ubuntu-24.04-x86_64-rocm-7.13.0.zip",
+                "asset_patterns": [
+                    "*-bin-Linux-Ubuntu-24.04-x86_64-rocm-*.zip",
+                    "*-bin-Linux-Ubuntu-24.04-x86_64-rocm-7.13.0.zip",
+                ],
+                "hidden": True,
             },
         }
     if current_platform == "darwin" and current_arch == "arm64":
@@ -353,6 +411,13 @@ def find_asset(assets: list[dict[str, Any]], pattern: str) -> dict[str, Any] | N
         if name and fnmatch.fnmatch(name, pattern):
             return asset
     return None
+
+
+def find_asset_for_spec(
+    assets: list[dict[str, Any]], spec: Mapping[str, Any]
+) -> dict[str, Any] | None:
+    patterns = spec.get("asset_patterns") or [spec["asset_pattern"]]
+    return next((match for pattern in patterns if (match := find_asset(assets, pattern))), None)
 
 
 def find_asset_by_name(assets: list[dict[str, Any]], name: str) -> dict[str, Any] | None:
@@ -623,13 +688,14 @@ def install_release(
         set_download_progress(ctx, status="error", message=f"Unknown backend: {backend}")
         return False
 
-    asset = find_asset(assets, backend_spec["asset_pattern"])
+    patterns = backend_spec.get("asset_patterns") or [backend_spec["asset_pattern"]]
+    asset = find_asset_for_spec(assets, backend_spec)
     if not asset:
         set_download_progress(
             ctx,
             status="error",
             message=(
-                f"No asset matching {backend_spec['asset_pattern']} in release {tag}. "
+                f"No asset matching {', '.join(patterns)} in release {tag}. "
                 "Try a different backend or a newer release."
             ),
         )

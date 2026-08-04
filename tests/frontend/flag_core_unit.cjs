@@ -191,6 +191,61 @@ check("Krea 2 Turbo bundle applies its configured inference defaults", () => {
 	assert(flat.includes("--vae-tiling"));
 });
 
+check("MiniMax-H3 bundle emits repeatable Ref2VA inputs", () => {
+	flagCore.resetToDefaults();
+	flagCore.setBundle("minimax_h3", true);
+	flagCore.setMultipleFlagValues({
+		diffusion_model: "models/diffusion/minimax-h3.gguf",
+		vae: "models/vae/minimax-video.safetensors",
+		audio_vae: "models/vae/minimax-audio.safetensors",
+		llm: "models/text-encoders/minimax-qwen.gguf",
+		ref_image: ["refs/cat.png", "refs/board.png"],
+		ref_video: ["refs/video-a", "refs/video-b"],
+		ref_video_audio: ["refs/video-a.wav"],
+		ref_audio: ["refs/music.wav", "refs/voice.wav"],
+	});
+	const values = flagCore.getFlagValues();
+	const result = flagCore.getLaunchArgs();
+	const flags = result.args.map((pair) => pair[0]);
+	assert.equal(values.width, 864);
+	assert.equal(values.height, 480);
+	assert.equal(values.video_frames, 56);
+	assert.equal(values.fps, 24);
+	assert.equal(values.cfg_scale, 1);
+	assert.equal(values.rng, "cpu");
+	assert.equal(result.error, null);
+	assert.equal(flags.filter((flag) => flag === "--ref-image").length, 2);
+	assert.equal(flags.filter((flag) => flag === "--ref-video").length, 2);
+	assert.equal(flags.filter((flag) => flag === "--ref-video-audio").length, 1);
+	assert.equal(flags.filter((flag) => flag === "--ref-audio").length, 2);
+});
+
+check("MiniMax-H3 rejects incompatible or unpaired reference inputs", () => {
+	flagCore.resetToDefaults();
+	flagCore.setBundle("minimax_h3", true);
+	flagCore.setMultipleFlagValues({
+		diffusion_model: "h3.gguf",
+		init_img: "start.png",
+		ref_image: ["reference.png"],
+	});
+	assert.match(flagCore.getLaunchArgs().error, /cannot be combined/);
+
+	flagCore.setMultipleFlagValues({
+		init_img: "",
+		ref_image: [],
+		ref_video: ["video-a"],
+		ref_video_audio: ["a.wav", "b.wav"],
+	});
+	assert.match(flagCore.getLaunchArgs().error, /corresponding reference video/);
+
+	flagCore.setMultipleFlagValues({
+		ref_video: ["video-a", "video-b"],
+		ref_video_audio: ["a.wav"],
+		audio_vae: "",
+	});
+	assert.match(flagCore.getLaunchArgs().error, /require an Audio VAE/);
+});
+
 check("Generate Image dimension buckets move minimum and maximum up one tier", () => {
 	assert.deepEqual(
 		JSON.parse(JSON.stringify(SDGui.DIMENSION_BUCKETS["1:1"])),

@@ -179,6 +179,35 @@ window.SDGui.MODEL_TYPE_BUNDLES = [
 		},
 	},
 	{
+		value: "minimax_h3",
+		label: "MiniMax-H3 (audio + video)",
+		fields: [
+			{ key: "diffusion_model", purpose: "diffusion_model", required: true },
+			{ key: "vae", purpose: "vae", label: "Video VAE", required: true },
+			{
+				key: "audio_vae",
+				purpose: "audio_vae",
+				label: "Audio VAE (optional for silent video)",
+				required: false,
+			},
+			{ key: "llm", purpose: "llm", label: "MiniMax Qwen3-VL", required: true },
+			{ key: "llm_vision", purpose: "llm_vision", required: false },
+		],
+		defaults: {
+			mode: "vid_gen",
+			width: 864,
+			height: 480,
+			video_frames: 56,
+			fps: 24,
+			cfg_scale: 1.0,
+			flow_shift: "",
+			rng: "cpu",
+			diffusion_fa: true,
+			offload_to_cpu: true,
+			temporal_tiling: false,
+		},
+	},
+	{
 		value: "z_image",
 		label: "Z-Image (Turbo)",
 		fields: [

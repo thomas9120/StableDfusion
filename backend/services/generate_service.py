@@ -356,7 +356,7 @@ def _prepare(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
         "image": params.get("image", ""),  # metadata mode input
         "init_img": params.get("init_img", ""),  # img2img / upscale input
         "strength": params.get("strength"),  # img2img denoising strength
-        "ref_image": params.get("ref_image", ""),  # Kontext / image-edit reference
+        "ref_image": params.get("ref_image", []),  # repeatable image references
         "img_cfg_scale": params.get("img_cfg_scale"),  # edit/inpaint image guidance
         "mask": params.get("mask", ""),  # inpaint mask
         "control_image": params.get("control_image", ""),  # controlnet
@@ -369,6 +369,9 @@ def _prepare(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
         "fps": params.get("fps"),
         "vace_strength": params.get("vace_strength"),
         "end_img": params.get("end_img", ""),  # last frame (flf2v)
+        "ref_video": params.get("ref_video", []),
+        "ref_video_audio": params.get("ref_video_audio", []),
+        "ref_audio": params.get("ref_audio", []),
         "control_video": params.get("control_video", ""),
         "moe_boundary": params.get("moe_boundary"),  # Wan2.2 MoE
         "extra_tiling_args": params.get("extra_tiling_args", ""),  # LTX VAE tiling

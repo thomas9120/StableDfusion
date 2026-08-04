@@ -19,11 +19,16 @@ from backend.services import sdcpp_manager  # noqa: E402
 # Realistic asset names observed from the live GitHub releases API.
 WIN_ASSETS = [
     {"name": "cudart-sd-bin-win-cu12-x64.zip", "browser_download_url": "url-cudart"},
+    {"name": "sd-master-ea7f0c8-bin-win-cpu-x64.zip", "browser_download_url": "url-cpu"},
     {"name": "sd-master-92a3b73-bin-win-avx-x64.zip", "browser_download_url": "url-avx"},
     {"name": "sd-master-92a3b73-bin-win-avx2-x64.zip", "browser_download_url": "url-avx2"},
     {"name": "sd-master-92a3b73-bin-win-avx512-x64.zip", "browser_download_url": "url-avx512"},
     {"name": "sd-master-92a3b73-bin-win-cuda12-x64.zip", "browser_download_url": "url-cuda12"},
     {"name": "sd-master-92a3b73-bin-win-vulkan-x64.zip", "browser_download_url": "url-vulkan"},
+    {
+        "name": "sd-master-ea7f0c8-bin-win-rocm-7.14.0-x64.zip",
+        "browser_download_url": "url-rocm",
+    },
 ]
 
 MAC_ASSET_NAME = "sd-master-92a3b73-bin-Darwin-macOS-15.7.7-arm64.zip"
@@ -40,9 +45,10 @@ def name_of(asset):
 
 def test_build_backend_specs_win32_x64_has_recommended_default_first():
     specs = sdcpp_manager.build_backend_specs("win32", "x64")
-    assert "cpu-avx2" in specs
-    # avx2 is the recommended default → listed first.
-    assert list(specs.keys())[0] == "cpu-avx2"
+    assert "cpu" in specs
+    # The combined CPU build is the recommended default → listed first.
+    assert list(specs.keys())[0] == "cpu"
+    assert specs["cpu-avx2"]["hidden"] is True
     # CUDA variant carries the runtime companion.
     assert specs["cuda12"]["companion"] == "cudart-sd-bin-win-cu12-x64.zip"
     assert specs["cuda12"]["asset_pattern"].endswith("-bin-win-cuda12-x64.zip")
@@ -53,14 +59,27 @@ def test_build_backend_specs_unsupported_platform_is_empty():
     assert sdcpp_manager.build_backend_specs("haiku", "x64") == {}
 
 
-def test_find_asset_matches_avx2_without_colliding_with_avx_or_avx512():
+def test_find_asset_matches_current_cpu_and_rocm_release_names():
     specs = sdcpp_manager.build_backend_specs("win32", "x64")
-    avx2 = sdcpp_manager.find_asset(WIN_ASSETS, specs["cpu-avx2"]["asset_pattern"])
-    avx = sdcpp_manager.find_asset(WIN_ASSETS, specs["cpu-avx"]["asset_pattern"])
-    avx512 = sdcpp_manager.find_asset(WIN_ASSETS, specs["cpu-avx512"]["asset_pattern"])
-    assert name_of(avx2) == "sd-master-92a3b73-bin-win-avx2-x64.zip"
-    assert name_of(avx) == "sd-master-92a3b73-bin-win-avx-x64.zip"
-    assert name_of(avx512) == "sd-master-92a3b73-bin-win-avx512-x64.zip"
+    cpu = sdcpp_manager.find_asset(WIN_ASSETS, specs["cpu"]["asset_pattern"])
+    rocm = sdcpp_manager.find_asset(WIN_ASSETS, specs["rocm"]["asset_pattern"])
+    assert name_of(cpu) == "sd-master-ea7f0c8-bin-win-cpu-x64.zip"
+    assert name_of(rocm) == "sd-master-ea7f0c8-bin-win-rocm-7.14.0-x64.zip"
+
+    linux_spec = sdcpp_manager.build_backend_specs("linux", "x64")["rocm"]
+    linux_asset = [{"name": "sd-master-ea7f0c8-bin-Linux-Ubuntu-24.04-x86_64-rocm-7.14.0.zip"}]
+    assert sdcpp_manager.find_asset(linux_asset, linux_spec["asset_pattern"]) is not None
+
+
+def test_legacy_cpu_spec_prefers_combined_asset_and_keeps_old_fallback():
+    spec = sdcpp_manager.build_backend_specs("win32", "x64")["cpu-avx2"]
+    assert name_of(sdcpp_manager.find_asset_for_spec(WIN_ASSETS, spec)) == (
+        "sd-master-ea7f0c8-bin-win-cpu-x64.zip"
+    )
+    old_assets = [asset for asset in WIN_ASSETS if "ea7f0c8" not in asset["name"]]
+    assert name_of(sdcpp_manager.find_asset_for_spec(old_assets, spec)) == (
+        "sd-master-92a3b73-bin-win-avx2-x64.zip"
+    )
 
 
 def test_find_asset_cuda12_main_pattern_does_not_match_cudart_companion():

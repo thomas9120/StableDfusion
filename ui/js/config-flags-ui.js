@@ -43,9 +43,12 @@ window.SDGui.configFlagsUi = (() => {
 			});
 			wrap.appendChild(sel);
 		} else {
-			var input = el("input");
+			var input = el(flag.type === "paths" ? "textarea" : "input");
 			input.id = "cfg-" + flag.id;
-			if (flag.type === "int") {
+			if (flag.type === "paths") {
+				input.rows = 3;
+				input.placeholder = "One path per line";
+			} else if (flag.type === "int") {
 				input.type = "number";
 				input.step = "1";
 			} else if (flag.type === "float") {
@@ -54,10 +57,19 @@ window.SDGui.configFlagsUi = (() => {
 			} else {
 				input.type = "text";
 			}
-			if (cur !== undefined && cur !== null) input.value = String(cur);
+			if (cur !== undefined && cur !== null)
+				input.value =
+					flag.type === "paths" && Array.isArray(cur)
+						? cur.join("\n")
+						: String(cur);
 			input.addEventListener("change", () => {
 				var val = input.value;
-				if (flag.type === "int") val = parseInt(val, 10);
+				if (flag.type === "paths")
+					val = val
+						.split(/\r?\n/)
+						.map((path) => path.trim())
+						.filter(Boolean);
+				else if (flag.type === "int") val = parseInt(val, 10);
 				else if (flag.type === "float") val = parseFloat(val);
 				// M20 — don't persist NaN into shared state (empty/invalid
 				// input). The flag keeps its previous value.

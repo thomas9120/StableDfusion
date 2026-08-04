@@ -199,7 +199,10 @@ Generation Options:
                                            "0.85,0.725,0.421875,0.0").
   --skip-layers                            layers to skip for SLG steps (default: [7,8,9])
   --high-noise-skip-layers                 (high noise) layers to skip for SLG steps (default: [7,8,9])
-  -r, --ref-image                          reference image for Flux Kontext models (can be used multiple times)
+  -r, --ref-image                          reference image for Flux Kontext or MiniMax-H3 Ref2VA (can be used multiple times)
+  --ref-video                              MiniMax-H3 Ref2VA reference video frame directory at 24 fps (can be used multiple times)
+  --ref-video-audio                        WAV soundtrack paired by index with --ref-video (can be used multiple times)
+  --ref-audio                              standalone WAV reference for MiniMax-H3 Ref2VA (can be used multiple times)
   --cache-mode                             caching method: 'easycache' (DiT), 'ucache' (UNET),
                                            'dbcache'/'taylorseer'/'cache-dit' (DiT block-level), 'spectrum' (UNET/DiT
                                            Chebyshev+Taylor forecasting)

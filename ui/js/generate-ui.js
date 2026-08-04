@@ -28,6 +28,7 @@ window.SDGui.generateUi = (() => {
 	var populateEnum = dom.populateEnum;
 
 	var bindText = ctrl.bindText;
+	var bindPaths = ctrl.bindPaths;
 	var bindNumber = ctrl.bindNumber;
 	var bindEnum = ctrl.bindEnum;
 	var bindPathSelect = ctrl.bindPathSelect;
@@ -325,6 +326,44 @@ window.SDGui.generateUi = (() => {
 		}
 	}
 
+	function appendPathValue(flagId, path) {
+		var current = window.SDGui.flagCore.getFlagValues()[flagId];
+		var values = Array.isArray(current)
+			? current.slice()
+			: String(current || "")
+					.split(/\r?\n/)
+					.filter(Boolean);
+		values.push(path);
+		window.SDGui.flagCore.setFlagValue(flagId, values);
+		syncControl(flagId);
+	}
+
+	async function browseAppendPath(flagId, purpose, title) {
+		try {
+			var res = await window.SDGui.fetchJson("/api/select-file", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ purpose: purpose, title: title }),
+			});
+			if (res && res.selected && res.path) appendPathValue(flagId, res.path);
+		} catch (e) {
+			window.SDGui.toast(e.message, "error");
+		}
+	}
+
+	async function browseAppendDir(flagId, title) {
+		try {
+			var res = await window.SDGui.fetchJson("/api/select-directory", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ title: title }),
+			});
+			if (res && res.selected && res.path) appendPathValue(flagId, res.path);
+		} catch (e) {
+			window.SDGui.toast(e.message, "error");
+		}
+	}
+
 	function bindBrowse(buttonId, handler) {
 		var btn = $(buttonId);
 		if (btn) btn.addEventListener("click", handler);
@@ -490,9 +529,9 @@ window.SDGui.generateUi = (() => {
 		bindBrowse("btn-browse-init-img", () =>
 			browsePath("init_img", "image", "Select init image"),
 		);
-		bindText("gen-ref-image", "ref_image");
+		bindPaths("gen-ref-image", "ref_image");
 		bindBrowse("btn-browse-ref-image", () =>
-			browsePath("ref_image", "image", "Select reference image"),
+			browseAppendPath("ref_image", "image", "Select reference image"),
 		);
 		bindNumber("gen-strength", "strength", true);
 		bindNumber("gen-img-cfg", "img_cfg_scale", true);
@@ -517,6 +556,22 @@ window.SDGui.generateUi = (() => {
 		bindText("gen-video-end-img", "end_img");
 		bindBrowse("btn-browse-video-end-img", () =>
 			browsePath("end_img", "image", "Select end frame"),
+		);
+		bindPaths("gen-video-ref-images", "ref_image");
+		bindBrowse("btn-browse-video-ref-image", () =>
+			browseAppendPath("ref_image", "image", "Select reference image"),
+		);
+		bindPaths("gen-ref-videos", "ref_video");
+		bindBrowse("btn-browse-ref-video", () =>
+			browseAppendDir("ref_video", "Select reference video frames"),
+		);
+		bindPaths("gen-ref-video-audios", "ref_video_audio");
+		bindBrowse("btn-browse-ref-video-audio", () =>
+			browseAppendPath("ref_video_audio", "audio", "Select reference video soundtrack"),
+		);
+		bindPaths("gen-ref-audios", "ref_audio");
+		bindBrowse("btn-browse-ref-audio", () =>
+			browseAppendPath("ref_audio", "audio", "Select standalone audio reference"),
 		);
 
 		bindText("gen-control-video", "control_video");
