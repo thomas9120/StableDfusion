@@ -215,7 +215,7 @@ window.SDGui.manager = (() => {
 			? status.available_backends
 			: [];
 		var current =
-			status && status.backend ? status.backend : backendSelect.value;
+			backendSelect.value || (status && status.backend ? status.backend : "");
 		backendSelect.replaceChildren();
 		if (available.length === 0) {
 			backendSelect.appendChild(
@@ -439,7 +439,6 @@ window.SDGui.manager = (() => {
 		var badge = document.getElementById("version-badge");
 		var info = document.getElementById("installed-info");
 		var repairBtn = document.getElementById("btn-repair");
-		var backendSelect = document.getElementById("backend-select");
 		var releaseSelect = document.getElementById("release-select");
 		var installBtn = document.getElementById("btn-install");
 		var sidebarStatus = document.getElementById("sidebar-status");
@@ -450,16 +449,6 @@ window.SDGui.manager = (() => {
 			installBtn.disabled =
 				!status.available_backends || status.available_backends.length === 0;
 
-		if (
-			(status.installed || status.config_stale) &&
-			status.backend &&
-			backendSelect
-		) {
-			var hasBackend = Array.from(backendSelect.options).some(
-				(o) => o.value === status.backend,
-			);
-			if (hasBackend) backendSelect.value = status.backend;
-		}
 		if (
 			(status.installed || status.config_stale) &&
 			status.version &&
@@ -579,8 +568,9 @@ window.SDGui.manager = (() => {
 			}
 			var hint = document.createElement("div");
 			hint.style.color = "var(--fg-faint)";
-			hint.textContent =
-				"Click Repair Install to reinstall the configured version/backend.";
+			hint.textContent = missing.includes("hipblas.dll")
+				? "Install the matching AMD ROCm toolkit, then restart StableDfusion."
+				: "Click Repair Install to reinstall the configured version/backend.";
 			info.appendChild(hint);
 			appendRow("Version (config)", String(status.version));
 			appendRow("Backend (config)", String(status.backend));

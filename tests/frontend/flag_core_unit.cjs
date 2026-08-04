@@ -209,7 +209,7 @@ check("MiniMax-H3 bundle emits repeatable Ref2VA inputs", () => {
 	const flags = result.args.map((pair) => pair[0]);
 	assert.equal(values.width, 864);
 	assert.equal(values.height, 480);
-	assert.equal(values.video_frames, 56);
+	assert.equal(values.video_frames, 124);
 	assert.equal(values.fps, 24);
 	assert.equal(values.cfg_scale, 1);
 	assert.equal(values.rng, "cpu");

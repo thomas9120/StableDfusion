@@ -1079,6 +1079,12 @@ function findChromiumExecutable() {
 		await page.waitForTimeout(150);
 		const h3Ui = await page.evaluate(() => ({
 			values: window.SDGui.flagCore.getFlagValues(),
+			durationVisible: !document
+				.getElementById("gen-h3-duration-group")
+				.classList.contains("hidden"),
+			framesHidden: document
+				.getElementById("gen-video-frames-group")
+				.classList.contains("hidden"),
 			refsVisible: !document
 				.getElementById("gen-video-ref-images")
 				.closest("#gen-video-inputs")
@@ -1086,10 +1092,26 @@ function findChromiumExecutable() {
 		}));
 		check(
 			"MiniMax-H3 bundle applies AV defaults",
-			h3Ui.values.video_frames === 56 &&
+			h3Ui.values.video_frames === 124 &&
 				h3Ui.values.fps === 24 &&
 				h3Ui.values.cfg_scale === 1 &&
 				h3Ui.values.rng === "cpu",
+		);
+		check(
+			"MiniMax-H3 shows duration instead of raw frames",
+			h3Ui.durationVisible && h3Ui.framesHidden,
+		);
+		await page.locator("#gen-h3-duration").fill("10");
+		await page.locator("#gen-h3-duration").press("Tab");
+		await page.waitForTimeout(50);
+		const h3Duration = await page.evaluate(() => ({
+			frames: window.SDGui.flagCore.getFlagValues().video_frames,
+			actual: document.getElementById("gen-h3-duration-actual").textContent,
+		}));
+		check(
+			"MiniMax-H3 duration aligns to its frame grid",
+			h3Duration.frames === 243 &&
+				h3Duration.actual.includes("10.13 seconds actual"),
 		);
 		check("MiniMax-H3 Ref2VA controls are visible in video mode", h3Ui.refsVisible);
 

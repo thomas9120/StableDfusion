@@ -242,6 +242,37 @@ window.SDGui.generateUi = (() => {
 		if (resultEmpty) resultEmpty.textContent = cfg.empty;
 	}
 
+	function alignH3Frames(seconds) {
+		var frames = Math.max(5, Math.ceil(Number(seconds) * 24));
+		while (frames % 17 !== 5) frames++;
+		return frames;
+	}
+
+	function syncH3Duration() {
+		var isH3 = window.SDGui.flagCore.getBundle() === "minimax_h3";
+		setHidden($("gen-h3-duration-group"), !isH3);
+		setHidden($("gen-video-frames-group"), isH3);
+		setHidden($("gen-fps-group"), isH3);
+		if (!isH3) return;
+
+		var frames = Number(window.SDGui.flagCore.getFlagValues().video_frames) || 124;
+		var actualSeconds = frames / 24;
+		var input = $("gen-h3-duration");
+		if (input && document.activeElement !== input) {
+			input.value = String(
+				actualSeconds < 5 ? actualSeconds.toFixed(2) : Math.round(actualSeconds),
+			);
+		}
+		var actual = $("gen-h3-duration-actual");
+		if (actual) {
+			actual.textContent =
+				actualSeconds.toFixed(2) +
+				" seconds actual (" +
+				frames +
+				" frames at 24 FPS)";
+		}
+	}
+
 	function updateModeSections() {
 		var mode = window.SDGui.flagCore.getMode();
 		var activePanelId = MODE_INPUT_PANELS[mode];
@@ -274,6 +305,7 @@ window.SDGui.generateUi = (() => {
 		setHidden($("gen-sampling-section"), !usePrompt);
 		setHidden($("gen-advanced-section"), !usePrompt);
 		setHidden($("gen-model-setup-section"), mode === "upscale");
+		syncH3Duration();
 
 		dims.updateAffordances();
 		updateActionCopy();
@@ -547,6 +579,17 @@ window.SDGui.generateUi = (() => {
 
 		bindNumber("gen-video-frames", "video_frames");
 		bindNumber("gen-fps", "fps");
+		var h3Duration = $("gen-h3-duration");
+		if (h3Duration) {
+			h3Duration.addEventListener("change", () => {
+				var seconds = Math.max(5, Number(h3Duration.value) || 5);
+				window.SDGui.flagCore.setMultipleFlagValues({
+					video_frames: alignH3Frames(seconds),
+					fps: 24,
+				});
+				syncH3Duration();
+			});
+		}
 		bindNumber("gen-vace-strength", "vace_strength", true);
 		bindBool("gen-temporal-tiling", "temporal_tiling");
 		bindText("gen-video-init-img", "init_img");
@@ -659,6 +702,7 @@ window.SDGui.generateUi = (() => {
 			// field) must not trigger a full rebuild per keystroke.
 			syncSelectorsFromState();
 			syncAll();
+			syncH3Duration();
 		});
 	}
 

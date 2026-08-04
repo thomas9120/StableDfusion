@@ -18,6 +18,7 @@ PLAN.md §16 open decision #3.
 import fnmatch
 import hashlib
 import json
+import os
 import pathlib
 import re
 import shutil
@@ -69,21 +70,22 @@ def _install_identity(item: Mapping[str, Any]) -> tuple[str, str] | None:
 def normalize_install_config(raw: Mapping[str, Any] | None) -> dict[str, Any]:
     """Return current install config shape, migrating legacy top-level fields."""
     cfg = _blank_install_config()
+    active_declared = isinstance(raw, Mapping) and "active_install" in raw
     if isinstance(raw, Mapping):
         cfg.update(dict(raw))
 
     active = cfg.get("active_install")
     if not isinstance(active, Mapping):
-        legacy_tag = cfg.get("tag")
-        legacy_backend = cfg.get("backend")
-        if _valid_install_part(legacy_tag) and _valid_install_part(legacy_backend):
-            active = {
-                "tag": legacy_tag,
-                "backend": legacy_backend,
-                "version": cfg.get("version") or legacy_tag,
-            }
-        else:
-            active = None
+        active = None
+        if not active_declared:
+            legacy_tag = cfg.get("tag")
+            legacy_backend = cfg.get("backend")
+            if _valid_install_part(legacy_tag) and _valid_install_part(legacy_backend):
+                active = {
+                    "tag": legacy_tag,
+                    "backend": legacy_backend,
+                    "version": cfg.get("version") or legacy_tag,
+                }
 
     installed: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
@@ -337,7 +339,7 @@ def build_backend_specs(current_platform: str, current_arch: str) -> dict[str, d
             },
             "vulkan": {"label": "Vulkan", "asset_pattern": "*-bin-win-vulkan-x64.zip"},
             "rocm": {
-                "label": "ROCm (AMD)",
+                "label": "ROCm (AMD; toolkit required)",
                 "asset_pattern": "*-bin-win-rocm-*-x64.zip",
             },
             "rocm-7.1.1": {
@@ -616,12 +618,11 @@ def get_macos_rpath_libraries(executable: pathlib.Path) -> list[str]:
 def validate_runtime_dependencies(
     ctx: AppContext, tools: Iterable[str] | None = None
 ) -> dict[str, Any]:
-    """Check that tool executables exist and (on macOS) their @rpath libs are present.
+    """Check that tool executables and required runtime libraries are present.
 
-    On Windows/Linux the shared libs are resolved via PATH/LD_LIBRARY_PATH at
-    launch (process_manager prepends sdcpp/bin), so we only verify executables
-    there and report ``ok=True``. On macOS we additionally inspect ``otool -L``
-    so a missing .dylib surfaces as "Install Incomplete".
+    Windows ROCm builds require hipBLAS from an external ROCm toolkit. macOS
+    dependencies are discovered from ``otool -L``. Other shared libraries are
+    resolved by the platform loader at launch.
     """
     current_platform = ctx.services.current_platform
     checked_tools: list[str] = []
@@ -653,6 +654,14 @@ def validate_runtime_dependencies(
         missing_runtime_files = sorted(
             name for name in required if not (active_bin / name).exists()
         )
+    elif current_platform == "win32":
+        active = get_active_install(ctx) or {}
+        if str(active.get("backend", "")).startswith("rocm"):
+            required.add("hipblas.dll")
+            search_dirs = [get_active_runtime_bin(ctx), *map(pathlib.Path, os.get_exec_path())]
+            missing_runtime_files = sorted(
+                name for name in required if not any((path / name).exists() for path in search_dirs)
+            )
 
     return {
         "ok": not missing_executables and not missing_runtime_files,

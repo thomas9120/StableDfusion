@@ -216,3 +216,62 @@ def test_remove_runtime_deletes_only_target_and_selects_next_active(tmp_path):
     assert not vulkan.exists()
     assert (cpu / "sd-cli.exe").exists()
     assert cfg["active_install"]["backend"] == "cpu-avx2"
+
+
+def test_remove_last_runtime_does_not_restore_legacy_active_fields(tmp_path):
+    ctx, cfg = make_ctx(
+        tmp_path,
+        {
+            "version": "Build 1",
+            "tag": "master-1-abc",
+            "backend": "vulkan",
+            "active_install": {
+                "tag": "master-1-abc",
+                "backend": "vulkan",
+                "version": "Build 1",
+            },
+            "installed_backends": [
+                {"tag": "master-1-abc", "backend": "vulkan", "version": "Build 1"}
+            ],
+        },
+    )
+    runtime = sdcpp_manager.runtime_bin_dir(ctx, "master-1-abc", "vulkan")
+    runtime.mkdir(parents=True)
+    (runtime / "sd-cli.exe").write_bytes(b"vulkan")
+
+    sdcpp_manager.remove_runtime(ctx, "master-1-abc", "vulkan")
+
+    assert cfg["active_install"] is None
+    assert cfg["installed_backends"] == []
+    assert cfg["tag"] is None
+    assert cfg["backend"] is None
+
+
+def test_windows_rocm_requires_hipblas_on_runtime_path(tmp_path, monkeypatch):
+    ctx, _cfg = make_ctx(
+        tmp_path,
+        {
+            "active_install": {
+                "tag": "master-1-abc",
+                "backend": "rocm",
+                "version": "Build 1",
+            },
+            "installed_backends": [
+                {"tag": "master-1-abc", "backend": "rocm", "version": "Build 1"}
+            ],
+        },
+    )
+    runtime = sdcpp_manager.runtime_bin_dir(ctx, "master-1-abc", "rocm")
+    runtime.mkdir(parents=True)
+    for tool in ctx.services.sdcpp_tools:
+        (runtime / f"{tool}.exe").write_bytes(b"exe")
+    ctx.services.find_tool_executable = lambda _ctx, tool: runtime / f"{tool}.exe"
+    system_bin = tmp_path / "rocm-system"
+    system_bin.mkdir()
+    monkeypatch.setenv("PATH", str(system_bin))
+
+    health = sdcpp_manager.validate_runtime_dependencies(ctx)
+    assert health["missing_runtime_files"] == ["hipblas.dll"]
+
+    (system_bin / "hipblas.dll").write_bytes(b"dll")
+    assert sdcpp_manager.validate_runtime_dependencies(ctx)["ok"] is True

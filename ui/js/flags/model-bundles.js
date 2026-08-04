@@ -196,7 +196,7 @@ window.SDGui.MODEL_TYPE_BUNDLES = [
 			mode: "vid_gen",
 			width: 864,
 			height: 480,
-			video_frames: 56,
+			video_frames: 124,
 			fps: 24,
 			cfg_scale: 1.0,
 			flow_shift: "",
