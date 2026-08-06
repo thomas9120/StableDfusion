@@ -75,7 +75,14 @@ window.SDGui.generateControls = (() => {
 		if (node)
 			node.addEventListener("change", () => {
 				var v = isFloat ? parseFloat(node.value) : parseInt(node.value, 10);
-				flagCore.setFlagValue(flagId, Number.isNaN(v) ? 0 : v);
+				// M20 — don't persist NaN into shared state (empty/invalid
+				// input). Restore the display so the field matches state.
+				if (Number.isNaN(v)) {
+					var cur = flagCore.getFlagValues()[flagId];
+					node.value = cur === undefined || cur === null ? "" : String(cur);
+					return;
+				}
+				flagCore.setFlagValue(flagId, v);
 			});
 	}
 
@@ -144,7 +151,15 @@ window.SDGui.generateControls = (() => {
 		});
 		number.addEventListener("change", () => {
 			var n = isFloat ? parseFloat(number.value) : parseInt(number.value, 10);
-			if (Number.isNaN(n)) n = 0;
+			// M20 — don't persist NaN into shared state (empty/invalid
+			// input). Restore both controls so they match state.
+			if (Number.isNaN(n)) {
+				var cur = flagCore.getFlagValues()[flagId];
+				if (cur === undefined || cur === null) return;
+				slider.value = String(cur);
+				number.value = String(cur);
+				return;
+			}
 			slider.value = String(n);
 			flagCore.setFlagValue(flagId, n);
 		});

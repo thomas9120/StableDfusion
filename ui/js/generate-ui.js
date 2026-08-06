@@ -703,6 +703,10 @@ window.SDGui.generateUi = (() => {
 			syncSelectorsFromState();
 			syncAll();
 			syncH3Duration();
+			// Dimensions are cheap to refresh (size buttons only rebuild when
+			// the shape changes, M27 guard in dimensions.js), so update the
+			// chips/readout even when width/height change from Configure.
+			dims.updateAffordances();
 		});
 	}
 
