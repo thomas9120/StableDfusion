@@ -9,6 +9,8 @@ the tag. See PLAN.md §11.
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -245,6 +247,143 @@ def test_remove_last_runtime_does_not_restore_legacy_active_fields(tmp_path):
     assert cfg["installed_backends"] == []
     assert cfg["tag"] is None
     assert cfg["backend"] is None
+
+
+def test_download_file_rejects_non_github_url(tmp_path):
+    ctx, _cfg = make_ctx(tmp_path, {})
+    dest = tmp_path / "asset.zip"
+    with pytest.raises(ValueError):
+        sdcpp_manager.download_file(ctx, "http://github.com/leejet/x/a.zip", dest)
+    with pytest.raises(ValueError):
+        sdcpp_manager.download_file(ctx, "https://evil.example/a.zip", dest)
+
+
+def test_download_file_accepts_github_url(tmp_path):
+    ctx, _cfg = make_ctx(tmp_path, {})
+    payload = b"zip-bytes"
+
+    class FakeResp:
+        headers = {"Content-Length": str(len(payload))}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def geturl(self):
+            return "https://objects.githubusercontent.com/github-production-release-asset/1"
+
+        def read(self, n=-1):
+            if not hasattr(self, "_done"):
+                self._done = True
+                return payload
+            return b""
+
+    ctx.services.urlopen_with_ssl = lambda *a, **k: FakeResp()
+    dest = tmp_path / "asset.zip"
+    n = sdcpp_manager.download_file(
+        ctx,
+        "https://github.com/leejet/stable-diffusion.cpp/releases/download/t/a.zip",
+        dest,
+    )
+    assert n == len(payload)
+    assert dest.read_bytes() == payload
+
+
+def test_install_release_rejects_unsafe_asset_name(tmp_path, monkeypatch):
+    ctx, _cfg = make_ctx(tmp_path, {})
+    specs = sdcpp_manager.build_backend_specs("win32", "x64")
+    monkeypatch.setattr(
+        sdcpp_manager,
+        "resolve_release",
+        lambda _ctx, _tag: {
+            "name": "Build",
+            "assets": [
+                {
+                    "name": "../evil.zip",
+                    "browser_download_url": (
+                        "https://github.com/leejet/stable-diffusion.cpp/"
+                        "releases/download/t/evil.zip"
+                    ),
+                }
+            ],
+        },
+    )
+    # Force matcher to return the evil asset regardless of pattern.
+    monkeypatch.setattr(
+        sdcpp_manager,
+        "find_asset_for_spec",
+        lambda assets, _spec: assets[0],
+    )
+    ok = sdcpp_manager.install_release(ctx, "tag", "cpu", specs)
+    assert ok is False
+    assert "Unsafe" in ctx.state.download_progress.snapshot()["message"] or "asset name" in (
+        ctx.state.download_progress.snapshot()["message"] or ""
+    )
+
+
+def test_parse_github_asset_digest_and_verify_path():
+    from backend.download_security import parse_github_asset_digest
+
+    assert parse_github_asset_digest({"sha256": "ABC"}) == "abc"
+    assert parse_github_asset_digest({"digest": "sha256:deadbeef"}) == "deadbeef"
+    assert parse_github_asset_digest({}) is None
+
+
+def test_install_release_rejects_digest_mismatch(tmp_path, monkeypatch):
+    """Asset digest that does not match downloaded bytes must fail install."""
+    import hashlib
+    import zipfile
+
+    ctx, _cfg = make_ctx(tmp_path, {})
+    specs = sdcpp_manager.build_backend_specs("win32", "x64")
+    asset_name = "sd-master-deadbeef-bin-win-cpu-x64.zip"
+    payload = b"not-the-signed-bytes"
+    wrong_digest = "0" * 64
+    assert hashlib.sha256(payload).hexdigest() != wrong_digest
+
+    monkeypatch.setattr(
+        sdcpp_manager,
+        "resolve_release",
+        lambda _ctx, _tag: {
+            "name": "Build",
+            "assets": [
+                {
+                    "name": asset_name,
+                    "browser_download_url": (
+                        "https://github.com/leejet/stable-diffusion.cpp/"
+                        f"releases/download/t/{asset_name}"
+                    ),
+                    "digest": f"sha256:{wrong_digest}",
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        sdcpp_manager,
+        "find_asset_for_spec",
+        lambda assets, _spec: assets[0],
+    )
+
+    def fake_download(_ctx, _url, dest, progress_cb=None):
+        # Minimal zip so a regress that skips verify would still extract.
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(dest, "w") as zf:
+            zf.writestr("sd-cli.exe", payload)
+        if progress_cb:
+            progress_cb(len(payload), len(payload))
+        return len(payload)
+
+    monkeypatch.setattr(sdcpp_manager, "download_file", fake_download)
+
+    ok = sdcpp_manager.install_release(ctx, "tag", "cpu", specs)
+    assert ok is False
+    message = ctx.state.download_progress.snapshot().get("message") or ""
+    assert "SHA256" in message
+    # Must not leave a half-installed runtime after verify failure.
+    target = sdcpp_manager.runtime_bin_dir(ctx, "tag", "cpu")
+    assert not target.exists()
 
 
 def test_windows_rocm_requires_hipblas_on_runtime_path(tmp_path, monkeypatch):

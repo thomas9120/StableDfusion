@@ -32,6 +32,11 @@ from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
 from ..context import AppContext
+from ..download_security import (
+    parse_github_asset_digest,
+    safe_download_basename,
+    validate_github_download_url,
+)
 
 # macOS @rpath/ libraries reported by `otool -L`.
 RPATH_LIBRARY_RE = re.compile(r"^\s*@rpath/([^\s(]+)")
@@ -507,8 +512,12 @@ def download_file(
     dest: pathlib.Path,
     progress_cb: Callable[[int, int], None] | None = None,
 ) -> int:
+    url = validate_github_download_url(url)
     req = urllib.request.Request(url, headers={"User-Agent": "stable-d-gui"})
     with ctx.services.urlopen_with_ssl(req, timeout=60) as resp:
+        final_url = getattr(resp, "geturl", lambda: url)()
+        if final_url:
+            validate_github_download_url(str(final_url))
         total = int(resp.headers.get("Content-Length", 0))
         downloaded = 0
         with open(dest, "wb") as f:
@@ -710,12 +719,18 @@ def install_release(
         )
         return False
 
-    # GitHub release assets carry no sha256 metadata, and upstream ships no
-    # checksum file (PLAN §16 #3). Verification is skipped with a warning.
-    expected_sha = asset.get("sha256")
+    # Upstream often ships no checksums (PLAN §16 #3). Prefer asset["sha256"] or
+    # GitHub's asset["digest"] (sha256:...) when present; otherwise warn and skip.
+    try:
+        asset_name = safe_download_basename(str(asset.get("name") or ""))
+    except ValueError as exc:
+        set_download_progress(ctx, status="error", message=str(exc))
+        return False
+
+    expected_sha = parse_github_asset_digest(asset)
     if not expected_sha:
         print(
-            f"WARNING: No SHA256 available for {asset['name']}; skipping checksum verification.",
+            f"WARNING: No SHA256 available for {asset_name}; skipping checksum verification.",
             file=sys.stderr,
         )
 
@@ -725,21 +740,26 @@ def install_release(
         def progress_cb(downloaded: int, total: int) -> None:
             set_download_progress(ctx, downloaded=downloaded, total=total)
 
-        archive_path = tmpdir / asset["name"]
-        set_download_progress(ctx, message=f"Downloading {asset['name']}...")
+        archive_path = tmpdir / asset_name
+        set_download_progress(ctx, message=f"Downloading {asset_name}...")
         download_file(ctx, asset["browser_download_url"], archive_path, progress_cb)
 
         if expected_sha:
             actual_sha = sha256_file(archive_path)
-            if actual_sha != expected_sha:
+            if actual_sha.lower() != expected_sha.lower():
                 set_download_progress(
-                    ctx, status="error", message=f"SHA256 mismatch for {asset['name']}"
+                    ctx, status="error", message=f"SHA256 mismatch for {asset_name}"
                 )
                 return False
 
         companion_archives: list[pathlib.Path] = []
         companion_name = backend_spec.get("companion")
         if companion_name:
+            try:
+                companion_name = safe_download_basename(str(companion_name))
+            except ValueError as exc:
+                set_download_progress(ctx, status="error", message=str(exc))
+                return False
             companion_asset = find_asset_by_name(assets, companion_name)
             if companion_asset:
                 companion_path = tmpdir / companion_name
@@ -747,6 +767,16 @@ def install_release(
                 download_file(
                     ctx, companion_asset["browser_download_url"], companion_path, progress_cb
                 )
+                companion_sha = parse_github_asset_digest(companion_asset)
+                if companion_sha:
+                    actual_companion = sha256_file(companion_path)
+                    if actual_companion.lower() != companion_sha.lower():
+                        set_download_progress(
+                            ctx,
+                            status="error",
+                            message=f"SHA256 mismatch for {companion_name}",
+                        )
+                        return False
                 companion_archives.append(companion_path)
             else:
                 print(

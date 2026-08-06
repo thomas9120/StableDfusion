@@ -52,6 +52,13 @@
       <div id="api-endpoints"></div>
       <div class="section">
         <h3>Cloudflare tunnel</h3>
+        <p class="form-hint" id="tunnel-warning">
+          Exposes only the running sd-server (not this GUI). trycloudflare
+          URLs are public and world-readable — anyone with the link can reach
+          the API. Prefer listen host 127.0.0.1 and the GUI proxy; set
+          SD_GUI_TOKEN if this machine’s control plane is reachable beyond
+          loopback.
+        </p>
         <div id="tunnel-status" class="status-box"></div>
         <div class="form-row">
           <button

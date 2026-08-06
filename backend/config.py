@@ -90,9 +90,30 @@ def parse_gui_allowed_hosts(value: object) -> tuple[str, ...]:
     return tuple(hosts)
 
 
+def parse_gui_token(value: object) -> str:
+    """Optional shared secret for API/proxy auth. Empty = no token configured."""
+    return str(value or "").strip()
+
+
+def parse_env_bool(value: object, default: bool = False) -> bool:
+    """Truthy: 1/true/yes/on. Falsy: 0/false/no/off. Empty/unknown → default."""
+    if value is None:
+        return default
+    text = str(value).strip().lower()
+    if not text:
+        return default
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
 GUI_HOST = parse_gui_host(os.environ.get("SD_GUI_HOST"), DEFAULT_GUI_HOST)
 GUI_PORT = parse_gui_port(os.environ.get("SD_GUI_PORT"), DEFAULT_GUI_PORT)
 GUI_ALLOWED_HOSTS = parse_gui_allowed_hosts(os.environ.get("SD_GUI_ALLOWED_HOSTS"))
+GUI_TOKEN = parse_gui_token(os.environ.get("SD_GUI_TOKEN"))
+GUI_ALLOW_INSECURE = parse_env_bool(os.environ.get("SD_GUI_ALLOW_INSECURE"), False)
 SD_SERVER_PROXY_TIMEOUT = parse_proxy_timeout(os.environ.get("SD_GUI_PROXY_TIMEOUT"))
 
 # GitHub releases for leejet/stable-diffusion.cpp are continuous builds

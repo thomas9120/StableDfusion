@@ -96,7 +96,16 @@ python server.py  →  backend/app.py  (stdlib ThreadingHTTPServer)
 | `SD_GUI_HOST` | `127.0.0.1` | Bind host (`0.0.0.0` or `*` for LAN access) |
 | `SD_GUI_PORT` | `5250` | GUI port (distinct from LLama-GUI's 5240) |
 | `SD_GUI_ALLOWED_HOSTS` | — | Comma-separated extra allowed hosts (LAN IPs / hostnames), admitted as `http://<host>:<port>` origins |
+| `SD_GUI_TOKEN` | — | Optional shared secret. When set, mutating `/api/*` and all `/v1` `/sdapi` `/sdcpp` proxy requests require `Authorization: Bearer <token>` or `X-SD-GUI-Token: <token>` |
+| `SD_GUI_ALLOW_INSECURE` | off | Set to `1`/`true`/`yes` to allow non-loopback bind **without** a token (explicit opt-in; not recommended) |
 | `SD_GUI_PROXY_TIMEOUT` | `1800` | Timeout (seconds) per proxied `/v1` / `/sdapi` / `/sdcpp` request to sd-server |
+
+**Security notes**
+
+- Default bind is loopback only — no token required for local desktop use.
+- Binding to `0.0.0.0` / a LAN IP without `SD_GUI_TOKEN` is refused at boot unless `SD_GUI_ALLOW_INSECURE=1`.
+- Cloudflare tunnel URLs are public. Prefer keeping sd-server on `127.0.0.1` and using the GUI proxy; set `SD_GUI_TOKEN` if the GUI itself is reachable beyond loopback.
+- When a token is configured, the UI sends it if present in `localStorage` / `sessionStorage` key `SD_GUI_TOKEN` (e.g. `localStorage.setItem("SD_GUI_TOKEN", "…")` in the browser console).
 
 Runtime layout (auto-created on boot): `models/`, `output/` (+ `.preview/`, `.gallery/`),
 `presets/`, `sdcpp/bin/`, `tools/cloudflared/`.

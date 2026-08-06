@@ -4,6 +4,7 @@ Generic plumbing adapted from LLama-GUI. Contains no stable-diffusion-specific
 logic so it can be reused and reasoned about independently.
 """
 
+import hmac
 import json
 import urllib.parse
 
@@ -13,10 +14,115 @@ from . import config
 # allowed origin (loopback still required for /api access).
 WILDCARD_BIND_HOSTS = {"0.0.0.0", "::"}
 
+# CORS preflight: browsers must be allowed to send the shared-secret headers.
+CORS_ALLOW_HEADERS = "Content-Type, Authorization, X-SD-GUI-Token"
+
+_MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+class InsecureBindError(RuntimeError):
+    """Raised when the GUI would bind non-loopback without token or opt-in."""
+
 
 def _loopback_host(host: str) -> bool:
     host = (host or "").strip().lower()
     return host in {"localhost", "127.0.0.1", "::1"} or host.startswith("127.")
+
+
+def is_loopback_bind_host(host: str) -> bool:
+    """True when the GUI listen address is loopback-only (default desktop mode)."""
+    host = (host or "").strip().lower()
+    if not host or host in WILDCARD_BIND_HOSTS or host == "*":
+        return False
+    return _loopback_host(host)
+
+
+def require_secure_bind(host: str, token: str = "", allow_insecure: bool = False) -> None:
+    """Refuse non-loopback bind unless a token is set or insecure mode is opted in.
+
+    Loopback binds always pass. Raises ``InsecureBindError`` when the bind would
+    expose the control plane without authentication.
+    """
+    if is_loopback_bind_host(host):
+        return
+    if str(token or "").strip():
+        return
+    if allow_insecure:
+        return
+    raise InsecureBindError(
+        "Refusing to bind to non-loopback host without authentication. "
+        "Set SD_GUI_TOKEN to a shared secret, set SD_GUI_ALLOW_INSECURE=1 to "
+        "opt in explicitly, or bind to 127.0.0.1 (default)."
+    )
+
+
+def insecure_bind_warning(host: str, token: str = "", allow_insecure: bool = False) -> str | None:
+    """Return a loud warning when non-loopback is allowed without a token."""
+    if is_loopback_bind_host(host):
+        return None
+    if str(token or "").strip():
+        return None
+    if not allow_insecure:
+        return None
+    return (
+        "WARNING: GUI is bound to a non-loopback address without SD_GUI_TOKEN. "
+        "All mutating APIs and the sd-server proxy are unauthenticated. "
+        "Set SD_GUI_TOKEN or bind to 127.0.0.1."
+    )
+
+
+def extract_request_token(headers) -> str | None:
+    """Read the shared secret from Authorization Bearer or X-SD-GUI-Token."""
+    if headers is None:
+        return None
+    get = getattr(headers, "get", None)
+    if not callable(get):
+        return None
+    auth = get("Authorization") or ""
+    if isinstance(auth, str) and auth[:7].lower() == "bearer ":
+        token = auth[7:].strip()
+        if token:
+            return token
+    custom = get("X-SD-GUI-Token")
+    if custom is None:
+        return None
+    token = str(custom).strip()
+    return token or None
+
+
+def token_matches(provided: str | None, expected: str) -> bool:
+    """Constant-time compare; False when either side is missing/empty."""
+    if not expected or provided is None:
+        return False
+    try:
+        return hmac.compare_digest(str(provided), str(expected))
+    except (TypeError, ValueError):
+        return False
+
+
+def request_requires_gui_token(method: str, path: str, token: str = "") -> bool:
+    """Whether this request must present SD_GUI_TOKEN when a token is configured.
+
+    - All methods on /v1, /sdapi, /sdcpp proxy paths
+    - Mutating methods (POST/PUT/PATCH/DELETE) on /api/*
+    Static UI and safe API GETs do not require the token.
+    """
+    if not str(token or "").strip():
+        return False
+    path = path or ""
+    method_u = (method or "GET").upper()
+    if is_v1_proxy_path(path):
+        return True
+    if path.startswith("/api/") and method_u in _MUTATING_METHODS:
+        return True
+    return False
+
+
+def is_gui_token_authorized(headers, method: str, path: str, token: str = "") -> bool:
+    """True when the request is allowed under the current token policy."""
+    if not request_requires_gui_token(method, path, token):
+        return True
+    return token_matches(extract_request_token(headers), token)
 
 
 def is_static_ui_path(path: str) -> bool:

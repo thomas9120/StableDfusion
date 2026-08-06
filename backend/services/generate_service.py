@@ -648,6 +648,9 @@ def run(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
         if ctx.state.generation.snapshot().get("state") == "running":
             return {"error": "A generation is already running"}
         job_id = prepared["base_name"]
+        # Clear cancel under the same lock as the running transition so a
+        # concurrent cancel() cannot set the event only to have it wiped here.
+        ctx.state.generation_cancel.clear()
         # replace() (not update()) so keys added dynamically by the previous
         # job — warnings, stderr_tail, stdout_excerpt, ... — don't leak into
         # this job's status payload.
@@ -664,7 +667,6 @@ def run(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
             }
         )
 
-    ctx.state.generation_cancel.clear()
     thread = threading.Thread(
         target=_run_job,
         args=(ctx, job_id, prepared),
@@ -684,8 +686,8 @@ def status(ctx: AppContext) -> dict[str, Any]:
 
 
 def cancel(ctx: AppContext) -> bool:
-    snap = ctx.state.generation.snapshot()
-    if snap.get("state") != "running":
-        return False
-    ctx.state.generation_cancel.set()
-    return True
+    with ctx.state.generation_lock:
+        if ctx.state.generation.snapshot().get("state") != "running":
+            return False
+        ctx.state.generation_cancel.set()
+        return True

@@ -51,10 +51,38 @@ window.SDGui.toast = (message, kind) => {
 	arm(window.SDGui.TOAST_LINGER_MS);
 };
 
+// Optional shared secret when SD_GUI_TOKEN is configured on the server.
+// Set via: localStorage.setItem("SD_GUI_TOKEN", "...") or sessionStorage.
+window.SDGui.getApiToken = () => {
+	try {
+		return (
+			localStorage.getItem("SD_GUI_TOKEN") ||
+			sessionStorage.getItem("SD_GUI_TOKEN") ||
+			""
+		);
+	} catch (e) {
+		return "";
+	}
+};
+
 // Shared API helper. Throws an Error (with the server's message) on non-OK
 // responses, so callers can surface `e.message` directly.
+// Attaches Authorization: Bearer when SD_GUI_TOKEN is in storage (LAN/token mode).
 window.SDGui.fetchJson = async (url, options) => {
-	var resp = await fetch(url, options);
+	options = options || {};
+	var headers = Object.assign({}, options.headers || {});
+	var token = window.SDGui.getApiToken();
+	if (token) {
+		var hasAuth =
+			headers.Authorization ||
+			headers.authorization ||
+			headers["X-SD-GUI-Token"] ||
+			headers["x-sd-gui-token"];
+		if (!hasAuth) {
+			headers.Authorization = "Bearer " + token;
+		}
+	}
+	var resp = await fetch(url, Object.assign({}, options, { headers: headers }));
 	var data = null;
 	try {
 		var text = await resp.text();

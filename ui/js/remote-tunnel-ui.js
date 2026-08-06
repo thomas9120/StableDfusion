@@ -1,4 +1,6 @@
 // Cloudflare tunnel UI: start/stop, URL + copy, status polling.
+// Tunnels only the running sd-server port. trycloudflare URLs are public /
+// world-readable — never expose the GUI port through this path.
 window.SDGui = window.SDGui || {};
 
 window.SDGui.remoteTunnelUi = (() => {
