@@ -53,6 +53,7 @@ PURPOSE_FILTERS: dict[str, tuple[list[tuple[str, str]], str]] = {
     "control": ([("ControlNet", "*.pth *.safetensors")], "Select ControlNet"),
     "lora": ([("LoRA", "*.safetensors *.gguf *.bin")], "Select LoRA"),
     "image": ([("Image", "*.png *.jpg *.jpeg *.webp *.bmp")], "Select image"),
+    "audio": ([("WAV audio", "*.wav")], "Select WAV audio"),
 }
 
 # Purposes that should default the picker to the models/ directory.

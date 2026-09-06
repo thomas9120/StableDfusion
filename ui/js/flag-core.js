@@ -146,6 +146,11 @@ window.SDGui.flagCore = (() => {
 		return flag.category === "model_components" && flag.id !== "upscale_model";
 	}
 
+	function pathValues(value) {
+		var values = Array.isArray(value) ? value : String(value || "").split(/\r?\n/);
+		return values.map((v) => String(v || "").trim()).filter(Boolean);
+	}
+
 	// Mode-specific required inputs (Phase 3). Different modes need different
 	// file-pickers populated before sd-cli will run; surface that as a clear
 	// error rather than letting sd-cli bail with an opaque message.
@@ -164,6 +169,23 @@ window.SDGui.flagCore = (() => {
 						"Download a Qwen3-4B GGUF (e.g. from unsloth/Qwen3-4B-Instruct-2507-GGUF) " +
 						"and select it for the LLM text encoder field."
 					);
+				}
+				if (state.mode === "vid_gen") {
+					var refImages = pathValues(vals.ref_image);
+					var refVideos = pathValues(vals.ref_video);
+					var refVideoAudio = pathValues(vals.ref_video_audio);
+					var refAudio = pathValues(vals.ref_audio);
+					var hasReferences =
+						refImages.length || refVideos.length || refVideoAudio.length || refAudio.length;
+					if (hasReferences && (vals.init_img || vals.end_img)) {
+						return "MiniMax-H3 reference inputs cannot be combined with start or end frames.";
+					}
+					if (refVideoAudio.length > refVideos.length) {
+						return "Each reference video soundtrack needs a corresponding reference video.";
+					}
+					if ((refVideoAudio.length || refAudio.length) && !vals.audio_vae) {
+						return "MiniMax-H3 audio references require an Audio VAE.";
+					}
 				}
 				return null;
 		case "convert":
@@ -225,6 +247,10 @@ window.SDGui.flagCore = (() => {
 
 			if (f.type === "bool") {
 				if (v === true) args.push([f.flag]);
+				return;
+			}
+			if (f.type === "paths") {
+				pathValues(v).forEach((path) => args.push([f.flag, path]));
 				return;
 			}
 

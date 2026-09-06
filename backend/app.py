@@ -22,16 +22,21 @@ from typing import Any
 from . import config
 from .context import DEFAULT_CONTEXT
 from .http import (
+    CORS_ALLOW_HEADERS,
     WILDCARD_BIND_HOSTS,
+    InsecureBindError,
     Request,
     Response,
     get_access_control_origin,
     get_allowed_request_origins,
     get_cors_methods,
+    insecure_bind_warning,
+    is_gui_token_authorized,
     is_safe_request_origin,
     is_static_ui_path,
     is_trusted_request_host,
     is_v1_proxy_path,
+    require_secure_bind,
 )
 from .routes import file_picker as file_picker_routes
 from .routes import generate as generate_routes
@@ -234,6 +239,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return False
         return is_safe_request_origin(self.headers, self.get_allowed_request_origins())
 
+    def is_gui_auth_ok(self, method, path):
+        """Shared-secret check for mutating /api and all proxy paths when configured."""
+        return is_gui_token_authorized(self.headers, method, path, config.GUI_TOKEN)
+
+    def reject_unauthorized(self):
+        Response(self).error("Unauthorized", 401)
+
     def get_access_control_origin(self):
         return get_access_control_origin(self.headers, self.get_allowed_request_origins())
 
@@ -242,7 +254,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", self.get_access_control_origin())
         self.send_header("Access-Control-Allow-Methods", get_cors_methods(parsed.path))
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.send_header("Access-Control-Allow-Headers", CORS_ALLOW_HEADERS)
         self.end_headers()
 
     def read_body(self):
@@ -328,6 +340,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if not self.is_request_allowed():
                 self.send_error(403)
                 return
+            if not self.is_gui_auth_ok("GET", parsed.path):
+                self.reject_unauthorized()
+                return
             self.proxy_to_sd_server("GET", parsed)
             return
         if parsed.path in ("/", "/index.html"):
@@ -341,6 +356,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if not self.is_request_allowed():
                 self.send_error(403)
                 return
+            if not self.is_gui_auth_ok("GET", parsed.path):
+                self.reject_unauthorized()
+                return
             self.dispatch("GET", parsed)
             return
         super().do_GET()
@@ -351,6 +369,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if not self.is_request_allowed():
                 self.send_error(403)
                 return
+            if not self.is_gui_auth_ok("POST", parsed.path):
+                self.reject_unauthorized()
+                return
             body = self.read_raw_body()
             if body is None:
                 self.send_error(413, "Request body too large")
@@ -359,6 +380,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
         if not self.is_request_allowed():
             self.send_error(403)
+            return
+        if not self.is_gui_auth_ok("POST", parsed.path):
+            self.reject_unauthorized()
             return
         body = self.read_body()
         if body is _BODY_TOO_LARGE:
@@ -373,6 +397,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         if not self.is_request_allowed():
             self.send_error(403)
+            return
+        if not self.is_gui_auth_ok("DELETE", parsed.path):
+            self.reject_unauthorized()
             return
         if is_v1_proxy_path(parsed.path):
             body = self.read_raw_body()
@@ -398,6 +425,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not self.is_request_allowed():
             self.send_error(403)
             return
+        if not self.is_gui_auth_ok("PUT", parsed.path):
+            self.reject_unauthorized()
+            return
         body = self.read_raw_body()
         if body is None:
             self.send_error(413, "Request body too large")
@@ -411,6 +441,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
         if not self.is_request_allowed():
             self.send_error(403)
+            return
+        if not self.is_gui_auth_ok("PATCH", parsed.path):
+            self.reject_unauthorized()
             return
         body = self.read_raw_body()
         if body is None:
@@ -463,6 +496,15 @@ API_ROUTER = (
 
 
 def main() -> None:
+    try:
+        require_secure_bind(config.GUI_HOST, config.GUI_TOKEN, config.GUI_ALLOW_INSECURE)
+    except InsecureBindError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+    warning = insecure_bind_warning(config.GUI_HOST, config.GUI_TOKEN, config.GUI_ALLOW_INSECURE)
+    if warning:
+        print(warning, file=sys.stderr)
+
     port = config.GUI_PORT
     for d in (
         config.MODELS_DIR,
@@ -506,6 +548,8 @@ def main() -> None:
         sys.exit(1)
 
     print(f"StableDfusion running at http://{config.GUI_HOST}:{port}")
+    if config.GUI_TOKEN:
+        print("API auth: SD_GUI_TOKEN is set (Bearer / X-SD-GUI-Token required on mutating APIs).")
     print("Press Ctrl+C to stop the server.")
     try:
         STATE.gui_server.serve_forever()

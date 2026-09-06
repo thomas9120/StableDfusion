@@ -168,30 +168,12 @@ window.SDGui.hfDownloadUi = (() => {
 				body: JSON.stringify(inputs),
 			});
 			state.files = (data && data.files) || [];
-			// Sensible default selection: pre-check the largest of each name
-			// family (helps when a repo ships both GGUF + SafeTensors variants —
-			// user can override). Skip if there are ≤ 3 files.
+			// Small repos usually represent one bundle; large repos commonly contain
+			// mutually exclusive quantizations or model variants, so selecting none
+			// avoids accidental multi-hundred-GB downloads.
 			state.selected = new Set();
 			if (state.files.length > 0 && state.files.length <= 3) {
 				state.files.forEach((f) => state.selected.add(f.name));
-			} else if (state.files.length > 3) {
-				// Default-select one common "main" weight format. Prefer GGUF
-				// quant/f16 names, then fall back to safetensors only if no GGUF
-				// candidate was selected.
-				var selectedGguf = false;
-				state.files.forEach((f) => {
-					if (/(q4_0|q5_0|q5_1|q8_0|fp8|fp16|f16).*\.gguf$/i.test(f.name)) {
-						state.selected.add(f.name);
-						selectedGguf = true;
-					}
-				});
-				if (!selectedGguf) {
-					state.files.forEach((f) => {
-						if (/\.safetensors$/i.test(f.name)) {
-							state.selected.add(f.name);
-						}
-					});
-				}
 			}
 			renderFileList();
 			var msg =

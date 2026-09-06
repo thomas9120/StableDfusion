@@ -18,6 +18,7 @@ PLAN.md §16 open decision #3.
 import fnmatch
 import hashlib
 import json
+import os
 import pathlib
 import re
 import shutil
@@ -31,6 +32,11 @@ from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
 from ..context import AppContext
+from ..download_security import (
+    parse_github_asset_digest,
+    safe_download_basename,
+    validate_github_download_url,
+)
 
 # macOS @rpath/ libraries reported by `otool -L`.
 RPATH_LIBRARY_RE = re.compile(r"^\s*@rpath/([^\s(]+)")
@@ -69,21 +75,22 @@ def _install_identity(item: Mapping[str, Any]) -> tuple[str, str] | None:
 def normalize_install_config(raw: Mapping[str, Any] | None) -> dict[str, Any]:
     """Return current install config shape, migrating legacy top-level fields."""
     cfg = _blank_install_config()
+    active_declared = isinstance(raw, Mapping) and "active_install" in raw
     if isinstance(raw, Mapping):
         cfg.update(dict(raw))
 
     active = cfg.get("active_install")
     if not isinstance(active, Mapping):
-        legacy_tag = cfg.get("tag")
-        legacy_backend = cfg.get("backend")
-        if _valid_install_part(legacy_tag) and _valid_install_part(legacy_backend):
-            active = {
-                "tag": legacy_tag,
-                "backend": legacy_backend,
-                "version": cfg.get("version") or legacy_tag,
-            }
-        else:
-            active = None
+        active = None
+        if not active_declared:
+            legacy_tag = cfg.get("tag")
+            legacy_backend = cfg.get("backend")
+            if _valid_install_part(legacy_tag) and _valid_install_part(legacy_backend):
+                active = {
+                    "tag": legacy_tag,
+                    "backend": legacy_backend,
+                    "version": cfg.get("version") or legacy_tag,
+                }
 
     installed: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
@@ -291,28 +298,72 @@ def build_backend_specs(current_platform: str, current_arch: str) -> dict[str, d
     asset — used for the CUDA runtime zip.
     """
     if current_platform == "win32" and current_arch == "x64":
-        # avx2 first = recommended default CPU choice.
+        # One dynamic CPU backend replaced the per-AVX release artifacts.
         return {
+            "cpu": {
+                "label": "CPU — recommended",
+                "asset_pattern": "*-bin-win-cpu-x64.zip",
+            },
             "cpu-avx2": {
                 "label": "CPU (AVX2) — recommended",
                 "asset_pattern": "*-bin-win-avx2-x64.zip",
+                "asset_patterns": [
+                    "*-bin-win-cpu-x64.zip",
+                    "*-bin-win-avx2-x64.zip",
+                ],
+                "hidden": True,
             },
-            "cpu-avx": {"label": "CPU (AVX)", "asset_pattern": "*-bin-win-avx-x64.zip"},
-            "cpu-avx512": {"label": "CPU (AVX512)", "asset_pattern": "*-bin-win-avx512-x64.zip"},
-            "cpu-noavx": {"label": "CPU (no AVX)", "asset_pattern": "*-bin-win-noavx-x64.zip"},
+            "cpu-avx": {
+                "label": "CPU (AVX)",
+                "asset_pattern": "*-bin-win-avx-x64.zip",
+                "asset_patterns": ["*-bin-win-cpu-x64.zip", "*-bin-win-avx-x64.zip"],
+                "hidden": True,
+            },
+            "cpu-avx512": {
+                "label": "CPU (AVX512)",
+                "asset_pattern": "*-bin-win-avx512-x64.zip",
+                "asset_patterns": [
+                    "*-bin-win-cpu-x64.zip",
+                    "*-bin-win-avx512-x64.zip",
+                ],
+                "hidden": True,
+            },
+            "cpu-noavx": {
+                "label": "CPU (no AVX)",
+                "asset_pattern": "*-bin-win-noavx-x64.zip",
+                "asset_patterns": [
+                    "*-bin-win-cpu-x64.zip",
+                    "*-bin-win-noavx-x64.zip",
+                ],
+                "hidden": True,
+            },
             "cuda12": {
                 "label": "CUDA 12 (NVIDIA)",
                 "asset_pattern": "*-bin-win-cuda12-x64.zip",
                 "companion": "cudart-sd-bin-win-cu12-x64.zip",
             },
             "vulkan": {"label": "Vulkan", "asset_pattern": "*-bin-win-vulkan-x64.zip"},
+            "rocm": {
+                "label": "ROCm (AMD; toolkit required)",
+                "asset_pattern": "*-bin-win-rocm-*-x64.zip",
+            },
             "rocm-7.1.1": {
                 "label": "ROCm 7.1.1 (AMD)",
                 "asset_pattern": "*-bin-win-rocm-7.1.1-x64.zip",
+                "asset_patterns": [
+                    "*-bin-win-rocm-*-x64.zip",
+                    "*-bin-win-rocm-7.1.1-x64.zip",
+                ],
+                "hidden": True,
             },
             "rocm-7.13.0": {
                 "label": "ROCm 7.13.0 (AMD)",
                 "asset_pattern": "*-bin-win-rocm-7.13.0-x64.zip",
+                "asset_patterns": [
+                    "*-bin-win-rocm-*-x64.zip",
+                    "*-bin-win-rocm-7.13.0-x64.zip",
+                ],
+                "hidden": True,
             },
         }
     if current_platform.startswith("linux") and current_arch == "x64":
@@ -325,13 +376,27 @@ def build_backend_specs(current_platform: str, current_arch: str) -> dict[str, d
                 "label": "Vulkan",
                 "asset_pattern": "*-bin-Linux-Ubuntu-24.04-x86_64-vulkan.zip",
             },
+            "rocm": {
+                "label": "ROCm (AMD)",
+                "asset_pattern": "*-bin-Linux-Ubuntu-24.04-x86_64-rocm-*.zip",
+            },
             "rocm-7.2.1": {
                 "label": "ROCm 7.2.1 (AMD)",
                 "asset_pattern": "*-bin-Linux-Ubuntu-24.04-x86_64-rocm-7.2.1.zip",
+                "asset_patterns": [
+                    "*-bin-Linux-Ubuntu-24.04-x86_64-rocm-*.zip",
+                    "*-bin-Linux-Ubuntu-24.04-x86_64-rocm-7.2.1.zip",
+                ],
+                "hidden": True,
             },
             "rocm-7.13.0": {
                 "label": "ROCm 7.13.0 (AMD)",
                 "asset_pattern": "*-bin-Linux-Ubuntu-24.04-x86_64-rocm-7.13.0.zip",
+                "asset_patterns": [
+                    "*-bin-Linux-Ubuntu-24.04-x86_64-rocm-*.zip",
+                    "*-bin-Linux-Ubuntu-24.04-x86_64-rocm-7.13.0.zip",
+                ],
+                "hidden": True,
             },
         }
     if current_platform == "darwin" and current_arch == "arm64":
@@ -353,6 +418,13 @@ def find_asset(assets: list[dict[str, Any]], pattern: str) -> dict[str, Any] | N
         if name and fnmatch.fnmatch(name, pattern):
             return asset
     return None
+
+
+def find_asset_for_spec(
+    assets: list[dict[str, Any]], spec: Mapping[str, Any]
+) -> dict[str, Any] | None:
+    patterns = spec.get("asset_patterns") or [spec["asset_pattern"]]
+    return next((match for pattern in patterns if (match := find_asset(assets, pattern))), None)
 
 
 def find_asset_by_name(assets: list[dict[str, Any]], name: str) -> dict[str, Any] | None:
@@ -440,8 +512,12 @@ def download_file(
     dest: pathlib.Path,
     progress_cb: Callable[[int, int], None] | None = None,
 ) -> int:
+    url = validate_github_download_url(url)
     req = urllib.request.Request(url, headers={"User-Agent": "stable-d-gui"})
     with ctx.services.urlopen_with_ssl(req, timeout=60) as resp:
+        final_url = getattr(resp, "geturl", lambda: url)()
+        if final_url:
+            validate_github_download_url(str(final_url))
         total = int(resp.headers.get("Content-Length", 0))
         downloaded = 0
         with open(dest, "wb") as f:
@@ -551,12 +627,11 @@ def get_macos_rpath_libraries(executable: pathlib.Path) -> list[str]:
 def validate_runtime_dependencies(
     ctx: AppContext, tools: Iterable[str] | None = None
 ) -> dict[str, Any]:
-    """Check that tool executables exist and (on macOS) their @rpath libs are present.
+    """Check that tool executables and required runtime libraries are present.
 
-    On Windows/Linux the shared libs are resolved via PATH/LD_LIBRARY_PATH at
-    launch (process_manager prepends sdcpp/bin), so we only verify executables
-    there and report ``ok=True``. On macOS we additionally inspect ``otool -L``
-    so a missing .dylib surfaces as "Install Incomplete".
+    Windows ROCm builds require hipBLAS from an external ROCm toolkit. macOS
+    dependencies are discovered from ``otool -L``. Other shared libraries are
+    resolved by the platform loader at launch.
     """
     current_platform = ctx.services.current_platform
     checked_tools: list[str] = []
@@ -588,6 +663,14 @@ def validate_runtime_dependencies(
         missing_runtime_files = sorted(
             name for name in required if not (active_bin / name).exists()
         )
+    elif current_platform == "win32":
+        active = get_active_install(ctx) or {}
+        if str(active.get("backend", "")).startswith("rocm"):
+            required.add("hipblas.dll")
+            search_dirs = [get_active_runtime_bin(ctx), *map(pathlib.Path, os.get_exec_path())]
+            missing_runtime_files = sorted(
+                name for name in required if not any((path / name).exists() for path in search_dirs)
+            )
 
     return {
         "ok": not missing_executables and not missing_runtime_files,
@@ -623,24 +706,31 @@ def install_release(
         set_download_progress(ctx, status="error", message=f"Unknown backend: {backend}")
         return False
 
-    asset = find_asset(assets, backend_spec["asset_pattern"])
+    patterns = backend_spec.get("asset_patterns") or [backend_spec["asset_pattern"]]
+    asset = find_asset_for_spec(assets, backend_spec)
     if not asset:
         set_download_progress(
             ctx,
             status="error",
             message=(
-                f"No asset matching {backend_spec['asset_pattern']} in release {tag}. "
+                f"No asset matching {', '.join(patterns)} in release {tag}. "
                 "Try a different backend or a newer release."
             ),
         )
         return False
 
-    # GitHub release assets carry no sha256 metadata, and upstream ships no
-    # checksum file (PLAN §16 #3). Verification is skipped with a warning.
-    expected_sha = asset.get("sha256")
+    # Upstream often ships no checksums (PLAN §16 #3). Prefer asset["sha256"] or
+    # GitHub's asset["digest"] (sha256:...) when present; otherwise warn and skip.
+    try:
+        asset_name = safe_download_basename(str(asset.get("name") or ""))
+    except ValueError as exc:
+        set_download_progress(ctx, status="error", message=str(exc))
+        return False
+
+    expected_sha = parse_github_asset_digest(asset)
     if not expected_sha:
         print(
-            f"WARNING: No SHA256 available for {asset['name']}; skipping checksum verification.",
+            f"WARNING: No SHA256 available for {asset_name}; skipping checksum verification.",
             file=sys.stderr,
         )
 
@@ -650,21 +740,26 @@ def install_release(
         def progress_cb(downloaded: int, total: int) -> None:
             set_download_progress(ctx, downloaded=downloaded, total=total)
 
-        archive_path = tmpdir / asset["name"]
-        set_download_progress(ctx, message=f"Downloading {asset['name']}...")
+        archive_path = tmpdir / asset_name
+        set_download_progress(ctx, message=f"Downloading {asset_name}...")
         download_file(ctx, asset["browser_download_url"], archive_path, progress_cb)
 
         if expected_sha:
             actual_sha = sha256_file(archive_path)
-            if actual_sha != expected_sha:
+            if actual_sha.lower() != expected_sha.lower():
                 set_download_progress(
-                    ctx, status="error", message=f"SHA256 mismatch for {asset['name']}"
+                    ctx, status="error", message=f"SHA256 mismatch for {asset_name}"
                 )
                 return False
 
         companion_archives: list[pathlib.Path] = []
         companion_name = backend_spec.get("companion")
         if companion_name:
+            try:
+                companion_name = safe_download_basename(str(companion_name))
+            except ValueError as exc:
+                set_download_progress(ctx, status="error", message=str(exc))
+                return False
             companion_asset = find_asset_by_name(assets, companion_name)
             if companion_asset:
                 companion_path = tmpdir / companion_name
@@ -672,6 +767,16 @@ def install_release(
                 download_file(
                     ctx, companion_asset["browser_download_url"], companion_path, progress_cb
                 )
+                companion_sha = parse_github_asset_digest(companion_asset)
+                if companion_sha:
+                    actual_companion = sha256_file(companion_path)
+                    if actual_companion.lower() != companion_sha.lower():
+                        set_download_progress(
+                            ctx,
+                            status="error",
+                            message=f"SHA256 mismatch for {companion_name}",
+                        )
+                        return False
                 companion_archives.append(companion_path)
             else:
                 print(

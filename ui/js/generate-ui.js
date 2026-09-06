@@ -28,6 +28,7 @@ window.SDGui.generateUi = (() => {
 	var populateEnum = dom.populateEnum;
 
 	var bindText = ctrl.bindText;
+	var bindPaths = ctrl.bindPaths;
 	var bindNumber = ctrl.bindNumber;
 	var bindEnum = ctrl.bindEnum;
 	var bindPathSelect = ctrl.bindPathSelect;
@@ -241,6 +242,37 @@ window.SDGui.generateUi = (() => {
 		if (resultEmpty) resultEmpty.textContent = cfg.empty;
 	}
 
+	function alignH3Frames(seconds) {
+		var frames = Math.max(5, Math.ceil(Number(seconds) * 24));
+		while (frames % 17 !== 5) frames++;
+		return frames;
+	}
+
+	function syncH3Duration() {
+		var isH3 = window.SDGui.flagCore.getBundle() === "minimax_h3";
+		setHidden($("gen-h3-duration-group"), !isH3);
+		setHidden($("gen-video-frames-group"), isH3);
+		setHidden($("gen-fps-group"), isH3);
+		if (!isH3) return;
+
+		var frames = Number(window.SDGui.flagCore.getFlagValues().video_frames) || 124;
+		var actualSeconds = frames / 24;
+		var input = $("gen-h3-duration");
+		if (input && document.activeElement !== input) {
+			input.value = String(
+				actualSeconds < 5 ? actualSeconds.toFixed(2) : Math.round(actualSeconds),
+			);
+		}
+		var actual = $("gen-h3-duration-actual");
+		if (actual) {
+			actual.textContent =
+				actualSeconds.toFixed(2) +
+				" seconds actual (" +
+				frames +
+				" frames at 24 FPS)";
+		}
+	}
+
 	function updateModeSections() {
 		var mode = window.SDGui.flagCore.getMode();
 		var activePanelId = MODE_INPUT_PANELS[mode];
@@ -273,6 +305,7 @@ window.SDGui.generateUi = (() => {
 		setHidden($("gen-sampling-section"), !usePrompt);
 		setHidden($("gen-advanced-section"), !usePrompt);
 		setHidden($("gen-model-setup-section"), mode === "upscale");
+		syncH3Duration();
 
 		dims.updateAffordances();
 		updateActionCopy();
@@ -320,6 +353,44 @@ window.SDGui.generateUi = (() => {
 				window.SDGui.flagCore.setFlagValue(flagId, res.path);
 				syncControl(flagId);
 			}
+		} catch (e) {
+			window.SDGui.toast(e.message, "error");
+		}
+	}
+
+	function appendPathValue(flagId, path) {
+		var current = window.SDGui.flagCore.getFlagValues()[flagId];
+		var values = Array.isArray(current)
+			? current.slice()
+			: String(current || "")
+					.split(/\r?\n/)
+					.filter(Boolean);
+		values.push(path);
+		window.SDGui.flagCore.setFlagValue(flagId, values);
+		syncControl(flagId);
+	}
+
+	async function browseAppendPath(flagId, purpose, title) {
+		try {
+			var res = await window.SDGui.fetchJson("/api/select-file", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ purpose: purpose, title: title }),
+			});
+			if (res && res.selected && res.path) appendPathValue(flagId, res.path);
+		} catch (e) {
+			window.SDGui.toast(e.message, "error");
+		}
+	}
+
+	async function browseAppendDir(flagId, title) {
+		try {
+			var res = await window.SDGui.fetchJson("/api/select-directory", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ title: title }),
+			});
+			if (res && res.selected && res.path) appendPathValue(flagId, res.path);
 		} catch (e) {
 			window.SDGui.toast(e.message, "error");
 		}
@@ -490,9 +561,9 @@ window.SDGui.generateUi = (() => {
 		bindBrowse("btn-browse-init-img", () =>
 			browsePath("init_img", "image", "Select init image"),
 		);
-		bindText("gen-ref-image", "ref_image");
+		bindPaths("gen-ref-image", "ref_image");
 		bindBrowse("btn-browse-ref-image", () =>
-			browsePath("ref_image", "image", "Select reference image"),
+			browseAppendPath("ref_image", "image", "Select reference image"),
 		);
 		bindNumber("gen-strength", "strength", true);
 		bindNumber("gen-img-cfg", "img_cfg_scale", true);
@@ -508,6 +579,17 @@ window.SDGui.generateUi = (() => {
 
 		bindNumber("gen-video-frames", "video_frames");
 		bindNumber("gen-fps", "fps");
+		var h3Duration = $("gen-h3-duration");
+		if (h3Duration) {
+			h3Duration.addEventListener("change", () => {
+				var seconds = Math.max(5, Number(h3Duration.value) || 5);
+				window.SDGui.flagCore.setMultipleFlagValues({
+					video_frames: alignH3Frames(seconds),
+					fps: 24,
+				});
+				syncH3Duration();
+			});
+		}
 		bindNumber("gen-vace-strength", "vace_strength", true);
 		bindBool("gen-temporal-tiling", "temporal_tiling");
 		bindText("gen-video-init-img", "init_img");
@@ -517,6 +599,22 @@ window.SDGui.generateUi = (() => {
 		bindText("gen-video-end-img", "end_img");
 		bindBrowse("btn-browse-video-end-img", () =>
 			browsePath("end_img", "image", "Select end frame"),
+		);
+		bindPaths("gen-video-ref-images", "ref_image");
+		bindBrowse("btn-browse-video-ref-image", () =>
+			browseAppendPath("ref_image", "image", "Select reference image"),
+		);
+		bindPaths("gen-ref-videos", "ref_video");
+		bindBrowse("btn-browse-ref-video", () =>
+			browseAppendDir("ref_video", "Select reference video frames"),
+		);
+		bindPaths("gen-ref-video-audios", "ref_video_audio");
+		bindBrowse("btn-browse-ref-video-audio", () =>
+			browseAppendPath("ref_video_audio", "audio", "Select reference video soundtrack"),
+		);
+		bindPaths("gen-ref-audios", "ref_audio");
+		bindBrowse("btn-browse-ref-audio", () =>
+			browseAppendPath("ref_audio", "audio", "Select standalone audio reference"),
 		);
 
 		bindText("gen-control-video", "control_video");
@@ -604,6 +702,11 @@ window.SDGui.generateUi = (() => {
 			// field) must not trigger a full rebuild per keystroke.
 			syncSelectorsFromState();
 			syncAll();
+			syncH3Duration();
+			// Dimensions are cheap to refresh (size buttons only rebuild when
+			// the shape changes, M27 guard in dimensions.js), so update the
+			// chips/readout even when width/height change from Configure.
+			dims.updateAffordances();
 		});
 	}
 

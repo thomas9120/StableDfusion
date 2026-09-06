@@ -43,9 +43,12 @@ window.SDGui.configFlagsUi = (() => {
 			});
 			wrap.appendChild(sel);
 		} else {
-			var input = el("input");
+			var input = el(flag.type === "paths" ? "textarea" : "input");
 			input.id = "cfg-" + flag.id;
-			if (flag.type === "int") {
+			if (flag.type === "paths") {
+				input.rows = 3;
+				input.placeholder = "One path per line";
+			} else if (flag.type === "int") {
 				input.type = "number";
 				input.step = "1";
 			} else if (flag.type === "float") {
@@ -54,19 +57,58 @@ window.SDGui.configFlagsUi = (() => {
 			} else {
 				input.type = "text";
 			}
-			if (cur !== undefined && cur !== null) input.value = String(cur);
-			input.addEventListener("change", () => {
+			if (cur !== undefined && cur !== null)
+				input.value =
+					flag.type === "paths" && Array.isArray(cur)
+						? cur.join("\n")
+						: String(cur);
+			var commit = () => {
 				var val = input.value;
-				if (flag.type === "int") val = parseInt(val, 10);
+				if (flag.type === "paths")
+					val = val
+						.split(/\r?\n/)
+						.map((path) => path.trim())
+						.filter(Boolean);
+				else if (flag.type === "int") val = parseInt(val, 10);
 				else if (flag.type === "float") val = parseFloat(val);
 				// M20 — don't persist NaN into shared state (empty/invalid
 				// input). The flag keeps its previous value.
 				if (Number.isNaN(val)) return;
 				window.SDGui.flagCore.setFlagValue(flag.id, val);
-			});
+			};
+			// Single-line text fields commit live per keystroke (matches the
+			// Generate tab's bindText and keeps the command preview live);
+			// numeric + multi-path inputs commit on blur/Enter to avoid
+			// intermediate-value flicker and mid-typing path mangling.
+			input.addEventListener(input.type === "text" ? "input" : "change", commit);
 			wrap.appendChild(input);
 		}
 		return wrap;
+	}
+
+	// Push the current shared value into a single rendered Configure control
+	// (unless the user is editing it), mirroring generate/control-bindings'
+	// syncControl. Used by the onChange refresh so external changes still
+	// surface while another Configure input has focus — without rebuilding the
+	// whole tab mid-typing (M19). `vals` is a single getFlagValues() snapshot
+	// shared across the whole refresh (avoids one deep clone per flag).
+	function syncInputFromState(flag, vals) {
+		var node = document.getElementById("cfg-" + flag.id);
+		if (!node || document.activeElement === node) return;
+		var cur = vals[flag.id];
+		if (cur === undefined || cur === null) return;
+		if (flag.type === "bool") node.checked = cur === true;
+		else if (flag.type === "paths")
+			node.value = (Array.isArray(cur) ? cur : [cur]).filter(Boolean).join("\n");
+		else node.value = String(cur);
+	}
+
+	// Same as syncInputFromState but for the custom-args textarea, which is
+	// rendered separately (renderCustomArgs) and is not part of SD_CLI_FLAGS.
+	function syncCustomArgs(vals) {
+		var ta = document.getElementById("configure-custom-args");
+		if (!ta || document.activeElement === ta) return;
+		ta.value = vals.custom_args || "";
 	}
 
 	function flagMatchesSearch(flag) {
@@ -194,13 +236,19 @@ window.SDGui.configFlagsUi = (() => {
 		var btnCollapse = document.getElementById("btn-collapse-all");
 		if (btnCollapse) btnCollapse.addEventListener("click", collapseAll);
 		// Re-render when shared state changes (e.g. Generate edits the same flag,
-		// history restore, or bundle switch). M19 — do a full rebuild so inputs
-		// reflect the new values, unless the user is actively editing a Configure
-		// input (don't clobber focused fields mid-typing).
+		// history restore, or bundle switch). M19 — while the user is editing a
+		// Configure input, don't rebuild the whole tab (that would clobber the
+		// focused field mid-typing); instead push state into every non-focused
+		// control and refresh the preview so external changes still appear.
 		window.SDGui.flagCore.onChange(() => {
 			var container = document.getElementById("configure-flags");
 			var focused = container && container.contains(document.activeElement);
 			if (focused) {
+				var vals = window.SDGui.flagCore.getFlagValues();
+				(window.SDGui.SD_CLI_FLAGS || [])
+					.filter((f) => !f.backendOwned)
+					.forEach((f) => syncInputFromState(f, vals));
+				syncCustomArgs(vals);
 				renderPreview();
 			} else {
 				render();

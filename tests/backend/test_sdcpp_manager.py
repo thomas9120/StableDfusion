@@ -9,6 +9,8 @@ the tag. See PLAN.md §11.
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -19,11 +21,16 @@ from backend.services import sdcpp_manager  # noqa: E402
 # Realistic asset names observed from the live GitHub releases API.
 WIN_ASSETS = [
     {"name": "cudart-sd-bin-win-cu12-x64.zip", "browser_download_url": "url-cudart"},
+    {"name": "sd-master-ea7f0c8-bin-win-cpu-x64.zip", "browser_download_url": "url-cpu"},
     {"name": "sd-master-92a3b73-bin-win-avx-x64.zip", "browser_download_url": "url-avx"},
     {"name": "sd-master-92a3b73-bin-win-avx2-x64.zip", "browser_download_url": "url-avx2"},
     {"name": "sd-master-92a3b73-bin-win-avx512-x64.zip", "browser_download_url": "url-avx512"},
     {"name": "sd-master-92a3b73-bin-win-cuda12-x64.zip", "browser_download_url": "url-cuda12"},
     {"name": "sd-master-92a3b73-bin-win-vulkan-x64.zip", "browser_download_url": "url-vulkan"},
+    {
+        "name": "sd-master-ea7f0c8-bin-win-rocm-7.14.0-x64.zip",
+        "browser_download_url": "url-rocm",
+    },
 ]
 
 MAC_ASSET_NAME = "sd-master-92a3b73-bin-Darwin-macOS-15.7.7-arm64.zip"
@@ -40,9 +47,10 @@ def name_of(asset):
 
 def test_build_backend_specs_win32_x64_has_recommended_default_first():
     specs = sdcpp_manager.build_backend_specs("win32", "x64")
-    assert "cpu-avx2" in specs
-    # avx2 is the recommended default → listed first.
-    assert list(specs.keys())[0] == "cpu-avx2"
+    assert "cpu" in specs
+    # The combined CPU build is the recommended default → listed first.
+    assert list(specs.keys())[0] == "cpu"
+    assert specs["cpu-avx2"]["hidden"] is True
     # CUDA variant carries the runtime companion.
     assert specs["cuda12"]["companion"] == "cudart-sd-bin-win-cu12-x64.zip"
     assert specs["cuda12"]["asset_pattern"].endswith("-bin-win-cuda12-x64.zip")
@@ -53,14 +61,27 @@ def test_build_backend_specs_unsupported_platform_is_empty():
     assert sdcpp_manager.build_backend_specs("haiku", "x64") == {}
 
 
-def test_find_asset_matches_avx2_without_colliding_with_avx_or_avx512():
+def test_find_asset_matches_current_cpu_and_rocm_release_names():
     specs = sdcpp_manager.build_backend_specs("win32", "x64")
-    avx2 = sdcpp_manager.find_asset(WIN_ASSETS, specs["cpu-avx2"]["asset_pattern"])
-    avx = sdcpp_manager.find_asset(WIN_ASSETS, specs["cpu-avx"]["asset_pattern"])
-    avx512 = sdcpp_manager.find_asset(WIN_ASSETS, specs["cpu-avx512"]["asset_pattern"])
-    assert name_of(avx2) == "sd-master-92a3b73-bin-win-avx2-x64.zip"
-    assert name_of(avx) == "sd-master-92a3b73-bin-win-avx-x64.zip"
-    assert name_of(avx512) == "sd-master-92a3b73-bin-win-avx512-x64.zip"
+    cpu = sdcpp_manager.find_asset(WIN_ASSETS, specs["cpu"]["asset_pattern"])
+    rocm = sdcpp_manager.find_asset(WIN_ASSETS, specs["rocm"]["asset_pattern"])
+    assert name_of(cpu) == "sd-master-ea7f0c8-bin-win-cpu-x64.zip"
+    assert name_of(rocm) == "sd-master-ea7f0c8-bin-win-rocm-7.14.0-x64.zip"
+
+    linux_spec = sdcpp_manager.build_backend_specs("linux", "x64")["rocm"]
+    linux_asset = [{"name": "sd-master-ea7f0c8-bin-Linux-Ubuntu-24.04-x86_64-rocm-7.14.0.zip"}]
+    assert sdcpp_manager.find_asset(linux_asset, linux_spec["asset_pattern"]) is not None
+
+
+def test_legacy_cpu_spec_prefers_combined_asset_and_keeps_old_fallback():
+    spec = sdcpp_manager.build_backend_specs("win32", "x64")["cpu-avx2"]
+    assert name_of(sdcpp_manager.find_asset_for_spec(WIN_ASSETS, spec)) == (
+        "sd-master-ea7f0c8-bin-win-cpu-x64.zip"
+    )
+    old_assets = [asset for asset in WIN_ASSETS if "ea7f0c8" not in asset["name"]]
+    assert name_of(sdcpp_manager.find_asset_for_spec(old_assets, spec)) == (
+        "sd-master-92a3b73-bin-win-avx2-x64.zip"
+    )
 
 
 def test_find_asset_cuda12_main_pattern_does_not_match_cudart_companion():
@@ -197,3 +218,199 @@ def test_remove_runtime_deletes_only_target_and_selects_next_active(tmp_path):
     assert not vulkan.exists()
     assert (cpu / "sd-cli.exe").exists()
     assert cfg["active_install"]["backend"] == "cpu-avx2"
+
+
+def test_remove_last_runtime_does_not_restore_legacy_active_fields(tmp_path):
+    ctx, cfg = make_ctx(
+        tmp_path,
+        {
+            "version": "Build 1",
+            "tag": "master-1-abc",
+            "backend": "vulkan",
+            "active_install": {
+                "tag": "master-1-abc",
+                "backend": "vulkan",
+                "version": "Build 1",
+            },
+            "installed_backends": [
+                {"tag": "master-1-abc", "backend": "vulkan", "version": "Build 1"}
+            ],
+        },
+    )
+    runtime = sdcpp_manager.runtime_bin_dir(ctx, "master-1-abc", "vulkan")
+    runtime.mkdir(parents=True)
+    (runtime / "sd-cli.exe").write_bytes(b"vulkan")
+
+    sdcpp_manager.remove_runtime(ctx, "master-1-abc", "vulkan")
+
+    assert cfg["active_install"] is None
+    assert cfg["installed_backends"] == []
+    assert cfg["tag"] is None
+    assert cfg["backend"] is None
+
+
+def test_download_file_rejects_non_github_url(tmp_path):
+    ctx, _cfg = make_ctx(tmp_path, {})
+    dest = tmp_path / "asset.zip"
+    with pytest.raises(ValueError):
+        sdcpp_manager.download_file(ctx, "http://github.com/leejet/x/a.zip", dest)
+    with pytest.raises(ValueError):
+        sdcpp_manager.download_file(ctx, "https://evil.example/a.zip", dest)
+
+
+def test_download_file_accepts_github_url(tmp_path):
+    ctx, _cfg = make_ctx(tmp_path, {})
+    payload = b"zip-bytes"
+
+    class FakeResp:
+        headers = {"Content-Length": str(len(payload))}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def geturl(self):
+            return "https://objects.githubusercontent.com/github-production-release-asset/1"
+
+        def read(self, n=-1):
+            if not hasattr(self, "_done"):
+                self._done = True
+                return payload
+            return b""
+
+    ctx.services.urlopen_with_ssl = lambda *a, **k: FakeResp()
+    dest = tmp_path / "asset.zip"
+    n = sdcpp_manager.download_file(
+        ctx,
+        "https://github.com/leejet/stable-diffusion.cpp/releases/download/t/a.zip",
+        dest,
+    )
+    assert n == len(payload)
+    assert dest.read_bytes() == payload
+
+
+def test_install_release_rejects_unsafe_asset_name(tmp_path, monkeypatch):
+    ctx, _cfg = make_ctx(tmp_path, {})
+    specs = sdcpp_manager.build_backend_specs("win32", "x64")
+    monkeypatch.setattr(
+        sdcpp_manager,
+        "resolve_release",
+        lambda _ctx, _tag: {
+            "name": "Build",
+            "assets": [
+                {
+                    "name": "../evil.zip",
+                    "browser_download_url": (
+                        "https://github.com/leejet/stable-diffusion.cpp/"
+                        "releases/download/t/evil.zip"
+                    ),
+                }
+            ],
+        },
+    )
+    # Force matcher to return the evil asset regardless of pattern.
+    monkeypatch.setattr(
+        sdcpp_manager,
+        "find_asset_for_spec",
+        lambda assets, _spec: assets[0],
+    )
+    ok = sdcpp_manager.install_release(ctx, "tag", "cpu", specs)
+    assert ok is False
+    assert "Unsafe" in ctx.state.download_progress.snapshot()["message"] or "asset name" in (
+        ctx.state.download_progress.snapshot()["message"] or ""
+    )
+
+
+def test_parse_github_asset_digest_and_verify_path():
+    from backend.download_security import parse_github_asset_digest
+
+    assert parse_github_asset_digest({"sha256": "ABC"}) == "abc"
+    assert parse_github_asset_digest({"digest": "sha256:deadbeef"}) == "deadbeef"
+    assert parse_github_asset_digest({}) is None
+
+
+def test_install_release_rejects_digest_mismatch(tmp_path, monkeypatch):
+    """Asset digest that does not match downloaded bytes must fail install."""
+    import hashlib
+    import zipfile
+
+    ctx, _cfg = make_ctx(tmp_path, {})
+    specs = sdcpp_manager.build_backend_specs("win32", "x64")
+    asset_name = "sd-master-deadbeef-bin-win-cpu-x64.zip"
+    payload = b"not-the-signed-bytes"
+    wrong_digest = "0" * 64
+    assert hashlib.sha256(payload).hexdigest() != wrong_digest
+
+    monkeypatch.setattr(
+        sdcpp_manager,
+        "resolve_release",
+        lambda _ctx, _tag: {
+            "name": "Build",
+            "assets": [
+                {
+                    "name": asset_name,
+                    "browser_download_url": (
+                        "https://github.com/leejet/stable-diffusion.cpp/"
+                        f"releases/download/t/{asset_name}"
+                    ),
+                    "digest": f"sha256:{wrong_digest}",
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        sdcpp_manager,
+        "find_asset_for_spec",
+        lambda assets, _spec: assets[0],
+    )
+
+    def fake_download(_ctx, _url, dest, progress_cb=None):
+        # Minimal zip so a regress that skips verify would still extract.
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(dest, "w") as zf:
+            zf.writestr("sd-cli.exe", payload)
+        if progress_cb:
+            progress_cb(len(payload), len(payload))
+        return len(payload)
+
+    monkeypatch.setattr(sdcpp_manager, "download_file", fake_download)
+
+    ok = sdcpp_manager.install_release(ctx, "tag", "cpu", specs)
+    assert ok is False
+    message = ctx.state.download_progress.snapshot().get("message") or ""
+    assert "SHA256" in message
+    # Must not leave a half-installed runtime after verify failure.
+    target = sdcpp_manager.runtime_bin_dir(ctx, "tag", "cpu")
+    assert not target.exists()
+
+
+def test_windows_rocm_requires_hipblas_on_runtime_path(tmp_path, monkeypatch):
+    ctx, _cfg = make_ctx(
+        tmp_path,
+        {
+            "active_install": {
+                "tag": "master-1-abc",
+                "backend": "rocm",
+                "version": "Build 1",
+            },
+            "installed_backends": [
+                {"tag": "master-1-abc", "backend": "rocm", "version": "Build 1"}
+            ],
+        },
+    )
+    runtime = sdcpp_manager.runtime_bin_dir(ctx, "master-1-abc", "rocm")
+    runtime.mkdir(parents=True)
+    for tool in ctx.services.sdcpp_tools:
+        (runtime / f"{tool}.exe").write_bytes(b"exe")
+    ctx.services.find_tool_executable = lambda _ctx, tool: runtime / f"{tool}.exe"
+    system_bin = tmp_path / "rocm-system"
+    system_bin.mkdir()
+    monkeypatch.setenv("PATH", str(system_bin))
+
+    health = sdcpp_manager.validate_runtime_dependencies(ctx)
+    assert health["missing_runtime_files"] == ["hipblas.dll"]
+
+    (system_bin / "hipblas.dll").write_bytes(b"dll")
+    assert sdcpp_manager.validate_runtime_dependencies(ctx)["ok"] is True

@@ -1,5 +1,6 @@
 """Cloudflare tunnel lifecycle for exposing the running sd-server."""
 
+import hashlib
 import json
 import re
 import stat
@@ -13,8 +14,33 @@ from urllib.request import Request
 
 from .. import config
 from ..context import AppContext
+from ..download_security import (
+    safe_download_basename,
+    validate_github_download_url,
+)
 
 _TRY_URL_RE = re.compile(r"https://[-a-zA-Z0-9.]+\.trycloudflare\.com")
+
+# Pin cloudflared releases. Update CLOUDFLARED_VERSION and every entry in
+# CLOUDFLARED_SHA256 together when bumping the pin (hashes from the GitHub
+# release asset ``digest`` field for that tag).
+CLOUDFLARED_VERSION = "2026.7.3"
+CLOUDFLARED_RELEASE_API = (
+    f"https://api.github.com/repos/cloudflare/cloudflared/releases/tags/{CLOUDFLARED_VERSION}"
+)
+CLOUDFLARED_SHA256: dict[str, str] = {
+    "cloudflared-windows-amd64.exe": (
+        "8635da433b6df8194746e88ed9d2589566c20e38bfc2a80e431a348b7c765841"
+    ),
+    "cloudflared-linux-amd64": ("9d71c677db00134c1bd4144b7783486b654ad281b1ea62b4972098d19f770f17"),
+    "cloudflared-linux-arm64": ("65259e652a7bea08bf5df603233ab22b8bf3116af8df9f9206209af6a1b955c0"),
+    "cloudflared-darwin-amd64.tgz": (
+        "70d1c8684fa6d14b5843787ec8d1ea8e18b23650e424f4ea43d849a506487c3b"
+    ),
+    "cloudflared-darwin-arm64.tgz": (
+        "90c5a4f914d705fd70c135dba6d80b1791d254b08d6d4136301941f88330dd09"
+    ),
+}
 
 
 def _asset_name(ctx: AppContext) -> str:
@@ -38,49 +64,213 @@ def _exe_path(ctx: AppContext) -> Path:
     return ctx.paths.cloudflared / f"cloudflared{suffix}"
 
 
+def _version_path(ctx: AppContext) -> Path:
+    return ctx.paths.cloudflared / "VERSION"
+
+
+def _sha256_sidecar_path(ctx: AppContext) -> Path:
+    """On-disk SHA256 of the installed executable (not the download asset)."""
+    return ctx.paths.cloudflared / "SHA256"
+
+
+def _read_installed_version(ctx: AppContext) -> str | None:
+    path = _version_path(ctx)
+    if not path.is_file():
+        return None
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return text or None
+
+
+def _write_installed_version(ctx: AppContext) -> None:
+    _version_path(ctx).write_text(CLOUDFLARED_VERSION + "\n", encoding="utf-8")
+
+
+def _read_installed_sha256(ctx: AppContext) -> str | None:
+    path = _sha256_sidecar_path(ctx)
+    if not path.is_file():
+        return None
+    try:
+        text = path.read_text(encoding="utf-8").strip().lower()
+    except OSError:
+        return None
+    return text or None
+
+
+def _write_installed_sha256(ctx: AppContext, digest: str) -> None:
+    _sha256_sidecar_path(ctx).write_text(digest.lower() + "\n", encoding="utf-8")
+
+
+def _clear_cloudflared_artifacts(ctx: AppContext) -> None:
+    """Remove cached cloudflared binary, pin sidecars, and leftover download temps."""
+    exe = _exe_path(ctx)
+    version_file = _version_path(ctx)
+    sha_file = _sha256_sidecar_path(ctx)
+    for path in (exe, version_file, sha_file):
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+    cloudflared_dir = ctx.paths.cloudflared
+    if cloudflared_dir.is_dir():
+        for child in cloudflared_dir.iterdir():
+            name = child.name
+            if name.startswith("cloudflared") and child.is_file():
+                try:
+                    child.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+
+def _allowed_sd_server_port(ctx: AppContext) -> int:
+    """Port the tunnel is allowed to expose (running sd-server, else config default)."""
+    snap = ctx.state.sd_server.snapshot()
+    status = str(snap.get("status") or "idle")
+    if status in {"running", "starting"}:
+        try:
+            port = int(snap.get("port"))
+        except (TypeError, ValueError):
+            port = 0
+        if 1 <= port <= 65535:
+            return port
+    return int(ctx.config.sd_server_port)
+
+
+def _validate_tunnel_port(ctx: AppContext, port: int) -> int:
+    try:
+        port = int(port)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Invalid tunnel target port.") from exc
+    if port < 1 or port > 65535:
+        raise ValueError("Tunnel target port must be between 1 and 65535.")
+
+    gui_port = int(ctx.config.gui_port)
+    if port == gui_port:
+        raise ValueError(
+            f"Tunneling the GUI port ({gui_port}) is not allowed; "
+            "only the sd-server port may be exposed."
+        )
+
+    allowed = _allowed_sd_server_port(ctx)
+    if port != allowed:
+        raise ValueError(
+            f"Tunnel may only target the configured sd-server port ({allowed}), not {port}."
+        )
+    return port
+
+
 def _find_asset_download(ctx: AppContext, asset_name: str) -> str:
+    asset_name = safe_download_basename(asset_name)
     req = Request(
-        "https://api.github.com/repos/cloudflare/cloudflared/releases/latest",
+        CLOUDFLARED_RELEASE_API,
         headers={"User-Agent": "Stable-D-GUI"},
     )
     with ctx.services.urlopen_with_ssl(req, timeout=30) as resp:
         data = json.loads(resp.read().decode("utf-8"))
     for asset in data.get("assets", []):
-        if asset.get("name") == asset_name:
-            return str(asset.get("browser_download_url") or "")
-    raise RuntimeError(f"Could not find cloudflared asset {asset_name!r}.")
+        name = asset.get("name")
+        if name == asset_name:
+            url = str(asset.get("browser_download_url") or "")
+            return validate_github_download_url(url)
+    raise RuntimeError(
+        f"Could not find cloudflared asset {asset_name!r} in release {CLOUDFLARED_VERSION}."
+    )
+
+
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def _download_file(ctx: AppContext, url: str, dest: Path) -> None:
+    url = validate_github_download_url(url)
     req = Request(url, headers={"User-Agent": "Stable-D-GUI"})
     with ctx.services.urlopen_with_ssl(req, timeout=120) as resp:
+        final_url = getattr(resp, "geturl", lambda: url)()
+        if final_url:
+            validate_github_download_url(str(final_url))
         dest.write_bytes(resp.read())
 
 
 def _ensure_cloudflared(ctx: AppContext) -> Path:
+    """Return a verified cloudflared binary matching the pinned version + SHA.
+
+    ``CLOUDFLARED_SHA256[asset]`` is the hash of the **downloaded asset** (raw
+    exe or ``.tgz``), checked on the temp file before install. The installed
+    executable's content hash is persisted in a SHA256 sidecar and used for
+    cache hits — required on Darwin where the pin is the archive, not the exe.
+    Never trusts ``exe.exists()`` or VERSION alone.
+    """
     exe = _exe_path(ctx)
-    if exe.exists():
-        return exe
+    asset = safe_download_basename(_asset_name(ctx))
+    expected_sha = CLOUDFLARED_SHA256.get(asset)
+    if not expected_sha:
+        raise RuntimeError(f"No pinned SHA256 for cloudflared asset {asset!r}.")
+
+    installed_version = _read_installed_version(ctx)
+    installed_sha = _read_installed_sha256(ctx)
+    if exe.is_file() and installed_version == CLOUDFLARED_VERSION and installed_sha:
+        try:
+            actual_sha = _sha256_file(exe)
+        except OSError:
+            actual_sha = ""
+        if actual_sha.lower() == installed_sha.lower():
+            return exe
+
+    # Missing, wrong version, or wrong/missing sidecar hash — wipe and fetch.
+    _clear_cloudflared_artifacts(ctx)
     ctx.paths.cloudflared.mkdir(parents=True, exist_ok=True)
-    asset = _asset_name(ctx)
     url = _find_asset_download(ctx, asset)
     tmp = ctx.paths.cloudflared / asset
-    _download_file(ctx, url, tmp)
+    try:
+        _download_file(ctx, url, tmp)
+        actual_sha = _sha256_file(tmp)
+        if actual_sha.lower() != expected_sha.lower():
+            raise RuntimeError(
+                f"SHA256 mismatch for {asset}: expected {expected_sha}, got {actual_sha}."
+            )
 
-    if asset.endswith(".tgz"):
-        import tarfile
+        if asset.endswith(".tgz"):
+            import tarfile
 
-        with tarfile.open(tmp, "r:gz") as tar:
-            member = next((m for m in tar.getmembers() if Path(m.name).name == "cloudflared"), None)
-            if member is None:
-                raise RuntimeError("cloudflared archive did not contain the executable.")
-            extracted = tar.extractfile(member)
-            if extracted is None:
-                raise RuntimeError("cloudflared executable could not be read from archive.")
-            exe.write_bytes(extracted.read())
+            with tarfile.open(tmp, "r:gz") as tar:
+                member = next(
+                    (m for m in tar.getmembers() if Path(m.name).name == "cloudflared"),
+                    None,
+                )
+                if member is None:
+                    raise RuntimeError("cloudflared archive did not contain the executable.")
+                extracted = tar.extractfile(member)
+                if extracted is None:
+                    raise RuntimeError("cloudflared executable could not be read from archive.")
+                exe.write_bytes(extracted.read())
+            tmp.unlink(missing_ok=True)
+        else:
+            tmp.replace(exe)
+        exe_sha = _sha256_file(exe)
+        _write_installed_version(ctx)
+        _write_installed_sha256(ctx, exe_sha)
+    except Exception:
         tmp.unlink(missing_ok=True)
-    else:
-        tmp.replace(exe)
+        # Leave no half-installed binary/sidecars after a failed verify/write.
+        try:
+            exe.unlink(missing_ok=True)
+        except OSError:
+            pass
+        try:
+            _version_path(ctx).unlink(missing_ok=True)
+        except OSError:
+            pass
+        try:
+            _sha256_sidecar_path(ctx).unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
 
     if sys.platform != "win32":
         exe.chmod(exe.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
@@ -130,12 +320,7 @@ def _monitor(ctx: AppContext, proc) -> None:
 
 
 def start(ctx: AppContext, port: int) -> dict:
-    try:
-        port = int(port)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("Invalid tunnel target port.") from exc
-    if port < 1 or port > 65535:
-        raise ValueError("Tunnel target port must be between 1 and 65535.")
+    port = _validate_tunnel_port(ctx, port)
 
     # Fast pre-check under the lock: refuse if already running.
     with ctx.state.remote_tunnel_lock:
@@ -148,7 +333,7 @@ def start(ctx: AppContext, port: int) -> dict:
     try:
         with ctx.state.remote_tunnel_install_lock:
             exe = _ensure_cloudflared(ctx)
-    except (OSError, URLError, RuntimeError) as exc:
+    except (OSError, URLError, RuntimeError, ValueError) as exc:
         with ctx.state.remote_tunnel_lock:
             ctx.state.remote_tunnel.update(
                 status="error",
@@ -156,14 +341,22 @@ def start(ctx: AppContext, port: int) -> dict:
             )
         raise
 
-    args = [str(exe), "tunnel", "--url", f"http://127.0.0.1:{port}"]
-
     # Re-acquire the lock to spawn + record. Re-check in case another start won
-    # the race during the download.
+    # the race during the download. Re-validate port under the lock so a
+    # mid-download sd-server port change fails closed instead of tunneling stale.
     with ctx.state.remote_tunnel_lock:
         proc = ctx.state.remote_tunnel_process
         if proc is not None and proc.poll() is None:
             return ctx.state.remote_tunnel.snapshot()
+        try:
+            port = _validate_tunnel_port(ctx, port)
+        except ValueError as exc:
+            ctx.state.remote_tunnel.update(
+                status="error",
+                message=f"Failed to start Cloudflare tunnel: {exc}",
+            )
+            raise
+        args = [str(exe), "tunnel", "--url", f"http://127.0.0.1:{port}"]
         ctx.state.remote_tunnel.update(
             status="starting",
             url="",

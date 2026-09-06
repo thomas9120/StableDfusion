@@ -166,3 +166,104 @@ def test_proxy_503s_with_starting_message_while_loading():
     code, headers, payload = server_mode_service.proxy(ctx, "GET", "/v1/models", "", {}, b"")
     assert code == 503
     assert b"still starting" in payload
+
+
+def test_proxy_strips_gui_auth_headers(monkeypatch):
+    """GUI Authorization / x-sd-gui-token must never reach sd-server."""
+    ctx = _ctx()
+    ctx.state.sd_server_process = _FakeAliveProc()
+    ctx.state.sd_server.update(
+        status="running",
+        pid=4242,
+        host="127.0.0.1",
+        port=8765,
+    )
+
+    captured = {}
+
+    class FakeResp:
+        status = 200
+
+        def read(self):
+            return b'{"ok":true}'
+
+        def getheaders(self):
+            return [("Content-Type", "application/json")]
+
+    class FakeConn:
+        def __init__(self, host, port, timeout=None):
+            captured["host"] = host
+            captured["port"] = port
+
+        def request(self, method, path, body=None, headers=None):
+            captured["method"] = method
+            captured["path"] = path
+            captured["headers"] = dict(headers or {})
+
+        def getresponse(self):
+            return FakeResp()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(server_mode_service.http.client, "HTTPConnection", FakeConn)
+
+    inbound = {
+        "Host": "gui.example",
+        "Content-Length": "0",
+        "Connection": "keep-alive",
+        "Accept-Encoding": "gzip",
+        "Authorization": "Bearer gui-secret",
+        "X-SD-GUI-Token": "gui-token-value",
+        "Content-Type": "application/json",
+        "X-Request-Id": "keep-me",
+    }
+    code, _headers, payload = server_mode_service.proxy(ctx, "GET", "/v1/models", "", inbound, b"")
+    assert code == 200
+    assert payload == b'{"ok":true}'
+    out = {k.lower(): v for k, v in captured["headers"].items()}
+    assert "authorization" not in out
+    assert "x-sd-gui-token" not in out
+    assert "host" not in out
+    assert "content-length" not in out
+    assert "connection" not in out
+    assert "accept-encoding" not in out
+    assert out.get("content-type") == "application/json"
+    assert out.get("x-request-id") == "keep-me"
+
+
+def test_connect_host_maps_wildcard_to_loopback():
+    assert server_mode_service._connect_host("0.0.0.0") == "127.0.0.1"
+    assert server_mode_service._connect_host("::") == "127.0.0.1"
+    assert server_mode_service._connect_host("") == "127.0.0.1"
+    assert server_mode_service._connect_host("127.0.0.1") == "127.0.0.1"
+    assert server_mode_service._connect_host("192.168.1.10") == "192.168.1.10"
+
+
+def test_start_refuses_when_port_already_in_use(monkeypatch):
+    """Busy-port guard: do not spawn if connect host:port already accepts TCP."""
+    ctx = _ctx()
+    monkeypatch.setattr(server_mode_service, "_probe_listening", lambda *a, **kw: True)
+
+    spawned = []
+
+    def boom(*_a, **_kw):
+        spawned.append(True)
+        raise AssertionError("Popen must not run when port is busy")
+
+    monkeypatch.setattr(server_mode_service.subprocess, "Popen", boom)
+
+    result = server_mode_service.start(
+        ctx,
+        {
+            "host": "127.0.0.1",
+            "port": 1234,
+            "args": [["--model", "models/sd15.gguf"]],
+        },
+    )
+
+    assert result.get("status") == 409
+    assert "already in use" in result.get("error", "").lower()
+    assert not spawned
+    assert ctx.state.sd_server_process is None
+    assert ctx.state.sd_server.snapshot().get("status") not in {"running", "starting"}
