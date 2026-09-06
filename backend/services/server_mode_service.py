@@ -261,17 +261,52 @@ def _monitor(ctx: AppContext, proc, host: str, port: int) -> None:
             )
 
 
+def _port_in_use_error(host: str, port: int) -> dict[str, Any]:
+    connect = _connect_host(host)
+    return {
+        "error": (
+            f"sd-server listen port {port} is already in use on {connect} "
+            f"(something is already accepting TCP connections). "
+            f"Stop the other process or choose a different port."
+        ),
+        "status": 409,
+    }
+
+
 def start(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
     try:
         prepared = build_argv(request)
     except ValueError as exc:
         return {"error": str(exc), "status": 400}
 
+    host = prepared["host"]
+    port = prepared["port"]
+
+    # Non-loopback listen exposes sd-server directly (bypasses GUI proxy/token).
+    listen_host = (host or "").strip().lower()
+    if (
+        listen_host
+        and listen_host not in {"127.0.0.1", "localhost", "::1"}
+        and not listen_host.startswith("127.")
+    ):
+        print(
+            f"WARNING: sd-server listen host is {host!r} (non-loopback). "
+            "Prefer 127.0.0.1 and reach the API via the GUI proxy with "
+            "SD_GUI_TOKEN set if exposing the control plane.",
+            file=sys.stderr,
+        )
+
     # Fast pre-check under the lock: refuse if already running.
     with ctx.state.sd_server_lock:
         proc = ctx.state.sd_server_process
         if proc is not None and proc.poll() is None:
             return {"error": "sd-server is already running.", "status": 409}
+
+    # Refuse to spawn if the target connect host:port is already accepting TCP
+    # (another sd-server, leftover process, or unrelated service). Checked
+    # outside the lock; re-checked under the lock immediately before Popen.
+    if _probe_listening(host, port):
+        return _port_in_use_error(host, port)
 
     # Expensive validation (otool -L on macOS) runs OUTSIDE the lock so status
     # polls / stop are not blocked.
@@ -298,11 +333,13 @@ def start(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
     env = process_manager._build_process_env(ctx)
 
     # Re-acquire the lock to spawn + record. Re-check in case another start won
-    # the race during validation.
+    # the race during validation, or the port became busy.
     with ctx.state.sd_server_lock:
         proc = ctx.state.sd_server_process
         if proc is not None and proc.poll() is None:
             return {"error": "sd-server is already running.", "status": 409}
+        if _probe_listening(host, port):
+            return _port_in_use_error(host, port)
 
         with ctx.state.sd_server_log_lock:
             ctx.state.sd_server_log.clear()
@@ -310,8 +347,8 @@ def start(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
         ctx.state.sd_server.update(
             status="starting",
             pid=None,
-            host=prepared["host"],
-            port=prepared["port"],
+            host=host,
+            port=port,
             target_url=prepared["target_url"],
             command=" ".join(command),
             message="Starting sd-server...",
@@ -340,13 +377,16 @@ def start(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
         threading.Thread(target=_stream_log, args=(ctx, proc.stderr), daemon=True).start()
         threading.Thread(
             target=_monitor,
-            args=(ctx, proc, prepared["host"], prepared["port"]),
+            args=(ctx, proc, host, port),
             daemon=True,
             name=f"sd-server-{proc.pid}",
         ).start()
         # Stay in "starting" — the monitor thread promotes to "running" once
-        # the listen port actually accepts connections (model load can take
-        # minutes, and the proxy 503s anything that isn't "running").
+        # the listen port accepts TCP while ``sd_server_process is proc``
+        # (model load can take minutes; the proxy 503s anything that isn't
+        # "running"). This is not full process/socket ownership — only that
+        # our tracked proc is still current and something accepts on the port.
+        # No dedicated sd-server HTTP health endpoint is assumed.
         return ctx.state.sd_server.update(
             pid=proc.pid,
             message="sd-server starting (loading model)...",
@@ -354,6 +394,7 @@ def start(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
 
 
 def stop(ctx: AppContext) -> bool:
+    """Stop sd-server. Blocking terminate/wait run outside sd_server_lock."""
     with ctx.state.sd_server_lock:
         proc = ctx.state.sd_server_process
         if not proc or proc.poll() is not None:
@@ -361,23 +402,27 @@ def stop(ctx: AppContext) -> bool:
             ctx.state.sd_server.update(status="idle", pid=None, message="sd-server is not running.")
             return False
         ctx.state.sd_server.update(status="stopping", message="Stopping sd-server...")
+    # terminate/wait OUTSIDE the lock so status polls / start aren't blocked.
+    try:
+        if sys.platform == "win32":
+            proc.send_signal(signal.CTRL_BREAK_EVENT)
+        else:
+            proc.terminate()
         try:
-            if sys.platform == "win32":
-                proc.send_signal(signal.CTRL_BREAK_EVENT)
-            else:
-                proc.terminate()
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+    except Exception:
+        try:
+            proc.kill()
         except Exception:
-            try:
-                proc.kill()
-            except Exception:
-                pass
-        ctx.state.sd_server_process = None
-        ctx.state.sd_server.update(status="idle", pid=None, message="sd-server stopped.")
-        return True
+            pass
+    # Only clear if a new server hasn't been started in the meantime.
+    with ctx.state.sd_server_lock:
+        if ctx.state.sd_server_process is proc:
+            ctx.state.sd_server_process = None
+            ctx.state.sd_server.update(status="idle", pid=None, message="sd-server stopped.")
+    return True
 
 
 def status(ctx: AppContext) -> dict[str, Any]:
@@ -422,11 +467,16 @@ def proxy(
     connect_host = _connect_host(host)
     target_path = path + (f"?{query}" if query else "")
     conn = http.client.HTTPConnection(connect_host, port, timeout=config.SD_SERVER_PROXY_TIMEOUT)
-    forward_headers = {
-        key: value
-        for key, value in headers.items()
-        if key.lower() not in {"host", "content-length", "connection", "accept-encoding"}
+    # Never forward GUI auth secrets to sd-server (loopback or otherwise).
+    _deny = {
+        "host",
+        "content-length",
+        "connection",
+        "accept-encoding",
+        "authorization",
+        "x-sd-gui-token",
     }
+    forward_headers = {key: value for key, value in headers.items() if key.lower() not in _deny}
     try:
         conn.request(method, target_path, body=body or None, headers=forward_headers)
         resp = conn.getresponse()

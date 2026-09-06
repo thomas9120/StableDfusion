@@ -31,7 +31,9 @@ def get_status(request: Request, response: Response, ctx: AppContext) -> None:
 
         backend_specs = services.backend_specs
         available_backends = [
-            {"id": key, "label": spec["label"]} for key, spec in backend_specs.items()
+            {"id": key, "label": spec["label"]}
+            for key, spec in backend_specs.items()
+            if not spec.get("hidden")
         ]
 
         response.json(

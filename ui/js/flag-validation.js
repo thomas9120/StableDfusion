@@ -6,7 +6,7 @@ window.SDGui = window.SDGui || {};
 window.SDGui.validateFlagDefinitions = () => {
 	var warnings = [];
 	var flags = window.SDGui.SD_CLI_FLAGS || [];
-	var VALID_TYPES = ["bool", "int", "float", "text", "path", "enum"];
+	var VALID_TYPES = ["bool", "int", "float", "text", "path", "paths", "enum"];
 	var VALID_MODES = ["all", "img_gen", "vid_gen", "convert", "upscale", "metadata"];
 	var seenIds = {};
 	var seenFlags = {};

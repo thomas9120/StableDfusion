@@ -356,7 +356,7 @@ def _prepare(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
         "image": params.get("image", ""),  # metadata mode input
         "init_img": params.get("init_img", ""),  # img2img / upscale input
         "strength": params.get("strength"),  # img2img denoising strength
-        "ref_image": params.get("ref_image", ""),  # Kontext / image-edit reference
+        "ref_image": params.get("ref_image", []),  # repeatable image references
         "img_cfg_scale": params.get("img_cfg_scale"),  # edit/inpaint image guidance
         "mask": params.get("mask", ""),  # inpaint mask
         "control_image": params.get("control_image", ""),  # controlnet
@@ -369,6 +369,9 @@ def _prepare(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
         "fps": params.get("fps"),
         "vace_strength": params.get("vace_strength"),
         "end_img": params.get("end_img", ""),  # last frame (flf2v)
+        "ref_video": params.get("ref_video", []),
+        "ref_video_audio": params.get("ref_video_audio", []),
+        "ref_audio": params.get("ref_audio", []),
         "control_video": params.get("control_video", ""),
         "moe_boundary": params.get("moe_boundary"),  # Wan2.2 MoE
         "extra_tiling_args": params.get("extra_tiling_args", ""),  # LTX VAE tiling
@@ -645,6 +648,9 @@ def run(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
         if ctx.state.generation.snapshot().get("state") == "running":
             return {"error": "A generation is already running"}
         job_id = prepared["base_name"]
+        # Clear cancel under the same lock as the running transition so a
+        # concurrent cancel() cannot set the event only to have it wiped here.
+        ctx.state.generation_cancel.clear()
         # replace() (not update()) so keys added dynamically by the previous
         # job — warnings, stderr_tail, stdout_excerpt, ... — don't leak into
         # this job's status payload.
@@ -661,7 +667,6 @@ def run(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
             }
         )
 
-    ctx.state.generation_cancel.clear()
     thread = threading.Thread(
         target=_run_job,
         args=(ctx, job_id, prepared),
@@ -681,8 +686,8 @@ def status(ctx: AppContext) -> dict[str, Any]:
 
 
 def cancel(ctx: AppContext) -> bool:
-    snap = ctx.state.generation.snapshot()
-    if snap.get("state") != "running":
-        return False
-    ctx.state.generation_cancel.set()
-    return True
+    with ctx.state.generation_lock:
+        if ctx.state.generation.snapshot().get("state") != "running":
+            return False
+        ctx.state.generation_cancel.set()
+        return True

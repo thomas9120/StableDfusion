@@ -511,3 +511,50 @@ def test_build_argv_custom_arg_preview_still_detected():
     )
     assert argv.count("--preview") == 1
     assert argv[argv.index("--preview") + 1] == "proj"
+
+
+# ── cancel() / generation_cancel race ─────────────────────────────────────
+
+
+def test_cancel_when_not_running_returns_false(tmp_path):
+    ctx = _ctx(tmp_path)
+    assert ctx.state.generation.snapshot().get("state") != "running"
+    assert generate_service.cancel(ctx) is False
+    assert not ctx.state.generation_cancel.is_set()
+
+
+def test_cancel_after_running_keeps_event_set(tmp_path, monkeypatch):
+    """Regression: clear() must not run outside the lock after state is
+    running, or a concurrent cancel() is wiped before the worker starts.
+
+    Thread.start() is the first point after unlock where state is already
+    "running" — the old clear() lived between unlock and start. Cancel from
+    that window must leave generation_cancel set.
+    """
+    ctx = _ctx(tmp_path)
+    cancel_ok = []
+
+    class _FakeThread:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            # State is running; cancel here (old race window after unlock).
+            assert ctx.state.generation.snapshot()["state"] == "running"
+            cancel_ok.append(generate_service.cancel(ctx))
+
+    monkeypatch.setattr(generate_service.threading, "Thread", _FakeThread)
+
+    result = generate_service.run(
+        ctx,
+        {
+            "mode": "img_gen",
+            "args": [["-m", "m.gguf"], ["--prompt", "cat"]],
+            "seed": 7,
+            "total_steps": 4,
+        },
+    )
+    assert "job_id" in result
+    assert cancel_ok == [True]
+    assert ctx.state.generation_cancel.is_set()
+    assert ctx.state.generation.snapshot()["state"] == "running"

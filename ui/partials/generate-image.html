@@ -340,17 +340,17 @@
               </div>
               <div class="form-group">
                 <label class="form-label"
-                  >Reference image
+                  >Reference images
                   <span class="help-text"
-                    >(Flux Kontext / Qwen Image Edit)</span
+                    >(Flux Kontext / Qwen Image Edit, one per line)</span
                   ></label
                 >
                 <div class="field-row">
-                  <input
-                    type="text"
+                  <textarea
                     id="gen-ref-image"
                     placeholder="output/cat.png"
-                  />
+                    rows="2"
+                  ></textarea>
                   <button
                     id="btn-browse-ref-image"
                     class="btn btn-sm"
@@ -422,7 +422,21 @@
 
           <div id="gen-video-inputs" class="mode-inputs hidden">
             <div class="form-row">
-              <div class="form-group">
+              <div id="gen-h3-duration-group" class="form-group hidden">
+                <label class="form-label" for="gen-h3-duration"
+                  >Duration (seconds)</label
+                >
+                <input
+                  type="number"
+                  id="gen-h3-duration"
+                  min="5"
+                  step="1"
+                  value="5"
+                  aria-describedby="gen-h3-duration-actual"
+                />
+                <span id="gen-h3-duration-actual" class="help-text"></span>
+              </div>
+              <div id="gen-video-frames-group" class="form-group">
                 <label class="form-label" for="gen-video-frames">Frames</label>
                 <input
                   type="number"
@@ -432,7 +446,7 @@
                   value="25"
                 />
               </div>
-              <div class="form-group">
+              <div id="gen-fps-group" class="form-group">
                 <label class="form-label" for="gen-fps">FPS</label>
                 <input type="number" id="gen-fps" min="1" step="1" value="16" />
               </div>
@@ -495,6 +509,89 @@
                 </button>
               </div>
             </div>
+            <details class="mode-details">
+              <summary>MiniMax-H3 references (Ref2VA)</summary>
+              <p class="help-text">
+                Use references instead of start/end frames. Enter one path per
+                line; soundtrack lines pair with video-directory lines.
+              </p>
+              <div class="form-group">
+                <label class="form-label" for="gen-video-ref-images"
+                  >Reference images</label
+                >
+                <div class="field-row">
+                  <textarea
+                    id="gen-video-ref-images"
+                    rows="2"
+                    placeholder="output/cat.png"
+                  ></textarea>
+                  <button
+                    id="btn-browse-video-ref-image"
+                    class="btn btn-sm"
+                    type="button"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="gen-ref-videos"
+                  >Reference video frame directories</label
+                >
+                <div class="field-row">
+                  <textarea
+                    id="gen-ref-videos"
+                    rows="2"
+                    placeholder="C:/references/video-frames"
+                  ></textarea>
+                  <button
+                    id="btn-browse-ref-video"
+                    class="btn btn-sm"
+                    type="button"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="gen-ref-video-audios"
+                  >Paired video soundtracks (WAV)</label
+                >
+                <div class="field-row">
+                  <textarea
+                    id="gen-ref-video-audios"
+                    rows="2"
+                    placeholder="C:/references/video-audio.wav"
+                  ></textarea>
+                  <button
+                    id="btn-browse-ref-video-audio"
+                    class="btn btn-sm"
+                    type="button"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="gen-ref-audios"
+                  >Standalone audio references (WAV)</label
+                >
+                <div class="field-row">
+                  <textarea
+                    id="gen-ref-audios"
+                    rows="2"
+                    placeholder="C:/references/music.wav"
+                  ></textarea>
+                  <button
+                    id="btn-browse-ref-audio"
+                    class="btn btn-sm"
+                    type="button"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+            </details>
             <div class="form-group">
               <label class="form-label"
                 >Control video
