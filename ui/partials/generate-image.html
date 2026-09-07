@@ -14,7 +14,7 @@
         <!-- @section prompt -->
         <div id="gen-prompt-section">
           <div class="form-group">
-            <label class="form-label">Prompt</label>
+            <label class="form-label" for="gen-prompt">Prompt</label>
             <textarea
               id="gen-prompt"
               rows="3"
@@ -22,7 +22,7 @@
             ></textarea>
           </div>
           <div class="form-group">
-            <label class="form-label">Negative prompt</label>
+            <label class="form-label" for="gen-negative">Negative prompt</label>
             <textarea id="gen-negative" rows="2"></textarea>
           </div>
         </div>
@@ -39,43 +39,43 @@
               role="group"
               aria-label="Aspect ratio"
             >
-              <button type="button" class="dim-shape" data-shape="1:1">
+              <button type="button" class="dim-shape" data-shape="1:1" aria-pressed="false">
                 <span class="dim-glyph"
                   ><i style="width: 18px; height: 18px"></i
                 ></span>
                 <span class="dim-shape-label">1:1</span>
               </button>
-              <button type="button" class="dim-shape" data-shape="3:2">
+              <button type="button" class="dim-shape" data-shape="3:2" aria-pressed="false">
                 <span class="dim-glyph"
                   ><i style="width: 22px; height: 15px"></i
                 ></span>
                 <span class="dim-shape-label">3:2</span>
               </button>
-              <button type="button" class="dim-shape" data-shape="2:3">
+              <button type="button" class="dim-shape" data-shape="2:3" aria-pressed="false">
                 <span class="dim-glyph"
                   ><i style="width: 15px; height: 22px"></i
                 ></span>
                 <span class="dim-shape-label">2:3</span>
               </button>
-              <button type="button" class="dim-shape" data-shape="4:3">
+              <button type="button" class="dim-shape" data-shape="4:3" aria-pressed="false">
                 <span class="dim-glyph"
                   ><i style="width: 22px; height: 17px"></i
                 ></span>
                 <span class="dim-shape-label">4:3</span>
               </button>
-              <button type="button" class="dim-shape" data-shape="3:4">
+              <button type="button" class="dim-shape" data-shape="3:4" aria-pressed="false">
                 <span class="dim-glyph"
                   ><i style="width: 17px; height: 22px"></i
                 ></span>
                 <span class="dim-shape-label">3:4</span>
               </button>
-              <button type="button" class="dim-shape" data-shape="16:9">
+              <button type="button" class="dim-shape" data-shape="16:9" aria-pressed="false">
                 <span class="dim-glyph"
                   ><i style="width: 22px; height: 13px"></i
                 ></span>
                 <span class="dim-shape-label">16:9</span>
               </button>
-              <button type="button" class="dim-shape" data-shape="9:16">
+              <button type="button" class="dim-shape" data-shape="9:16" aria-pressed="false">
                 <span class="dim-glyph"
                   ><i style="width: 13px; height: 22px"></i
                 ></span>
@@ -229,21 +229,21 @@
           <summary>Advanced</summary>
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label">Threads</label>
+              <label class="form-label" for="gen-threads">Threads</label>
               <input type="number" id="gen-threads" value="-1" />
             </div>
             <div class="form-group">
-              <label class="form-label">Weight type</label>
+              <label class="form-label" for="gen-type">Weight type</label>
               <select id="gen-type"></select>
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label">Preview method</label>
+              <label class="form-label" for="gen-preview-method">Preview method</label>
               <select id="gen-preview-method"></select>
             </div>
             <div class="form-group">
-              <label class="form-label">Preview interval</label>
+              <label class="form-label" for="gen-preview-interval">Preview interval</label>
               <input
                 type="number"
                 id="gen-preview-interval"
@@ -283,7 +283,7 @@
           </div>
           <!-- @section bundle -->
           <div class="form-group">
-            <label class="form-label">Model type bundle</label>
+            <label class="form-label" for="gen-model-bundle">Model type bundle</label>
             <select id="gen-model-bundle">
               <option value="">Loading...</option>
             </select>
@@ -317,7 +317,7 @@
             <details class="mode-details">
               <summary>Image references (optional)</summary>
               <div class="form-group">
-                <label class="form-label"
+                <label class="form-label" for="gen-init-img"
                   >Init image
                   <span class="help-text"
                     >(classic img2img / inpaint)</span
@@ -339,7 +339,7 @@
                 </div>
               </div>
               <div class="form-group">
-                <label class="form-label"
+                <label class="form-label" for="gen-ref-image"
                   >Reference images
                   <span class="help-text"
                     >(Flux Kontext / Qwen Image Edit, one per line)</span
@@ -362,7 +362,7 @@
               </div>
               <div class="form-row">
                 <div class="form-group">
-                  <label class="form-label">Strength</label>
+                  <label class="form-label" for="gen-strength">Strength</label>
                   <input
                     type="number"
                     id="gen-strength"
@@ -373,7 +373,7 @@
                   />
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Image CFG</label>
+                  <label class="form-label" for="gen-img-cfg">Image CFG</label>
                   <input
                     type="number"
                     id="gen-img-cfg"
@@ -384,7 +384,7 @@
                   />
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Control strength</label>
+                  <label class="form-label" for="gen-control-strength">Control strength</label>
                   <input
                     type="number"
                     id="gen-control-strength"
@@ -396,7 +396,7 @@
                 </div>
               </div>
               <div class="form-group">
-                <label class="form-label">Mask (inpaint)</label>
+                <label class="form-label" for="gen-mask">Mask (inpaint)</label>
                 <div class="field-row">
                   <input type="text" id="gen-mask" />
                   <button id="btn-browse-mask" class="btn btn-sm" type="button">
@@ -405,7 +405,7 @@
                 </div>
               </div>
               <div class="form-group">
-                <label class="form-label">Control image (ControlNet)</label>
+                <label class="form-label" for="gen-control-image">Control image (ControlNet)</label>
                 <div class="field-row">
                   <input type="text" id="gen-control-image" />
                   <button
@@ -470,7 +470,7 @@
               >
             </div>
             <div class="form-group">
-              <label class="form-label"
+              <label class="form-label" for="gen-video-init-img"
                 >Start frame
                 <span class="help-text"
                   >(optional, image-to-video first frame)</span
@@ -492,7 +492,7 @@
               </div>
             </div>
             <div class="form-group">
-              <label class="form-label"
+              <label class="form-label" for="gen-video-end-img"
                 >End frame
                 <span class="help-text"
                   >(optional, last frame / flf2v)</span
@@ -593,7 +593,7 @@
               </div>
             </details>
             <div class="form-group">
-              <label class="form-label"
+              <label class="form-label" for="gen-control-video"
                 >Control video
                 <span class="help-text"
                   >(optional, directory of control frames in order)</span
@@ -646,7 +646,7 @@
           <!-- upscale: required init image + ESRGAN model -->
           <div id="gen-upscale-inputs" class="mode-inputs hidden">
             <div class="form-group">
-              <label class="form-label"
+              <label class="form-label" for="gen-upscale-init-img"
                 >Init image <span class="req">required</span></label
               >
               <div class="field-row">
@@ -661,7 +661,7 @@
               </div>
             </div>
             <div class="form-group">
-              <label class="form-label"
+              <label class="form-label" for="gen-upscale-model"
                 >ESRGAN upscale model <span class="req">required</span></label
               >
               <div class="field-row">
@@ -684,7 +684,7 @@
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label">Repeats</label>
+                <label class="form-label" for="gen-upscale-repeats">Repeats</label>
                 <input
                   type="number"
                   id="gen-upscale-repeats"
@@ -697,7 +697,7 @@
                 </p>
               </div>
               <div class="form-group">
-                <label class="form-label">Tile size</label>
+                <label class="form-label" for="gen-upscale-tile-size">Tile size</label>
                 <input
                   type="number"
                   id="gen-upscale-tile-size"
@@ -719,7 +719,7 @@
               tensor file to <code>-o / --output</code>.
             </p>
             <div class="form-group">
-              <label class="form-label"
+              <label class="form-label" for="gen-convert-name"
                 >Convert single tensor name (optional)</label
               >
               <input
@@ -735,7 +735,7 @@
             <details class="mode-details metadata-details">
               <summary>Inspect metadata</summary>
               <div class="form-group">
-                <label class="form-label"
+                <label class="form-label" for="gen-metadata-image"
                   >Image <span class="req">required</span></label
                 >
                 <div class="field-row">
@@ -750,7 +750,7 @@
                 </div>
               </div>
               <div class="form-group">
-                <label class="form-label">Format</label>
+                <label class="form-label" for="gen-metadata-format">Format</label>
                 <select id="gen-metadata-format">
                   <option value="text">text</option>
                   <option value="json">json</option>
@@ -769,6 +769,7 @@
           <button
             id="btn-generate"
             class="btn btn-primary"
+            type="button"
             title="Generate (Ctrl/Cmd+Enter)"
           >
             <span class="gen-btn-spinner" aria-hidden="true" hidden>
@@ -787,7 +788,7 @@
             </span>
             <span class="gen-btn-label">Generate</span>
           </button>
-          <button id="btn-generate-cancel" class="btn btn-danger hidden">
+          <button id="btn-generate-cancel" class="btn btn-danger hidden" type="button">
             Cancel
           </button>
           <span class="gen-kbd-hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span>

@@ -7,6 +7,7 @@ Mirrors LLama-GUI's backend/state.py. Adds SD-specific slots:
 - ``gallery``: in-memory cache of recent gallery sidecars.
 """
 
+import copy
 import threading
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -87,17 +88,17 @@ class AtomicDict:
     def update(self, **updates: Any) -> dict[str, Any]:
         with self._lock:
             self._data.update(updates)
-            return dict(self._data)
+            return copy.deepcopy(self._data)
 
     def replace(self, values: Mapping[str, Any]) -> dict[str, Any]:
         with self._lock:
             self._data.clear()
             self._data.update(values)
-            return dict(self._data)
+            return copy.deepcopy(self._data)
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
-            return dict(self._data)
+            return copy.deepcopy(self._data)
 
 
 @dataclass

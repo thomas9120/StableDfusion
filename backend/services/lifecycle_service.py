@@ -66,7 +66,7 @@ def restart_gui_server(ctx: AppContext) -> bool:
 
     restart_script = ctx.paths.root / "server.py"
     # Pre-flight: refuse to restart if the replacement can't be launched at all.
-    if not restart_script.exists() or not os.path.exists(sys.executable):
+    if not restart_script.is_file() or not os.path.exists(sys.executable):
         print(
             "ERROR: restart target missing (server.py or python executable); aborting restart.",
             file=sys.stderr,
@@ -79,13 +79,19 @@ def restart_gui_server(ctx: AppContext) -> bool:
         try:
             env = dict(os.environ)
             env["SD_GUI_RESTART"] = "1"
+            popen_kwargs: dict[str, object] = {
+                "cwd": str(ctx.paths.root),
+                "env": env,
+            }
+            if sys.platform == "win32":
+                popen_kwargs["creationflags"] = (
+                    subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+                )
+            else:
+                popen_kwargs["start_new_session"] = True
             subprocess.Popen(
                 [sys.executable, str(restart_script)],
-                cwd=str(ctx.paths.root),
-                env=env,
-                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
-                if sys.platform == "win32"
-                else 0,
+                **popen_kwargs,  # type: ignore[arg-type]
             )
             print("Restarting StableDfusion...", file=sys.stderr)
         except Exception as exc:
@@ -106,11 +112,11 @@ def restart_gui_server(ctx: AppContext) -> bool:
     return True
 
 
-def open_folder_in_file_manager(target) -> None:
+def open_folder_in_file_manager(target, timeout: float = 10) -> None:
     if sys.platform == "win32":
         os.startfile(str(target))  # type: ignore[attr-defined]
         return
     if sys.platform == "darwin":
-        subprocess.run(["open", str(target)], check=False)
+        subprocess.run(["open", str(target)], check=False, timeout=timeout)
         return
-    subprocess.run(["xdg-open", str(target)], check=False)
+    subprocess.run(["xdg-open", str(target)], check=False, timeout=timeout)

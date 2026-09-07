@@ -8,7 +8,9 @@ Keep this module free of optional third-party imports so the server can import
 it during startup on a minimal Python environment.
 """
 
+import math
 import os
+import sys
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -48,19 +50,30 @@ SD_SERVER_PORT = 1234
 DEFAULT_SD_SERVER_PROXY_TIMEOUT = 1800.0  # seconds
 
 
+# Upper bound for the sd-server proxy timeout (24h). Prevents an absurd
+# SD_GUI_PROXY_TIMEOUT from pinning proxy connections effectively forever.
+PROXY_TIMEOUT_MAX = 86400.0
+
+# Max lengths: hostname limit per RFC 1035 (253), token cap as a DoS guard.
+GUI_HOST_MAX_LEN = 253
+GUI_TOKEN_MAX_LEN = 4096
+
+
 def parse_proxy_timeout(value: object, default: float = DEFAULT_SD_SERVER_PROXY_TIMEOUT) -> float:
     try:
         timeout = float(str(value or "").strip())
     except (TypeError, ValueError):
         return default
-    if timeout <= 0:
+    if not math.isfinite(timeout) or timeout <= 0:
         return default
-    return timeout
+    return min(timeout, PROXY_TIMEOUT_MAX)
 
 
 def parse_gui_host(value: object, default: str = DEFAULT_GUI_HOST) -> str:
     host = str(value or "").strip()
     if not host or any(ord(ch) < 32 for ch in host) or "/" in host:
+        return default
+    if len(host) > GUI_HOST_MAX_LEN:
         return default
     if host == "*":
         return "0.0.0.0"
@@ -91,8 +104,20 @@ def parse_gui_allowed_hosts(value: object) -> tuple[str, ...]:
 
 
 def parse_gui_token(value: object) -> str:
-    """Optional shared secret for API/proxy auth. Empty = no token configured."""
-    return str(value or "").strip()
+    """Optional shared secret for API/proxy auth. Empty = no token configured.
+
+    Tokens longer than GUI_TOKEN_MAX_LEN (4096) are truncated with a stderr
+    warning so over-long env values fail loudly instead of silently.
+    """
+    token = str(value or "").strip()
+    if len(token) > GUI_TOKEN_MAX_LEN:
+        print(
+            "[warn] SD_GUI_TOKEN truncated to 4096 chars",
+            file=sys.stderr,
+            flush=True,
+        )
+        return token[:GUI_TOKEN_MAX_LEN]
+    return token
 
 
 def parse_env_bool(value: object, default: bool = False) -> bool:

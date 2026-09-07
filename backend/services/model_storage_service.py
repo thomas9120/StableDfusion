@@ -5,6 +5,7 @@ in ``models/`` quickly becomes noisy. This module centralizes the purpose →
 folder mapping used by model listing, file pickers, and HF downloads.
 """
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -99,6 +100,15 @@ def roots_for_listing(ctx: AppContext, purpose: Any) -> tuple[Path, ...]:
     return (ctx.paths.models / subdir, ctx.paths.models)
 
 
+def _stem_tokens(text: str) -> set[str]:
+    """Split a filename stem into lowercase alphanumeric tokens.
+
+    Fixes the substring bug where e.g. ``enclipper.gguf`` matched ``clip``
+    via ``in``. Token matching uses word boundaries (non-alnum split).
+    """
+    return set(t for t in re.split(r"[^a-z0-9]+", (text or "").lower()) if t)
+
+
 def infer_subdir_for_filename(filename: str) -> str:
     """Best-effort HF download destination from a repo filename."""
     lowered = (filename or "").replace("\\", "/").lower()
@@ -106,46 +116,52 @@ def infer_subdir_for_filename(filename: str) -> str:
     leaf = parts[-1] if parts else lowered
     dirs = parts[:-1]
     joined = "/".join(parts)
+    stem = leaf.rsplit(".", 1)[0] if "." in leaf else leaf
+    tokens = _stem_tokens(stem)
 
     # Prefer explicit folder intent before broad filename keywords. Some repos
     # include model-family words in every filename, while paths such as
     # text_encoder/model.safetensors identify the actual component.
-    if any(part in {"lora", "loras", "lycoris"} for part in dirs):
+    # Dir parts are matched on stem tokens (not exact strings) so hyphenated
+    # dirs like "clip-vit" still route to text-encoders.
+    _DIR_LORA_TOKENS = {"lora", "loras", "lycoris"}
+    _DIR_UPSCALE_TOKENS = {"upscaler", "upscalers", "upscale", "esrgan", "realesrgan"}
+    _DIR_VAE_TOKENS = {"vae", "taesd"}
+    _DIR_CLIP_TOKENS = {"clip", "t5", "t5xxl", "llm", "qwen", "umt5"}
+    if any(
+        part in {"lora", "loras", "lycoris"} or _stem_tokens(part) & _DIR_LORA_TOKENS
+        for part in dirs
+    ):
         return MODEL_SUBDIRS["loras"]
-    if any(part in {"upscaler", "upscalers", "upscale", "esrgan", "realesrgan"} for part in dirs):
+    if any(
+        part in {"upscaler", "upscalers", "upscale", "esrgan", "realesrgan"}
+        or _stem_tokens(part) & _DIR_UPSCALE_TOKENS
+        for part in dirs
+    ):
         return MODEL_SUBDIRS["upscalers"]
-    if any(part in {"vae", "taesd"} for part in dirs):
+    if any(part in {"vae", "taesd"} or _stem_tokens(part) & _DIR_VAE_TOKENS for part in dirs):
         return MODEL_SUBDIRS["vae"]
     if any(
         part in {"text_encoder", "text-encoder", "text-encoders", "clip", "t5", "llm"}
+        or _stem_tokens(part) & _DIR_CLIP_TOKENS
+        or ("text" in _stem_tokens(part) and _stem_tokens(part) & {"encoder", "encoders"})
         for part in dirs
     ):
         return MODEL_SUBDIRS["text_encoders"]
 
-    if any(token in leaf for token in ("upscaler", "upscale", "esrgan", "realesrgan")):
+    if tokens & {"upscaler", "upscale", "esrgan", "realesrgan"}:
         return MODEL_SUBDIRS["upscalers"]
     if (
-        "vae" in leaf
+        "vae" in tokens
         or leaf in {"ae.safetensors", "ae.gguf", "taesd.safetensors"}
         or leaf.startswith("ae.")
     ):
         return MODEL_SUBDIRS["vae"]
-    if any(
-        token in joined
-        for token in (
-            "text_encoder",
-            "text-encoder",
-            "encoder",
-            "clip",
-            "t5",
-            "t5xxl",
-            "llm",
-            "qwen",
-            "umt5",
-        )
-    ):
+    if tokens & {"clip", "t5", "t5xxl", "llm", "qwen", "umt5"}:
         return MODEL_SUBDIRS["text_encoders"]
-    if any(token in leaf for token in ("lora", "lycoris")):
+    if "text_encoder" in joined or "text-encoder" in joined:
+        return MODEL_SUBDIRS["text_encoders"]
+    if tokens & {"lora", "lycoris"}:
         return MODEL_SUBDIRS["loras"]
     return MODEL_SUBDIRS["diffusion"]
 

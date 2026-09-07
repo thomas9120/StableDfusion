@@ -37,9 +37,13 @@ def post_open_folder(request: Request, response: Response, ctx: AppContext) -> N
         "root": ctx.paths.root,
     }
     target = folder_paths[folder]
-    target.mkdir(parents=True, exist_ok=True)
     try:
-        lifecycle_service.open_folder_in_file_manager(target)
+        target.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        response.error(sanitize_error(exc, 500), 500)
+        return
+    try:
+        lifecycle_service.open_folder_in_file_manager(target, timeout=10)
         response.json({"opened": True})
     except Exception as exc:
         response.error(sanitize_error(exc, 500), 500)

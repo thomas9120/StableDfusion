@@ -34,7 +34,7 @@ def get_output_snapshot(ctx: AppContext) -> dict[str, Any]:
 def flatten_launch_args(args_list: Iterable[Any] | None) -> list[str]:
     flat: list[str] = []
     for entry in args_list or []:
-        if isinstance(entry, list):
+        if isinstance(entry, (list, tuple)):
             flat.extend(str(v) for v in entry)
         else:
             flat.append(str(entry))

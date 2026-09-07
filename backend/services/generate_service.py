@@ -23,6 +23,7 @@ dependency). /api/image/<name>/thumbnail serves the full image and the gallery
 import datetime
 import json
 import re
+import sys
 import threading
 import time
 from pathlib import Path
@@ -204,11 +205,50 @@ def _strip_value_flags(tokens: list[str], flags: tuple[str, ...]) -> list[str]:
 def _validate_token(token: Any, *, allow_prompt_whitespace: bool = False) -> None:
     if not isinstance(token, str):
         raise ValueError(f"Rejected unsafe launch argument token: {token!r}")
+    if "\x00" in token:
+        raise ValueError(f"Rejected unsafe launch argument token: {token!r}")
     pattern = _PROMPT_TOKEN_RE if allow_prompt_whitespace else _TOKEN_RE
     if not pattern.match(token):
         raise ValueError(f"Rejected unsafe launch argument token: {token!r}")
     if len(token) > 4096:
         raise ValueError("Launch argument token too long")
+
+
+_MODEL_PATH_FLAGS = {
+    "-m",
+    "--model",
+    "--diffusion-model",
+    "--vae",
+    "--clip_l",
+    "--clip_g",
+    "--clip_vision",
+    "--t5xxl",
+    "--llm",
+    "--llm_vision",
+    "--taesd",
+    "--control-net",
+    "--embd-dir",
+    "--lora-model-dir",
+    "--upscale-model",
+    "--init-img",
+    "--image",
+}
+
+
+def _validate_model_path(value: Any) -> None:
+    """Validate model/file path values without breaking existing behavior.
+
+    Absolute paths are allowed (warn on stderr) since users may reference
+    models outside ``models/``. NUL bytes and overlong paths (>4096) are
+    rejected.
+    """
+    text = value if isinstance(value, str) else str(value)
+    if "\x00" in text:
+        raise ValueError(f"Rejected unsafe model path: {value!r}")
+    if len(text) > 4096:
+        raise ValueError("Model path too long")
+    if Path(text).is_absolute():
+        print(f"WARNING: absolute model path used: {text!r}", file=sys.stderr)
 
 
 def _validate_user_args(user_args: list[Any]) -> None:
@@ -220,8 +260,11 @@ def _validate_user_args(user_args: list[Any]) -> None:
             flag = entry[0]
             _validate_token(flag)
             is_prompt = isinstance(flag, str) and flag in _PROMPT_FLAGS
+            is_model_path = isinstance(flag, str) and flag in _MODEL_PATH_FLAGS
             for index, token in enumerate(entry[1:], start=1):
                 _validate_token(token, allow_prompt_whitespace=is_prompt and index == 1)
+                if is_model_path and index == 1:
+                    _validate_model_path(token)
         else:
             _validate_token(entry)
 
@@ -397,7 +440,9 @@ def write_sidecar(ctx: AppContext, sidecar: dict[str, Any]) -> Path:
     name = sidecar.get("name") or "generation"
     safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(name)).strip("_") or "generation"
     path = gallery_dir / f"{safe}.json"
-    path.write_text(json.dumps(sidecar, indent=2), encoding="utf-8")
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(sidecar, indent=2), encoding="utf-8")
+    tmp.replace(path)
     return path
 
 
@@ -443,7 +488,7 @@ def _run_job(
             error=str(exc)[:500],
             finished_at=time.time(),
         )
-        print(f"[generate] {job_id} unexpected error: {exc!r}", flush=True)
+        print(f"[generate] {job_id} unexpected error: {exc!r}", file=sys.stderr, flush=True)
 
 
 def _run_job_inner(
@@ -472,11 +517,11 @@ def _run_job_inner(
             error=str(launch["error"])[:500],
             finished_at=time.time(),
         )
-        print(f"[generate] launch failed: {launch['error']}", flush=True)
+        print(f"[generate] launch failed: {launch['error']}", file=sys.stderr, flush=True)
         return
 
     cmd_line = launch.get("command", " ".join(argv))
-    print(f"[generate] {job_id} running sd-cli: {cmd_line}", flush=True)
+    print(f"[generate] {job_id} running sd-cli: {cmd_line}", file=sys.stderr, flush=True)
 
     last_mtime = 0.0
     step_estimate = 0
@@ -555,19 +600,21 @@ def _run_job_inner(
             stderr_tail=stderr_tail[-2000:],
             finished_at=time.time(),
         )
-        print(f"[generate] sd-cli exit {rc} for {job_id}", flush=True)
+        print(f"[generate] sd-cli exit {rc} for {job_id}", file=sys.stderr, flush=True)
         if stdout_tail:
-            print(f"[generate] sd-cli stdout tail:\n{stdout_tail}", flush=True)
+            print(f"[generate] sd-cli stdout tail:\n{stdout_tail}", file=sys.stderr, flush=True)
         if stderr_tail:
-            print(f"[generate] sd-cli stderr tail:\n{stderr_tail}", flush=True)
+            print(f"[generate] sd-cli stderr tail:\n{stderr_tail}", file=sys.stderr, flush=True)
         return
 
     # Log stderr even on success — warnings from sd-cli (VAE issues, flow-shift,
     # tensor mismatches, etc.) are often only written to stderr.
     if stderr_tail:
-        print(f"[generate] {job_id} sd-cli stderr:\n{stderr_tail}", flush=True)
+        print(f"[generate] {job_id} sd-cli stderr:\n{stderr_tail}", file=sys.stderr, flush=True)
     if stdout_tail:
-        print(f"[generate] {job_id} sd-cli stdout tail:\n{stdout_tail}", flush=True)
+        print(
+            f"[generate] {job_id} sd-cli stdout tail:\n{stdout_tail}", file=sys.stderr, flush=True
+        )
 
     results = _collect_results(output_path, base_name)
     rel_files = [p.name for p in results]
@@ -592,7 +639,7 @@ def _run_job_inner(
         if warnings:
             sidecar["warnings"] = warnings
             for w in warnings:
-                print(f"[generate] {job_id} WARNING: {w}", flush=True)
+                print(f"[generate] {job_id} WARNING: {w}", file=sys.stderr, flush=True)
 
     # Stash stderr tail in the sidecar so frontend can surface it.
     if stderr_tail:
@@ -638,15 +685,15 @@ def _run_job_inner(
 
 
 def run(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
-    """Start a generation. Returns {job_id} or {error}."""
+    """Start a generation. Returns {job_id} or {error, code}."""
     try:
         prepared = _prepare(ctx, request)
     except ValueError as exc:
-        return {"error": str(exc)}
+        return {"error": str(exc), "code": "invalid_request"}
 
     with ctx.state.generation_lock:
         if ctx.state.generation.snapshot().get("state") == "running":
-            return {"error": "A generation is already running"}
+            return {"error": "A generation is already running", "code": "already_running"}
         job_id = prepared["base_name"]
         # Clear cancel under the same lock as the running transition so a
         # concurrent cancel() cannot set the event only to have it wiped here.

@@ -103,6 +103,13 @@ def test_trusted_host_allows_tunnel_host():
 def test_trusted_host_wildcard_bind_trusts_any_host():
     from backend.http import is_trusted_request_host
 
-    # Explicit LAN-exposure mode keeps the existing trust-the-Host behavior.
-    assert is_trusted_request_host("anything.example:5250", "0.0.0.0") is True
-    assert is_trusted_request_host("anything.example:5250", "::") is True
+    # Wildcard bind no longer trusts arbitrary Host headers (DNS-rebinding
+    # hardening): only loopback, the GUI host, explicit ALLOWED_HOSTS, or the
+    # tunnel host pass. Wildcard itself is not a hostname clients send.
+    assert is_trusted_request_host("anything.example:5250", "0.0.0.0") is False
+    assert is_trusted_request_host("anything.example:5250", "::") is False
+    assert is_trusted_request_host("127.0.0.1:5250", "0.0.0.0") is True
+    assert (
+        is_trusted_request_host("mybox.local:5250", "0.0.0.0", allowed_hosts=("mybox.local",))
+        is True
+    )

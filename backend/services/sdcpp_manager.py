@@ -15,6 +15,7 @@ We therefore skip checksum verification with a stderr warning — this resolves
 PLAN.md §16 open decision #3.
 """
 
+import copy
 import fnmatch
 import hashlib
 import json
@@ -26,6 +27,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import urllib.request
 import zipfile
 from collections.abc import Callable, Iterable, Mapping
@@ -436,14 +438,12 @@ def find_asset_by_name(assets: list[dict[str, Any]], name: str) -> dict[str, Any
 
 def get_releases(ctx: AppContext, force: bool = False) -> list[dict[str, Any]]:
     """Fetch the raw GitHub releases list, with a short in-memory cache."""
-    import time
-
     now = time.time()
     with _RELEASES_CACHE_LOCK:
         if not force and _RELEASES_CACHE["data"] is not None:
             if now - _RELEASES_CACHE["fetched_at"] < _RELEASES_CACHE_TTL:
-                # Copy so callers can't mutate the shared cache entry.
-                return list(_RELEASES_CACHE["data"])
+                # Deep copy so callers can't mutate the shared cache entry.
+                return copy.deepcopy(_RELEASES_CACHE["data"])
 
     req = urllib.request.Request(
         ctx.config.github_api,
@@ -454,7 +454,7 @@ def get_releases(ctx: AppContext, force: bool = False) -> list[dict[str, Any]]:
     with _RELEASES_CACHE_LOCK:
         _RELEASES_CACHE["data"] = data
         _RELEASES_CACHE["fetched_at"] = now
-    return list(data)
+    return copy.deepcopy(data)
 
 
 def get_release_by_tag(ctx: AppContext, tag: str) -> dict[str, Any]:
@@ -596,9 +596,72 @@ def parse_otool_rpath_libraries(output: str) -> list[str]:
 
 # otool -L output only changes when the binary changes, but the status route
 # polls validate_runtime_dependencies frequently — cache per (path, mtime) so
-# we don't spawn two subprocesses per status poll on macOS.
+# we don't spawn two subprocesses per status poll on macOS. The full
+# validate_runtime_dependencies result is additionally cached briefly (TTL)
+# so /api/status polls don't stat/probe on every request.
 _RPATH_CACHE: dict[str, tuple[float, list[str]]] = {}
 _RPATH_CACHE_LOCK = threading.Lock()
+
+_RUNTIME_HEALTH_CACHE: dict[str, Any] = {"data": None, "fetched_at": 0.0, "key": None}
+_RUNTIME_HEALTH_CACHE_LOCK = threading.Lock()
+_RUNTIME_HEALTH_CACHE_TTL = 5.0
+
+
+def _runtime_health_state_key(
+    ctx: AppContext, tools_key: tuple[str, ...] | None
+) -> tuple[Any, ...]:
+    """Fingerprint filesystem state relevant to runtime health.
+
+    The TTL cache must not hide a newly installed binary/dll: include tool
+    mtimes, the active bin dir listing signature, and PATH (hipblas.dll is
+    resolved via PATH on win32 ROCm).
+    """
+    try:
+        tools = list(tools_key) if tools_key is not None else list(ctx.services.sdcpp_tools)
+    except Exception:
+        tools = []
+    mtimes: list[tuple[str, float]] = []
+    for tool in tools:
+        try:
+            exe = ctx.services.find_tool_executable(ctx, tool)
+            mtimes.append((str(exe), float(exe.stat().st_mtime)))
+        except Exception:
+            mtimes.append((str(tool), -1.0))
+    try:
+        active_bin = get_active_runtime_bin(ctx)
+        names: list[tuple[str, float]] = []
+        if active_bin.exists():
+            for child in sorted(active_bin.iterdir()):
+                try:
+                    names.append((child.name, float(child.stat().st_mtime)))
+                except OSError:
+                    names.append((child.name, -1.0))
+        bin_sig: tuple[Any, ...] = (str(active_bin), tuple(names))
+    except Exception:
+        bin_sig = ("", ())
+    if ctx.services.current_platform == "win32":
+        # hipblas.dll is resolved via PATH: fingerprint the candidate files'
+        # existence/mtime, not just the PATH string (a dll may appear in an
+        # already-listed dir).
+        path_entries = os.get_exec_path()
+        dll_sig: list[tuple[str, bool, float]] = []
+        try:
+            dll_sig.append(("hipblas.dll", (active_bin / "hipblas.dll").exists(), 0.0))
+        except Exception:
+            pass
+        for entry in path_entries:
+            try:
+                cand = pathlib.Path(entry) / "hipblas.dll"
+                try:
+                    dll_sig.append((str(cand), cand.exists(), float(cand.stat().st_mtime)))
+                except OSError:
+                    dll_sig.append((str(cand), False, -1.0))
+            except Exception:
+                continue
+        path_sig: tuple[Any, ...] = (tuple(path_entries), tuple(dll_sig))
+    else:
+        path_sig = ()
+    return (tuple(mtimes), bin_sig, tuple(path_sig))
 
 
 def get_macos_rpath_libraries(executable: pathlib.Path) -> list[str]:
@@ -632,7 +695,36 @@ def validate_runtime_dependencies(
     Windows ROCm builds require hipBLAS from an external ROCm toolkit. macOS
     dependencies are discovered from ``otool -L``. Other shared libraries are
     resolved by the platform loader at launch.
+
+    Results are cached briefly (5s TTL, thread-safe) so frequent /api/status
+    polls don't spawn an otool storm.
     """
+    tools_key = tuple(tools) if tools is not None else None
+    # Filesystem state (new dll dropped on PATH, binary replaced) must be
+    # visible immediately: key the cache on mtimes + PATH snapshot so a state
+    # change invalidates the TTL entry instead of serving stale health.
+    state_key = _runtime_health_state_key(ctx, tools_key)
+    now = time.time()
+    with _RUNTIME_HEALTH_CACHE_LOCK:
+        cached = _RUNTIME_HEALTH_CACHE.get("data")
+        if (
+            cached is not None
+            and _RUNTIME_HEALTH_CACHE.get("key") == (tools_key, state_key)
+            and now - float(_RUNTIME_HEALTH_CACHE.get("fetched_at") or 0.0)
+            < _RUNTIME_HEALTH_CACHE_TTL
+        ):
+            return copy.deepcopy(cached)
+    result = _validate_runtime_dependencies_uncached(ctx, tools)
+    with _RUNTIME_HEALTH_CACHE_LOCK:
+        _RUNTIME_HEALTH_CACHE["data"] = copy.deepcopy(result)
+        _RUNTIME_HEALTH_CACHE["fetched_at"] = now
+        _RUNTIME_HEALTH_CACHE["key"] = (tools_key, state_key)
+    return copy.deepcopy(result)
+
+
+def _validate_runtime_dependencies_uncached(
+    ctx: AppContext, tools: Iterable[str] | None = None
+) -> dict[str, Any]:
     current_platform = ctx.services.current_platform
     checked_tools: list[str] = []
     missing_executables: list[str] = []

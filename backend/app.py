@@ -37,6 +37,7 @@ from .http import (
     is_trusted_request_host,
     is_v1_proxy_path,
     require_secure_bind,
+    sanitize_error,
 )
 from .routes import file_picker as file_picker_routes
 from .routes import generate as generate_routes
@@ -154,7 +155,8 @@ def load_config() -> dict:
             return sdcpp_manager.normalize_install_config(
                 json.loads(config.CONFIG_FILE.read_text(encoding="utf-8"))
             )
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError, ValueError, AttributeError) as exc:
+            print(f"[warn] corrupt config.json, using blank config: {exc}", file=sys.stderr)
             return sdcpp_manager.normalize_install_config({})
     return sdcpp_manager.normalize_install_config({})
 
@@ -163,7 +165,10 @@ def save_config(cfg: Mapping[str, Any]) -> None:
     from .services import sdcpp_manager
 
     normalized = sdcpp_manager.normalize_install_config(cfg)
-    config.CONFIG_FILE.write_text(json.dumps(normalized, indent=2), encoding="utf-8")
+    config.CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = config.CONFIG_FILE.with_suffix(config.CONFIG_FILE.suffix + ".tmp")
+    tmp.write_text(json.dumps(normalized, indent=2), encoding="utf-8")
+    tmp.replace(config.CONFIG_FILE)
 
 
 def configure_services(ctx=APP_CONTEXT) -> None:
@@ -236,6 +241,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             allowed_hosts=config.GUI_ALLOWED_HOSTS,
             tunnel_host=tunnel_host,
         ):
+            # Hint LAN users: 0.0.0.0 binds require SD_GUI_ALLOWED_HOSTS.
+            print(
+                "[warn] rejected Host header; for LAN access bind 0.0.0.0 "
+                "and set SD_GUI_ALLOWED_HOSTS",
+                file=sys.stderr,
+                flush=True,
+            )
             return False
         return is_safe_request_origin(self.headers, self.get_allowed_request_origins())
 
@@ -271,11 +283,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if length > API_BODY_LIMIT:
             return _BODY_TOO_LARGE
         try:
-            return json.loads(self.rfile.read(length))
+            parsed = json.loads(self.rfile.read(length))
         except (json.JSONDecodeError, UnicodeDecodeError):
             return None
+        if not isinstance(parsed, dict):
+            return None
+        return parsed
 
     def read_raw_body(self, limit=PROXY_BODY_LIMIT):
+        """Read a raw proxy body. Returns bytes, ``_BODY_TOO_LARGE`` when over
+        the limit, or ``None`` when the length header is unusable."""
         try:
             length = int(self.headers.get("Content-Length", 0))
         except (TypeError, ValueError):
@@ -285,7 +302,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if length == 0:
             return b""
         if length > limit:
-            return None
+            return _BODY_TOO_LARGE
         return self.rfile.read(length)
 
     def dispatch(self, method, parsed, body=None):
@@ -308,7 +325,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             body=body if body is not None else {},
             params=dict(match.params),
         )
-        match.handler(request, Response(self), APP_CONTEXT)
+        try:
+            match.handler(request, Response(self), APP_CONTEXT)
+        except (BrokenPipeError, ConnectionResetError):
+            raise
+        except Exception as exc:
+            try:
+                Response(self).error(sanitize_error(exc, 500), 500)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
 
     def proxy_to_sd_server(self, method, parsed, body=b""):
         try:
@@ -363,6 +388,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
         super().do_GET()
 
+    def _proxy_body_or_error(self):
+        """Read a proxy body, answering 400/413 directly. Returns (body, handled)."""
+        body = self.read_raw_body()
+        if body is _BODY_TOO_LARGE:
+            Response(self).error("Request body too large", 413)
+            return None, True
+        if body is None:
+            Response(self).error("Invalid or missing Content-Length", 400)
+            return None, True
+        return body, False
+
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         if is_v1_proxy_path(parsed.path):
@@ -372,9 +408,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if not self.is_gui_auth_ok("POST", parsed.path):
                 self.reject_unauthorized()
                 return
-            body = self.read_raw_body()
-            if body is None:
-                self.send_error(413, "Request body too large")
+            body, handled = self._proxy_body_or_error()
+            if handled:
                 return
             self.proxy_to_sd_server("POST", parsed, body)
             return
@@ -386,10 +421,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
         body = self.read_body()
         if body is _BODY_TOO_LARGE:
-            self.send_error(413, "Request body too large")
+            Response(self).error("Request body too large", 413)
             return
         if body is None:
-            self.send_error(400, "Invalid or malformed JSON body")
+            Response(self).error("Invalid or malformed JSON body", 400)
             return
         self.dispatch("POST", parsed, body)
 
@@ -402,18 +437,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.reject_unauthorized()
             return
         if is_v1_proxy_path(parsed.path):
-            body = self.read_raw_body()
-            if body is None:
-                self.send_error(413, "Request body too large")
+            body, handled = self._proxy_body_or_error()
+            if handled:
                 return
             self.proxy_to_sd_server("DELETE", parsed, body)
             return
         body = self.read_body()
         if body is _BODY_TOO_LARGE:
-            self.send_error(413, "Request body too large")
+            Response(self).error("Request body too large", 413)
             return
         if body is None:
-            self.send_error(400, "Invalid or malformed JSON body")
+            Response(self).error("Invalid or malformed JSON body", 400)
             return
         self.dispatch("DELETE", parsed, body)
 
@@ -428,9 +462,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not self.is_gui_auth_ok("PUT", parsed.path):
             self.reject_unauthorized()
             return
-        body = self.read_raw_body()
-        if body is None:
-            self.send_error(413, "Request body too large")
+        body, handled = self._proxy_body_or_error()
+        if handled:
             return
         self.proxy_to_sd_server("PUT", parsed, body)
 
@@ -445,9 +478,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not self.is_gui_auth_ok("PATCH", parsed.path):
             self.reject_unauthorized()
             return
-        body = self.read_raw_body()
-        if body is None:
-            self.send_error(413, "Request body too large")
+        body, handled = self._proxy_body_or_error()
+        if handled:
             return
         self.proxy_to_sd_server("PATCH", parsed, body)
 
@@ -542,7 +574,7 @@ def main() -> None:
             if attempt + 1 < max_attempts:
                 _time.sleep(0.5)
                 continue
-            print(f"ERROR: Could not start server on port {port}: {exc}")
+            print(f"ERROR: Could not start server on port {port}: {exc}", file=sys.stderr)
             sys.exit(1)
     if not bound:
         sys.exit(1)

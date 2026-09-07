@@ -107,6 +107,14 @@ window.SDGui.gallery = (() => {
 		var item = el("div", "history-item");
 		item.setAttribute("data-id", entry.id || "");
 		item.title = entry.prompt || entry.name || "";
+		if (typeof actions.onRestore === "function") {
+			item.setAttribute("tabindex", "0");
+			item.setAttribute("role", "button");
+			item.setAttribute(
+				"aria-label",
+				"Restore settings for " + (entry.prompt || entry.name || "history item"),
+			);
+		}
 
 		var isVideo = isVideoFile(entry.file);
 		if (isVideo) {
@@ -189,8 +197,16 @@ window.SDGui.gallery = (() => {
 		item.appendChild(bar);
 
 		// Click anywhere else on the thumb = restore (preserves prior UX).
+		// Keyboard: Enter/Space restores too (history items are focusable).
 		if (typeof actions.onRestore === "function") {
 			item.addEventListener("click", () => actions.onRestore(entry));
+		item.addEventListener("keydown", (ev) => {
+			if (ev.target !== item) return;
+			if (ev.key === "Enter" || ev.key === " ") {
+				ev.preventDefault();
+				actions.onRestore(entry);
+			}
+		});
 		}
 		return item;
 	}

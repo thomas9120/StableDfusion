@@ -77,7 +77,7 @@ Metal, …). Then switch to **Generate Image** and start creating.
 ```
 python server.py  →  backend/app.py  (stdlib ThreadingHTTPServer)
                      ├─ serves ui/ as the web root
-                     ├─ /api/*  → backend/routes/*.py (33 endpoints)
+                     ├─ /api/*  → backend/routes/*.py (38 endpoints)
                      └─ /v1, /sdapi, /sdcpp/*  → proxied to running sd-server (127.0.0.1:1234)
 ```
 
@@ -93,10 +93,10 @@ python server.py  →  backend/app.py  (stdlib ThreadingHTTPServer)
 
 | Env var | Default | Purpose |
 |---|---|---|
-| `SD_GUI_HOST` | `127.0.0.1` | Bind host (`0.0.0.0` or `*` for LAN access) |
+| `SD_GUI_HOST` | `127.0.0.1` | Bind host. `0.0.0.0` / LAN IP requires `SD_GUI_ALLOWED_HOSTS` (Host allow-list) + `SD_GUI_TOKEN` (or explicit `SD_GUI_ALLOW_INSECURE=1`) |
 | `SD_GUI_PORT` | `5250` | GUI port (distinct from LLama-GUI's 5240) |
-| `SD_GUI_ALLOWED_HOSTS` | — | Comma-separated extra allowed hosts (LAN IPs / hostnames), admitted as `http://<host>:<port>` origins |
-| `SD_GUI_TOKEN` | — | Optional shared secret. When set, mutating `/api/*` and all `/v1` `/sdapi` `/sdcpp` proxy requests require `Authorization: Bearer <token>` or `X-SD-GUI-Token: <token>` |
+| `SD_GUI_ALLOWED_HOSTS` | — | Comma-separated extra allowed hosts (LAN IPs / hostnames), admitted as `http://<host>:<port>` origins. **Required** for LAN/`0.0.0.0` access — requests with other `Host` headers get 403 |
+| `SD_GUI_TOKEN` | — | Optional shared secret (max 4096 chars, truncated with a stderr warning). When set, mutating `/api/*` and all `/v1` `/sdapi` `/sdcpp` proxy requests require `Authorization: Bearer <token>` or `X-SD-GUI-Token: <token>` |
 | `SD_GUI_ALLOW_INSECURE` | off | Set to `1`/`true`/`yes` to allow non-loopback bind **without** a token (explicit opt-in; not recommended) |
 | `SD_GUI_PROXY_TIMEOUT` | `1800` | Timeout (seconds) per proxied `/v1` / `/sdapi` / `/sdcpp` request to sd-server |
 
@@ -108,7 +108,8 @@ python server.py  →  backend/app.py  (stdlib ThreadingHTTPServer)
 - When a token is configured, the UI sends it if present in `localStorage` / `sessionStorage` key `SD_GUI_TOKEN` (e.g. `localStorage.setItem("SD_GUI_TOKEN", "…")` in the browser console).
 
 Runtime layout (auto-created on boot): `models/`, `output/` (+ `.preview/`, `.gallery/`),
-`presets/`, `sdcpp/bin/`, `tools/cloudflared/`.
+`presets/`, `sdcpp/installs/<tag>/<backend>/bin/` (active runtime),
+`sdcpp/bin/` (legacy fallback), `tools/cloudflared/`.
 
 ## Project layout
 

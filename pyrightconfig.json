@@ -1,6 +1,9 @@
 {
   "include": ["backend", "server.py", "tests"],
+  "exclude": [".venv", "__pycache__", "sdcpp", "models", "output", "node_modules"],
   "extraPaths": ["."],
+  "venvPath": ".",
+  "venv": ".venv",
   "pythonVersion": "3.11",
   "typeCheckingMode": "standard",
   "reportMissingImports": "error",

@@ -13,10 +13,10 @@
 | `start-windows.bat` | One-click Windows launcher |
 | `install.sh` | macOS/Linux installer |
 | `start.sh` | macOS/Linux launcher |
-| `requirements.txt` | Python dependencies (stdlib + optional `certifi`) |
-| `pyproject.toml` | Ruff config |
+| `requirements.txt` | Python dependencies (`certifi` + `huggingface_hub`; Pillow intentionally omitted) |
+| `pyproject.toml` | Ruff config + pytest testpaths (deps live in `requirements.txt`) |
 | `pyrightconfig.json` | Pyright type-checking config |
-| `package.json` | Node dev deps (Playwright for smoke tests) |
+| `package.json` | Node dev deps (Playwright for smoke tests) + `test`/`test:syntax`/`test:frontend` scripts |
 | `AGENTS.md` | Agent instructions and conventions |
 | `PLAN.md` | Architecture design document (source of truth) |
 
@@ -27,7 +27,7 @@
 | `app.py` | HTTP handler, CORS, route registry, `_assemble_index()` partial system, `main()` | ✅ boots |
 | `config.py` | Paths (`sdcpp/`, `output/`, `models/` component folders), ports (5250 / 1234), env (`SD_GUI_*`) | ✅ |
 | `context.py` | `AppContext`, `AppPaths`, `ServerConfig`, `BackendServices` | ✅ |
-| `state.py` | `ServerState` + `AtomicDict` + locks (generation, sd_server, model_download, tunnel) | ✅ |
+| `state.py` | `ServerState` + `AtomicDict` + locks (process/output/stderr, install, model_download, remote_tunnel(+install/log), generation, preset, app_update, sd_server(+log)) | ✅ |
 | `http.py` | `Request`/`Response`/CORS helpers (generic) | ✅ |
 | `routing.py` | `Router` (exact + prefix) | ✅ |
 
@@ -40,7 +40,7 @@ edits reflect on browser refresh. Missing partials log a warning and leave the
 placeholder intact. The `ui/partials/` directory is never served directly —
 `is_static_ui_path()` in `http.py` only allows `/css/`, `/js/`, `/assets/` prefixes.
 
-### Routes (`backend/routes/`) — wired in `app.py:API_ROUTER`
+### Routes (`backend/routes/`) — 38 entries wired in `app.py:API_ROUTER`
 
 | Route | Method | Handler |
 |---|---|---|
@@ -77,6 +77,7 @@ placeholder intact. The `ui/partials/` directory is never served directly —
 | `/api/restart` | POST | `lifecycle.post_restart` |
 | `/api/open-folder` | POST | `lifecycle.post_open_folder` |
 | `/api/select-file` | POST | `file_picker.select_file` |
+| `/api/select-directory` | POST | `file_picker.select_directory` |
 | `/api/presets` | POST | `presets.save_preset` |
 | `/api/presets/shortcut` | POST | `presets.export_preset_shortcut` |
 | `/api/image/{name}` | GET | `images.serve_image` (prefix) |
@@ -101,7 +102,7 @@ placeholder intact. The `ui/partials/` directory is never served directly —
 
 ### Shell and partials
 
-`ui/index.html` is a ~160-line shell containing the `<head>`, sidebar nav, modal,
+`ui/index.html` is a ~200-line shell containing the `<head>`, sidebar nav, modal,
 script tags, and `<!-- @partial NAME -->` placeholders. The tab panels live
 in `ui/partials/`:
 
@@ -119,7 +120,7 @@ in `ui/partials/`:
 
 ### JavaScript (`ui/js/`)
 
-Script load order is fixed in `index.html` (see `PLAN.md` §8). `app.js` does
+Script load order is fixed in `index.html` (see `PLAN.md` §8 — archived design doc, not on disk). `app.js` does
 tab switching + status polling; other modules attach to `window.SDGui.*`.
 
 | Module | Role |
@@ -180,9 +181,10 @@ modules or bundler assumptions.
 ## Runtime directories
 
 Created on boot by `backend/app.main()`: `models/`, `models/diffusion/`,
-`models/vae/`, `models/text-encoders/`, `models/loras/`, `presets/`,
-`sdcpp/bin/` (legacy/current fallback), `sdcpp/installs/`, `output/`,
-`output/.preview/`, `output/.gallery/`.
+`models/vae/`, `models/text-encoders/`, `models/loras/`, `models/upscalers/`,
+`presets/`, `sdcpp/bin/` (legacy/current fallback), `sdcpp/installs/`,
+`output/`, `output/.preview/`, `output/.gallery/`, plus `tools/cloudflared/`
+(downloaded on first tunnel start).
 
 New stable-diffusion.cpp installs are stored by runtime under
 `sdcpp/installs/<tag>/<backend>/bin/`. The active runtime recorded in
@@ -193,9 +195,26 @@ New stable-diffusion.cpp installs are stored by runtime under
 | Directory | Contents |
 |---|---|
 | `tests/backend/` | pytest unit tests for routes, services, and managers |
-| `tests/frontend/` | Playwright smoke tests (dev only) |
+| `tests/frontend/` | `flag_core_unit.cjs` (flag-core unit), `flag_sync_smoke.cjs` (Playwright smoke), `js_syntax_check.cjs` (`node --check` over `ui/js/`) |
 
 ## Tooling
 
 - Python: `ruff` (config in `pyproject.toml`), `pyrightconfig.json`.
 - Node: `playwright` (dev only) for frontend smoke tests (`tests/frontend/`).
+  Playwright browsers are not bundled — run
+  `npx playwright install --with-deps chromium` once before the smoke test.
+
+## LAN access
+
+Binding to `0.0.0.0` (LAN) requires `SD_GUI_ALLOWED_HOSTS` to list the LAN
+host(s); other `Host` headers are rejected with 403 (see `backend/http.py`
+`is_trusted_request_host`). A rejected Host also logs a stderr hint. LAN
+binds additionally require `SD_GUI_TOKEN` (or explicit
+`SD_GUI_ALLOW_INSECURE=1`).
+
+## Install concurrency
+
+`backend/routes/install.py:_busy_with_workload` intentionally blocks ALL
+install mutations (install/update/repair/remove/cleanup/active-switch) while
+any generation or sd-cli/sd-server process runs — swapping binaries mid-run
+would corrupt the run (conservative-correct, not per-runtime).

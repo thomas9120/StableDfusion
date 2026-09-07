@@ -24,6 +24,8 @@ echo.
 echo Starting StableDfusion...
 echo URL: http://%HOST%:%PORT%
 echo.
+REM NOTE: the browser opens before the server is up, so the first load may
+REM need a refresh; if server.py exits, close the stray tab.
 
 start "" "http://%HOST%:%PORT%"
 %PYTHON_EXE% server.py

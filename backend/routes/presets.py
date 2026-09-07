@@ -11,6 +11,7 @@ Presets are saved generation configurations grouped by model type/bundle.
 import datetime
 import json
 import re
+import sys
 import urllib.parse
 from pathlib import Path
 from typing import Any
@@ -215,7 +216,7 @@ def delete_preset(request: Request, response: Response, ctx: AppContext) -> None
         return
     except OSError as exc:
         response.error("Could not delete preset.", 500)
-        print(f"[presets] delete failed for {raw_name!r}: {exc}", flush=True)
+        print(f"[presets] delete failed for {raw_name!r}: {exc}", file=sys.stderr, flush=True)
         return
     response.json({"deleted": True, "name": name})
 

@@ -30,6 +30,28 @@ def _runtime_process_running(ctx: AppContext) -> bool:
     return proc is not None and proc.poll() is None
 
 
+def _generation_running(ctx: AppContext) -> bool:
+    try:
+        return ctx.state.generation.snapshot().get("state") == "running"
+    except Exception:
+        return False
+
+
+def _busy_with_workload(ctx: AppContext) -> str | None:
+    """Return a refusal reason when install/update would swap binaries mid-run.
+
+    Conservative-correct: any running generation OR any running sd-cli /
+    sd-server process blocks ALL install mutations (install/update/repair/
+    remove/cleanup/active-switch). Swapping binaries mid-run would corrupt
+    the run, so the blanket block is intentional — not per-runtime.
+    """
+    if _generation_running(ctx):
+        return "Stop the running generation first"
+    if _runtime_process_running(ctx):
+        return "Stop running process first"
+    return None
+
+
 def _runtime_payload(request: Request, response: Response, ctx: AppContext):
     body = request.body or {}
     tag = body.get("tag")
@@ -41,9 +63,9 @@ def _runtime_payload(request: Request, response: Response, ctx: AppContext):
     # Validate before any use: tag is later interpolated into a GitHub API URL
     # and used to build filesystem paths. Strict regex prevents URL/path
     # injection (H5) and path traversal.
-    if not sdcpp_manager.INSTALL_ID_RE.fullmatch(tag) or not sdcpp_manager.INSTALL_ID_RE.fullmatch(
-        backend
-    ):
+    tag_ok = sdcpp_manager.INSTALL_ID_RE.fullmatch(tag)
+    backend_ok = sdcpp_manager.INSTALL_ID_RE.fullmatch(backend)
+    if not tag_ok or not backend_ok:
         response.error("Invalid tag or backend.", 400)
         return None
     if backend not in ctx.services.backend_specs:
@@ -53,8 +75,11 @@ def _runtime_payload(request: Request, response: Response, ctx: AppContext):
 
 
 def _begin_install_operation(response: Response, ctx: AppContext) -> bool:
-    if _runtime_process_running(ctx):
-        response.error("Stop running process first", 400)
+    busy = _busy_with_workload(ctx)
+    if busy:
+        # 409: a generation or sd-server run owns the binaries right now;
+        # swapping them mid-run would corrupt the run.
+        response.error(busy, 409)
         return False
     with ctx.state.install_lock:
         if ctx.state.install_in_progress:
@@ -104,7 +129,8 @@ def start_install(request: Request, response: Response, ctx: AppContext) -> None
 
     def _install(tag_value, backend_value):
         try:
-            sdcpp_manager.install_release(ctx, tag_value, backend_value, ctx.services.backend_specs)
+            specs = ctx.services.backend_specs
+            sdcpp_manager.install_release(ctx, tag_value, backend_value, specs)
         except Exception as exc:
             print(f"[install] unhandled error: {exc}", file=sys.stderr, flush=True)
             sdcpp_manager.set_download_progress(ctx, status="error", message=str(exc))
@@ -132,8 +158,9 @@ def set_active_runtime(request: Request, response: Response, ctx: AppContext) ->
     payload = _runtime_payload(request, response, ctx)
     if payload is None:
         return
-    if _runtime_process_running(ctx):
-        response.error("Stop running process first", 400)
+    busy = _busy_with_workload(ctx)
+    if busy:
+        response.error(busy, 409)
         return
     tag, backend = payload
     # Guard install state: refuse while an install/repair/update is running and
@@ -211,8 +238,9 @@ def remove_runtime(request: Request, response: Response, ctx: AppContext) -> Non
     payload = _runtime_payload(request, response, ctx)
     if payload is None:
         return
-    if _runtime_process_running(ctx):
-        response.error("Stop running process first", 400)
+    busy = _busy_with_workload(ctx)
+    if busy:
+        response.error(busy, 409)
         return
     tag, backend = payload
     with ctx.state.install_lock:
@@ -231,8 +259,9 @@ def remove_runtime(request: Request, response: Response, ctx: AppContext) -> Non
 
 
 def cleanup_sdcpp(request: Request, response: Response, ctx: AppContext) -> None:
-    if _runtime_process_running(ctx):
-        response.error("Stop running process first", 400)
+    busy = _busy_with_workload(ctx)
+    if busy:
+        response.error(busy, 409)
         return
     with ctx.state.install_lock:
         if ctx.state.install_in_progress:

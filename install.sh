@@ -41,6 +41,8 @@ echo "Installing Python dependencies..."
 if command -v npm >/dev/null 2>&1; then
 	echo "Installing frontend test dependencies..."
 	npm install
+	# Optional: enable Playwright browsers for frontend smoke tests.
+	# Uncomment to install: npx playwright install --with-deps chromium
 else
 	echo "npm was not found; skipping optional frontend test dependencies."
 fi

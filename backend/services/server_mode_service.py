@@ -14,6 +14,7 @@ from typing import Any
 
 from .. import config
 from ..context import AppContext
+from ..http import InsecureBindError, insecure_bind_warning, require_secure_bind
 from . import process_manager, sdcpp_manager
 
 CURATED_SERVER_VALUE_FLAGS = {
@@ -68,6 +69,11 @@ _TOKEN_RE = re.compile(r"^[^\x00-\x1f\x7f]*$")
 _HOST_RE = re.compile(r"^[A-Za-z0-9_.:\-[\]]+$")
 _POLL_INTERVAL = 0.5
 
+# Bound proxy response reads so a malicious/hung sd-server can't force the GUI
+# to buffer an unbounded payload (matches the /api proxy body allowance).
+PROXY_RESPONSE_LIMIT = 500 * 1024 * 1024
+PROXY_RESPONSE_CHUNK = 65536
+
 
 def _target_url(host: str, port: int) -> str:
     display_host = "127.0.0.1" if host in {"0.0.0.0", "::"} else host
@@ -103,19 +109,6 @@ def _validate_token(token: str) -> str:
 
 def _flag_takes_value(flag: str) -> bool:
     return flag in CURATED_SERVER_VALUE_FLAGS
-
-
-def _strip_owned(tokens: list[str]) -> list[str]:
-    out: list[str] = []
-    i = 0
-    while i < len(tokens):
-        tok = tokens[i]
-        if tok in SERVER_OWNED_FLAGS:
-            i += 2
-            continue
-        out.append(tok)
-        i += 1
-    return out
 
 
 def _flatten_pairs(pairs: Iterable[Any] | None) -> list[str]:
@@ -261,6 +254,40 @@ def _monitor(ctx: AppContext, proc, host: str, port: int) -> None:
             )
 
 
+def _read_bounded(resp, limit: int) -> bytes:
+    """Read at most ``limit`` bytes so a hung/malicious sd-server can't force
+    unbounded buffering in the GUI process.
+
+    Raises ValueError when more than ``limit`` bytes remain so callers can
+    answer 502 instead of silently truncating the payload.
+    """
+    chunks: list[bytes] = []
+    remaining = limit
+    read = getattr(resp, "read", None)
+    while remaining > 0:
+        try:
+            chunk = read(min(PROXY_RESPONSE_CHUNK, remaining))  # type: ignore[misc]
+        except TypeError:
+            # Test doubles / minimal file-likes may only support read() with no
+            # size argument — fall back to a single unbounded read.
+            chunk = read()  # type: ignore[misc]
+            if chunk:
+                chunks.append(chunk)
+            break
+        if not chunk:
+            break
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    if remaining <= 0:
+        try:
+            extra = read(1)  # type: ignore[misc]
+        except TypeError:
+            extra = None
+        if extra:
+            raise ValueError("sd-server response too large")
+    return b"".join(chunks)
+
+
 def _port_in_use_error(host: str, port: int) -> dict[str, Any]:
     connect = _connect_host(host)
     return {
@@ -283,18 +310,30 @@ def start(ctx: AppContext, request: dict[str, Any]) -> dict[str, Any]:
     port = prepared["port"]
 
     # Non-loopback listen exposes sd-server directly (bypasses GUI proxy/token).
-    listen_host = (host or "").strip().lower()
-    if (
-        listen_host
-        and listen_host not in {"127.0.0.1", "localhost", "::1"}
-        and not listen_host.startswith("127.")
-    ):
-        print(
-            f"WARNING: sd-server listen host is {host!r} (non-loopback). "
-            "Prefer 127.0.0.1 and reach the API via the GUI proxy with "
-            "SD_GUI_TOKEN set if exposing the control plane.",
-            file=sys.stderr,
-        )
+    # Mirror the GUI's require_secure_bind policy: refuse unless a token is set
+    # or insecure mode was explicitly opted in. Security refusal (403), not a
+    # warning-only path. API backward compatible except for this refusal.
+    try:
+        token = str(config.GUI_TOKEN or "")
+        require_secure_bind(host, token, bool(config.GUI_ALLOW_INSECURE))
+    except InsecureBindError as exc:
+        return {"error": str(exc), "status": 403}
+    warning = insecure_bind_warning(host, token, bool(config.GUI_ALLOW_INSECURE))
+    if warning:
+        print(warning, file=sys.stderr)
+    else:
+        listen_host = (host or "").strip().lower()
+        if (
+            listen_host
+            and listen_host not in {"127.0.0.1", "localhost", "::1"}
+            and not listen_host.startswith("127.")
+        ):
+            print(
+                f"WARNING: sd-server listen host is {host!r} (non-loopback). "
+                "Prefer 127.0.0.1 and reach the API via the GUI proxy with "
+                "SD_GUI_TOKEN set if exposing the control plane.",
+                file=sys.stderr,
+            )
 
     # Fast pre-check under the lock: refuse if already running.
     with ctx.state.sd_server_lock:
@@ -466,7 +505,12 @@ def proxy(
     port = int(snap.get("port") or config.SD_SERVER_PORT)
     connect_host = _connect_host(host)
     target_path = path + (f"?{query}" if query else "")
-    conn = http.client.HTTPConnection(connect_host, port, timeout=config.SD_SERVER_PROXY_TIMEOUT)
+    try:
+        timeout = float(config.SD_SERVER_PROXY_TIMEOUT)
+    except (TypeError, ValueError):
+        timeout = config.DEFAULT_SD_SERVER_PROXY_TIMEOUT
+    timeout = min(max(timeout, 1.0), config.PROXY_TIMEOUT_MAX)
+    conn = http.client.HTTPConnection(connect_host, port, timeout=timeout)
     # Never forward GUI auth secrets to sd-server (loopback or otherwise).
     _deny = {
         "host",
@@ -480,7 +524,15 @@ def proxy(
     try:
         conn.request(method, target_path, body=body or None, headers=forward_headers)
         resp = conn.getresponse()
-        payload = resp.read()
+        try:
+            payload = _read_bounded(resp, PROXY_RESPONSE_LIMIT)
+        except ValueError as exc:
+            print(f"[proxy] {exc}", file=sys.stderr, flush=True)
+            return (
+                502,
+                {"Content-Type": "application/json; charset=utf-8"},
+                b'{"error":"sd-server response too large"}',
+            )
         response_headers = {
             key: value
             for key, value in resp.getheaders()

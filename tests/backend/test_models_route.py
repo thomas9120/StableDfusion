@@ -110,3 +110,58 @@ def test_upscaler_listing_uses_upscalers_folder_and_esrgan_alias(tmp_path):
 
     assert [m["relative"] for m in out["models"]] == ["upscalers/RealESRGAN_x4plus.pth"]
     assert [m["relative"] for m in alias_out["models"]] == ["upscalers/RealESRGAN_x4plus.pth"]
+
+
+def _seed_numbered(ctx, count: int) -> None:
+    (ctx.paths.models / "diffusion").mkdir(parents=True, exist_ok=True)
+    for i in range(count):
+        (ctx.paths.models / "diffusion" / f"m{i:02d}.gguf").write_bytes(b"x")
+
+
+def test_limit_zero_returns_capped_default_not_unbounded(tmp_path):
+    ctx = _ctx(tmp_path)
+    _seed_numbered(ctx, 3)
+    out = _list(ctx, "limit=0")
+    assert out["limit"] == 1
+    assert out["total"] == 3
+    assert len(out["models"]) == 1
+
+
+def test_limit_offset_pagination_and_total_echo(tmp_path):
+    ctx = _ctx(tmp_path)
+    _seed_numbered(ctx, 4)
+    out = _list(ctx, "limit=1&offset=1")
+    assert out["total"] == 4
+    assert out["limit"] == 1
+    assert out["offset"] == 1
+    assert len(out["models"]) == 1
+    full = _list(ctx, "")
+    assert out["models"][0]["relative"] == full["models"][1]["relative"]
+
+
+def test_symlink_outside_models_dir_is_skipped(tmp_path):
+    import os
+
+    ctx = _ctx(tmp_path)
+    (ctx.paths.models / "diffusion").mkdir(parents=True)
+    (ctx.paths.models / "diffusion" / "real.gguf").write_bytes(b"x")
+    outside = tmp_path / "outside.gguf"
+    outside.write_bytes(b"x")
+    link = ctx.paths.models / "diffusion" / "evil.gguf"
+    try:
+        os.symlink(str(outside), str(link))
+    except (OSError, NotImplementedError):
+        return
+    out = _list(ctx, "")
+    rels = [m["relative"] for m in out["models"]]
+    assert "diffusion/evil.gguf" not in rels
+    assert "diffusion/real.gguf" in rels
+
+
+def test_huge_limit_is_capped_at_max(tmp_path):
+    ctx = _ctx(tmp_path)
+    _seed_numbered(ctx, 3)
+    out = _list(ctx, "limit=999999")
+    assert out["limit"] == 20000
+    assert out["total"] == 3
+    assert len(out["models"]) == 3

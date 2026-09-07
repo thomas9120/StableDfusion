@@ -26,6 +26,8 @@ echo "URL: $URL"
 echo
 
 if command -v open >/dev/null 2>&1; then
+	# NOTE: the browser opens before the server is up, so the first load may
+	# need a refresh; if server.py exits, close the stray tab.
 	open "$URL" >/dev/null 2>&1 || true
 elif command -v xdg-open >/dev/null 2>&1; then
 	xdg-open "$URL" >/dev/null 2>&1 || true
