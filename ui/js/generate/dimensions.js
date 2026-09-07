@@ -12,6 +12,8 @@ window.SDGui = window.SDGui || {};
 window.SDGui.generateDimensions = (() => {
 	// A6 - dimension alignment multiple. SD needs mult of 8; many models 64.
 	var DIM_MULTIPLE = 8;
+	// Hard cap for exact dimensions (matches the 64–4096 range in the UI).
+	var DIM_MAX = 4096;
 
 	// Last shape the user engaged with, so the size row stays stable when
 	// the current ratio is custom (no bucket highlight).
@@ -20,15 +22,22 @@ window.SDGui.generateDimensions = (() => {
 	// only rebuild them when the shape actually changes (not on every
 	// per-keystroke updateAffordances call).
 	var renderedShape = null;
+	// M27 — the recommended size tag is per-bundle, so rebuild when the
+	// bundle changes even if the shape is the same.
+	var renderedBundle = null;
+	// Edge-triggered huge-dimension warning (updateAffordances runs per
+	// keystroke, so only toast when crossing above DIM_MAX, not every render).
+	var warnedHuge = false;
 
 	var flagCore = null;
 	var onSyncAll = function () {};
 
-	// A6 - snap a value to the dimension multiple.
+	// A6 - snap a value to the dimension multiple, clamped to DIM_MAX.
 	function snapDim(v) {
 		var n = parseInt(v, 10);
 		if (Number.isNaN(n)) n = DIM_MULTIPLE;
 		if (n < DIM_MULTIPLE) n = DIM_MULTIPLE;
+		if (n > DIM_MAX) n = DIM_MAX;
 		return Math.round(n / DIM_MULTIPLE) * DIM_MULTIPLE;
 	}
 
@@ -40,29 +49,70 @@ window.SDGui.generateDimensions = (() => {
 		return buckets.find((b) => b.width === w && b.height === h) || null;
 	}
 
-	function sizeTagForLong(long) {
-		if (long <= 640) return "SD 1.x";
-		if (long <= 800) return "SD 1.5";
-		return "SDXL";
+	// Model-agnostic size tag. The old hardcoded "SD 1.x / SD 1.5 / SDXL"
+	// labels were wrong for every other bundle, so the default is generic
+	// (small/medium/large) with a native-size hint only when the bundle is
+	// known. `bundle` is optional; falls back to the active flagCore bundle.
+	function sizeTagForLong(long, bundle) {
+		var b = bundle || (flagCore && flagCore.getBundle ? flagCore.getBundle() : "") || "";
+		if (b === "sd1") {
+			if (long <= 512) return "native";
+			if (long <= 768) return "large";
+			return "very large";
+		}
+		if (b === "sdxl" || b === "sd3") {
+			if (long <= 1024) return "native";
+			return "large";
+		}
+		if (long <= 640) return "small";
+		if (long <= 1024) return "medium";
+		return "large";
 	}
 
-	function budgetFor(mp) {
+	// Conservative generic VRAM budget. `bundle` is accepted for future
+	// per-model tuning; thresholds stay model-agnostic on purpose.
+	function budgetFor(mp, bundle) {
+		void bundle;
 		if (mp <= 1.05) return { cls: "ok", text: "on budget" };
 		if (mp <= 1.3) return { cls: "warn", text: "large" };
 		return { cls: "over", text: "slow / OOM risk" };
 	}
 
+	// Long edge the active bundle defaults to (e.g. 512 for SD1, 1024 for
+	// SDXL, 2048 for Krea). Falls back to 1024 when unknown.
+	function bundleLongEdge() {
+		var bundles = window.SDGui.MODEL_TYPE_BUNDLES || [];
+		var name = flagCore && flagCore.getBundle ? flagCore.getBundle() : "";
+		for (var i = 0; i < bundles.length; i++) {
+			if (bundles[i].value === name && bundles[i].defaults) {
+				var w = Number(bundles[i].defaults.width) || 0;
+				var h = Number(bundles[i].defaults.height) || 0;
+				if (w > 0 && h > 0) return Math.max(w, h);
+			}
+		}
+		return 1024;
+	}
+
 	// (Re)build the size buttons for the given shape, ascending longer edge,
-	// plus a Custom escape hatch. Recommended = the SDXL-class bucket.
+	// plus a Custom escape hatch. Recommended = the bucket closest to the
+	// active bundle's native long edge (conservative per-bundle default).
 	function renderDimensionSizes(activeShape) {
 		var wrap = document.getElementById("gen-dim-sizes");
 		if (!wrap) return;
 		wrap.replaceChildren();
+		var bundle = flagCore && flagCore.getBundle ? flagCore.getBundle() : "";
 		var buckets = (window.SDGui.DIMENSION_BUCKETS || {})[activeShape] || [];
-		var recommended =
-			buckets
-				.filter((b) => b.long >= 1024)
-				.sort((a, b) => a.long - b.long)[0] || buckets[buckets.length - 1];
+		var target = bundleLongEdge();
+		var recommended = null;
+		var bestD = Infinity;
+		buckets.forEach((b) => {
+			var d = Math.abs(b.long - target);
+			if (d < bestD) {
+				bestD = d;
+				recommended = b;
+			}
+		});
+		if (!recommended) recommended = buckets[buckets.length - 1];
 		buckets.forEach((b) => {
 			var btn = document.createElement("button");
 			btn.className = "dim-size";
@@ -70,13 +120,14 @@ window.SDGui.generateDimensions = (() => {
 			btn.setAttribute("data-long", String(b.long));
 			btn.setAttribute("data-w", String(b.width));
 			btn.setAttribute("data-h", String(b.height));
+			btn.setAttribute("aria-pressed", "false");
 			var num = document.createElement("span");
 			num.className = "num";
 			num.textContent = String(b.long);
 			btn.appendChild(num);
 			var tag = document.createElement("span");
 			tag.className = "tag";
-			tag.textContent = sizeTagForLong(b.long);
+			tag.textContent = sizeTagForLong(b.long, bundle);
 			btn.appendChild(tag);
 			if (recommended && b.long === recommended.long)
 				btn.classList.add("recommended");
@@ -86,6 +137,7 @@ window.SDGui.generateDimensions = (() => {
 		custom.className = "dim-size";
 		custom.type = "button";
 		custom.setAttribute("data-long", "custom");
+		custom.setAttribute("aria-pressed", "false");
 		var cNum = document.createElement("span");
 		cNum.className = "num";
 		cNum.textContent = "Custom";
@@ -109,18 +161,19 @@ window.SDGui.generateDimensions = (() => {
 
 		// Shape highlight (cleared if the ratio is custom).
 		document.querySelectorAll("#gen-dim-shapes .dim-shape").forEach((chip) => {
-			chip.classList.toggle(
-				"active",
-				!!shape && chip.getAttribute("data-shape") === shape,
-			);
+			var on = !!shape && chip.getAttribute("data-shape") === shape;
+			chip.classList.toggle("active", on);
+			chip.setAttribute("aria-pressed", on ? "true" : "false");
 		});
 
 		// Size buttons for the active shape, then highlight the matching bucket
 		// — or Custom when the size is off-bucket. Only rebuild when the shape
-		// actually changes (M27: avoid per-keystroke DOM rebuild).
-		if (renderedShape !== lastShape) {
+		// or bundle actually changes (M27: avoid per-keystroke DOM rebuild).
+		var bundle = flagCore && flagCore.getBundle ? flagCore.getBundle() : "";
+		if (renderedShape !== lastShape || renderedBundle !== bundle) {
 			renderDimensionSizes(lastShape);
 			renderedShape = lastShape;
+			renderedBundle = bundle;
 		}
 		document.querySelectorAll("#gen-dim-sizes .dim-size").forEach((btn) => {
 			var on = bucket
@@ -128,6 +181,7 @@ window.SDGui.generateDimensions = (() => {
 					Number(btn.getAttribute("data-h")) === h
 				: btn.getAttribute("data-long") === "custom";
 			btn.classList.toggle("active", on);
+			btn.setAttribute("aria-pressed", on ? "true" : "false");
 		});
 
 		// Live readout.
@@ -143,9 +197,23 @@ window.SDGui.generateDimensions = (() => {
 				bLbl.textContent = bucket ? bucket.long + " long edge" : "custom";
 			var bud = document.getElementById("gen-dim-budget");
 			if (bud) {
-				var b = budgetFor((w * h) / 1e6);
+				var b = budgetFor(
+					(w * h) / 1e6,
+					flagCore && flagCore.getBundle ? flagCore.getBundle() : "",
+				);
 				bud.className = "dim-budget " + b.cls;
 				bud.textContent = b.text;
+			}
+			if (Math.max(w, h) > DIM_MAX) {
+				if (!warnedHuge) {
+					warnedHuge = true;
+					window.SDGui.toast(
+						"Dimensions above " + DIM_MAX + "px may fail or OOM.",
+						"warning",
+					);
+				}
+			} else {
+				warnedHuge = false;
 			}
 			// Proportional preview swatch (long side capped at 80px).
 			var box = document.getElementById("gen-dim-preview-box");
@@ -154,6 +222,8 @@ window.SDGui.generateDimensions = (() => {
 				box.style.width = Math.round(w * scale) + "px";
 				box.style.height = Math.round(h * scale) + "px";
 			}
+		} else {
+			warnedHuge = false;
 		}
 	}
 

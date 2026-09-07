@@ -175,12 +175,12 @@ def is_trusted_request_host(host_header, gui_host, allowed_hosts=(), tunnel_host
 
     A rebinding page is same-origin from the browser's view, so it sends no
     ``Origin`` header — but its ``Host`` is the attacker's domain, which is the
-    signal we reject here. Wildcard binds keep the existing trust-the-Host
-    behavior (explicit LAN-exposure mode). A missing Host means a non-browser
-    client, which is not a rebinding vector, so it is allowed.
+    signal we reject here. Wildcard binds require an explicit allow-list
+    (``SD_GUI_ALLOWED_HOSTS``), the configured GUI host, loopback, or the
+    tunnel host — an arbitrary Host header is never trusted. A missing Host
+    means a non-browser client, which is not a rebinding vector, so it is
+    allowed.
     """
-    if gui_host in WILDCARD_BIND_HOSTS:
-        return True
     raw = (host_header or "").strip()
     if not raw:
         return True
@@ -222,7 +222,18 @@ def get_allowed_request_origins(
         except Exception:
             pass
     if allow_request_host_origin and request_host:
-        origins.add(f"http://{request_host}")
+        # Tightened: never trust an arbitrary Host header as an Origin.
+        # An attacker-controlled Host (DNS rebinding) must not become an
+        # allowed CORS origin. Only admit request_host when it is loopback
+        # or explicitly allowed via gui_host / extra_hosts.
+        try:
+            hostname = urllib.parse.urlsplit(f"//{request_host}").hostname or ""
+        except ValueError:
+            hostname = ""
+        allowed = {str(h).lower() for h in (extra_hosts or ())}
+        allowed.add((gui_host or "").strip().lower())
+        if _loopback_host(hostname) or hostname.lower() in allowed:
+            origins.add(f"http://{request_host}")
     return origins
 
 

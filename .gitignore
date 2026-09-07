@@ -41,16 +41,9 @@ desktop.ini
 .vscode/
 *.log
 /.pi
-/models/vae
-/models/vae
-/models/diffusion
-/models/loras
-/models/text-encoders
+# Legacy per-folder model ignores removed — covered by models/* above.
 docs/polish.md
 PLAN.md
-PLAN.md
 /mocks
-PLAN.md
 /scripts
-/models/upscalers
 docs/todo.md

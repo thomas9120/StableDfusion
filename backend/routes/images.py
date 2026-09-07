@@ -9,6 +9,7 @@
 
 import json
 import re
+import sys
 import urllib.parse
 
 from backend.context import AppContext
@@ -30,17 +31,34 @@ _CONTENT_TYPES = {
 
 
 def list_images(request: Request, response: Response, ctx: AppContext) -> None:
-    entries = []
-    gallery_dir = ctx.paths.output_gallery
-    if gallery_dir.exists():
-        sidecars = sorted(gallery_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
-        for sidecar in sidecars:
+    try:
+        entries = []
+        gallery_dir = ctx.paths.output_gallery
+        if gallery_dir.exists():
             try:
-                data = json.loads(sidecar.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                continue
-            if isinstance(data, dict):
-                entries.append(data)
+                candidates = list(gallery_dir.glob("*.json"))
+            except OSError as exc:
+                response.error("Could not list images.", 500)
+                print(f"[images] list failed: {exc}", file=sys.stderr, flush=True)
+                return
+            with_mtime = []
+            for sidecar in candidates:
+                try:
+                    with_mtime.append((sidecar.stat().st_mtime, sidecar))
+                except OSError:
+                    continue
+            with_mtime.sort(key=lambda item: item[0], reverse=True)
+            for _, sidecar in with_mtime:
+                try:
+                    data = json.loads(sidecar.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    continue
+                if isinstance(data, dict):
+                    entries.append(data)
+    except OSError as exc:
+        response.error("Could not list images.", 500)
+        print(f"[images] list failed: {exc}", file=sys.stderr, flush=True)
+        return
     response.json({"images": entries})
 
 
@@ -76,4 +94,4 @@ def serve_image(request: Request, response: Response, ctx: AppContext) -> None:
         response.file(image_path, content_type=_content_type(image_path), headers=headers)
     except OSError as exc:
         response.error("Could not read image.", 500)
-        print(f"[images] read failed for {name}: {exc}", flush=True)
+        print(f"[images] read failed for {name}: {exc}", file=sys.stderr, flush=True)

@@ -53,6 +53,7 @@ window.SDGui.generatePreviewProgress = (() => {
 			v.muted = true;
 			v.playsInline = true;
 			v.hidden = true;
+			v.addEventListener("error", showPreviewEmpty);
 			frame.insertBefore(v, $("gen-preview-empty") || null);
 		}
 		return v;
@@ -86,10 +87,31 @@ window.SDGui.generatePreviewProgress = (() => {
 		if (previewEmpty) previewEmpty.style.display = "";
 	}
 
+	function showPreviewEmpty() {
+		var img = $("gen-preview");
+		if (img) {
+			img.hidden = true;
+			img.removeAttribute("src");
+		}
+		var v = $("gen-preview-video");
+		if (v) {
+			v.hidden = true;
+			v.removeAttribute("src");
+		}
+		var empty = $("gen-preview-empty");
+		if (empty) empty.style.display = "";
+	}
+
 	function refreshPreview(mtime) {
 		var media = activePreviewMedia();
 		var empty = $("gen-preview-empty");
 		if (!media) return;
+		// 404 (e.g. preview cleaned up mid-run): fall back to the empty
+		// placeholder instead of a broken-image icon.
+		if (media.tagName === "IMG" && !media._previewErrBound) {
+			media._previewErrBound = true;
+			media.addEventListener("error", showPreviewEmpty);
+		}
 		media.src = "/api/generate/preview?t=" + mtime;
 		media.hidden = false;
 		// Live video preview: muted autoplay so the denoising preview animates.
@@ -156,5 +178,6 @@ window.SDGui.generatePreviewProgress = (() => {
 		refreshPreview: refreshPreview,
 		updateProgress: updateProgress,
 		showResultEmpty: showResultEmpty,
+		showPreviewEmpty: showPreviewEmpty,
 	};
 })();

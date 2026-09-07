@@ -6,6 +6,8 @@
 - POST /api/hf/download-cancel
 """
 
+import sys
+
 from backend.context import AppContext
 from backend.http import Request, Response
 from backend.services import hf_download_service
@@ -31,7 +33,7 @@ def list_repo_files(request: Request, response: Response, ctx: AppContext) -> No
         response.error(f"Hugging Face: {exc}", 502)
     except Exception as exc:
         # Network/SSL/unexpected — surface a clean message, full trace to stderr.
-        print(f"[hf/repo-files] {exc}", flush=True)
+        print(f"[hf/repo-files] {exc}", file=sys.stderr, flush=True)
         response.error("Could not reach Hugging Face. Check your network and try again.", 502)
 
 
@@ -39,8 +41,14 @@ def start_download(request: Request, response: Response, ctx: AppContext) -> Non
     body = request.body or {}
     result = hf_download_service.start_download(ctx, body)
     if "error" in result:
-        status = 409 if result["error"] == "A download is already in progress" else 400
-        response.error(result["error"], status)
+        code = result.get("code", "")
+        if code == "already_running":
+            status = 409
+        elif code == "invalid_request":
+            status = 400
+        else:
+            status = 409 if result["error"] == "A download is already in progress" else 400
+        response.error(result["error"], status, code=code or None)
         return
     response.json(result)
 

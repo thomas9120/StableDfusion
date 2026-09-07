@@ -18,6 +18,10 @@ function dismissToastNode(note) {
 window.SDGui.toast = (message, kind) => {
 	var container = document.getElementById("toast-container");
 	if (!container) return;
+	if (!container.hasAttribute("aria-live")) {
+		container.setAttribute("role", "status");
+		container.setAttribute("aria-live", "polite");
+	}
 	while (container.children.length >= window.SDGui.TOAST_MAX) {
 		dismissToastNode(container.firstChild);
 	}
@@ -112,21 +116,26 @@ window.SDGui.copyText = async (text) => {
 };
 
 // Attach an absolutely-positioned "Copy" button to a <pre> (or any element).
-// `getText` returns the current text to copy; safe to call on every render.
+// `getText` returns the current text to copy; the latest getter is stored on
+// the element so re-renders update what gets copied (no stale closure).
 window.SDGui.attachCopyButton = (pre, getText) => {
 	if (!pre) return;
-	if (pre.querySelector(".copy-btn")) return;
+	if (typeof getText === "function") pre._copyGetter = getText;
+	var existing = pre.querySelector(".copy-btn");
+	if (existing) return existing;
 	var btn = document.createElement("button");
 	btn.type = "button";
 	btn.className = "btn btn-sm copy-btn";
 	btn.textContent = "Copy";
 	btn.setAttribute("aria-label", "Copy to clipboard");
 	btn.addEventListener("click", () => {
+		var fn = pre._copyGetter;
 		window.SDGui.copyText(
-			typeof getText === "function" ? getText() : pre.textContent,
+			typeof fn === "function" ? fn() : pre.textContent,
 		);
 	});
 	pre.appendChild(btn);
+	return btn;
 };
 
 // Shared confirm dialog (uses #confirm-modal). Returns a Promise<boolean>.
@@ -244,8 +253,23 @@ window.SDGui.manager = (() => {
 			: [];
 		var current =
 			backendSelect.value || (status && status.backend ? status.backend : "");
-		backendSelect.replaceChildren();
+		// Skip rebuild while the user is interacting with the dropdown so the
+		// 5s status poll doesn't collapse an open select.
+		if (document.activeElement === backendSelect) return;
+		var existingValues = Array.from(backendSelect.options).map((o) => o.value);
+		var nextValues = available.map((b) => b.id);
+		var sameOptions =
+			existingValues.length === nextValues.length &&
+			existingValues.every((v, i) => v === nextValues[i]);
+		if (sameOptions && nextValues.length !== 0) {
+			var hasCurrent = existingValues.indexOf(current) !== -1;
+			if (hasCurrent && backendSelect.value === current) return;
+			if (hasCurrent) backendSelect.value = current;
+			else if (nextValues.length) backendSelect.value = nextValues[0];
+			return;
+		}
 		if (available.length === 0) {
+			backendSelect.replaceChildren();
 			backendSelect.appendChild(
 				new Option("No supported backends for this platform", ""),
 			);
@@ -253,6 +277,7 @@ window.SDGui.manager = (() => {
 			return;
 		}
 		backendSelect.disabled = false;
+		backendSelect.replaceChildren();
 		available.forEach((b) => {
 			backendSelect.appendChild(new Option(b.label, b.id));
 		});

@@ -12,6 +12,8 @@ window.SDGui.generateRunController = (() => {
 	var lastPreviewMtime = 0;
 	var generating = false;
 	var pollInFlight = false;
+	var pollFailCount = 0;
+	var POLL_MAX_FAILS = 20;
 
 	var flagCore = null;
 	var previewProgress = null;
@@ -139,6 +141,7 @@ window.SDGui.generateRunController = (() => {
 		pollInFlight = true;
 		try {
 			var snap = await window.SDGui.fetchJson("/api/generate/status");
+			pollFailCount = 0;
 			var section = runningSection || sectionForMode(snap.mode || flagCore.getMode());
 			onRunProgress(section, snap);
 			updateGenBtnFromSnap(snap);
@@ -173,7 +176,25 @@ window.SDGui.generateRunController = (() => {
 			}
 			runningSection = null;
 		} catch (e) {
-			/* transient network - keep polling */
+			// Transient network blips keep polling; give up after N
+			// consecutive failures (same pattern as the HF download poller).
+			pollFailCount++;
+			if (pollFailCount >= POLL_MAX_FAILS) {
+				stopPolling();
+				setGenerating(false);
+				previewProgress.setRunStartTime(0);
+				previewProgress.showProgressBar(false);
+				var section = runningSection || getActiveSection();
+				onRunDone(section, {
+					state: "error",
+					error: "Lost contact with the server during generation.",
+				});
+				runningSection = null;
+				window.SDGui.toast(
+					"Lost contact with the server during generation.",
+					"error",
+				);
+			}
 		} finally {
 			pollInFlight = false;
 		}
@@ -188,6 +209,7 @@ window.SDGui.generateRunController = (() => {
 
 	function startPolling() {
 		stopPolling();
+		pollFailCount = 0;
 		pollTimer = setInterval(poll, 400);
 	}
 

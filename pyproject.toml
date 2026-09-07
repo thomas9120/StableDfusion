@@ -3,6 +3,8 @@ name = "stable-d-gui"
 version = "0.1.0"
 description = "A web GUI for leejet/stable-diffusion.cpp"
 requires-python = ">=3.11"
+# NOTE: runtime dependencies live in requirements.txt (single source of truth).
+# Do not add dependencies here; this file holds build metadata + tool config only.
 
 [tool.ruff]
 line-length = 100
@@ -12,3 +14,9 @@ extend-exclude = ["sdcpp", "models", "output", ".venv"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "W", "B"]
 # I001 (import sorting) and the pyupgrade (UP) rules are enforced by pi-lens.
+
+[tool.ruff.format]
+# Inherits line-length = 100 from [tool.ruff].
+
+[tool.pytest.ini_options]
+testpaths = ["tests/backend"]

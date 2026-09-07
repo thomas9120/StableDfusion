@@ -21,6 +21,13 @@ if %ERRORLEVEL% EQU 0 (
     set "PY_CMD=python"
 )
 
+%PY_CMD% -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" >nul 2>nul
+if %ERRORLEVEL% NEQ 0 (
+    echo ERROR: Python 3.11+ is required.
+    pause
+    exit /b 1
+)
+
 if not exist ".venv\Scripts\python.exe" (
     echo Creating local Python environment in .venv...
     %PY_CMD% -m venv .venv
@@ -56,6 +63,8 @@ if %ERRORLEVEL% EQU 0 (
         pause
         exit /b 1
     )
+    REM Optional: enable Playwright browsers for frontend smoke tests.
+    REM Uncomment to install: npx playwright install --with-deps chromium
 ) else (
     echo npm was not found; skipping optional frontend test dependencies.
 )

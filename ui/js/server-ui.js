@@ -141,9 +141,14 @@ window.SDGui.serverUi = (() => {
 		control.id = "server-" + flag.id;
 		if (cur !== undefined && cur !== null) control.value = String(cur);
 		controls[flag.id] = control;
-		control.addEventListener("input", () => {
+		var onControlCommit = () => {
 			setValue(flag, normalizeControlValue(control, flag));
-		});
+		};
+		control.addEventListener("input", onControlCommit);
+		// Selects (and some number inputs) only fire change reliably across
+		// browsers/keyboard use; listen to both without double-committing
+		// harm (setValue is idempotent for the same value).
+		control.addEventListener("change", onControlCommit);
 		wrap.appendChild(control);
 		return wrap;
 	}

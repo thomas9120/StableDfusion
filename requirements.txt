@@ -1,2 +1,6 @@
+# Runtime deps only (single source of truth; pyproject.toml adds none).
+# NOTE: Pillow is intentionally NOT a dependency — gallery thumbnails are
+# client-side scaled full images served by /api/image/{name}.
+# Dev/test tooling (pytest, ruff) is installed separately, not pinned here.
 certifi>=2026.5.20
 huggingface_hub>=0.24.0

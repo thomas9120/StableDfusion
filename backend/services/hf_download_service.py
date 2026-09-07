@@ -18,6 +18,7 @@ also enforces them before reaching the service.
 """
 
 import re
+import sys
 import threading
 import time
 import urllib.request
@@ -59,6 +60,10 @@ _SAFE_REVISION_RE = re.compile(r"^[A-Za-z0-9._\-/]{1,200}$")
 
 MAX_FILES_PER_DOWNLOAD = 32
 DOWNLOAD_CHUNK = 256 * 1024  # 256 KB
+
+# HfApi listing calls have no timeout kwarg in older huggingface_hub versions,
+# so run them on a worker thread and bound the wait here.
+HF_LISTING_TIMEOUT = 60.0
 
 
 def validate_hf_repo_id(repo_id: str) -> bool:
@@ -115,7 +120,15 @@ def get_repo_files(
         )
     api = HfApi(token=token)
     try:
-        names = api.list_repo_files(repo_id, revision=revision or "main", token=token)
+        names = _call_with_timeout(
+            api.list_repo_files,
+            HF_LISTING_TIMEOUT,
+            repo_id,
+            revision=revision or "main",
+            token=token,
+        )
+    except TimeoutError as exc:
+        raise RepoListingError(f"Timed out listing {repo_id}: {exc}") from exc
     except Exception as exc:
         # Translate the underlying HfHubHTTPError / RepositoryNotFoundError into
         # a string the route layer can return as a 4xx message.
@@ -124,7 +137,14 @@ def get_repo_files(
     # Build name → size map (best-effort; missing sizes are reported as 0).
     sizes: dict[str, int] = {}
     try:
-        info = api.repo_info(repo_id, revision=revision or "main", files_metadata=True, token=token)
+        info = _call_with_timeout(
+            api.repo_info,
+            HF_LISTING_TIMEOUT,
+            repo_id,
+            revision=revision or "main",
+            files_metadata=True,
+            token=token,
+        )
         for sibling in getattr(info, "siblings", None) or []:
             rfilename = getattr(sibling, "rfilename", None)
             if not rfilename:
@@ -159,6 +179,27 @@ def get_repo_files(
 
 class RepoListingError(Exception):
     """Raised when HF repo listing fails; the route returns 4xx."""
+
+
+def _call_with_timeout(func, timeout: float, *args: Any, **kwargs: Any) -> Any:
+    """Run a blocking HF call on a worker thread with a bounded wait.
+
+    huggingface_hub listing calls take no timeout kwarg on older versions, so
+    a hung network call would otherwise block the request thread forever.
+    The executor is shut down without waiting so a hung worker never blocks
+    the request thread on ``shutdown``; the daemon-less worker is left to
+    finish in the background while the caller gets a prompt TimeoutError.
+    """
+    import concurrent.futures
+
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    fut = ex.submit(func, *args, **kwargs)
+    try:
+        return fut.result(timeout=timeout)
+    except concurrent.futures.TimeoutError as exc:
+        raise TimeoutError(f"call timed out after {timeout}s") from exc
+    finally:
+        ex.shutdown(wait=False, cancel_futures=True)
 
 
 # ── Download (background thread + cancel + progress) ────────────────────
@@ -262,18 +303,21 @@ def start_download(ctx: AppContext, request: dict) -> dict[str, Any]:
     token = (request.get("token") or "").strip() or None
 
     if not validate_hf_repo_id(repo_id):
-        return {"error": "Invalid repo id"}
+        return {"error": "Invalid repo id", "code": "invalid_request"}
     if not validate_hf_revision(revision):
-        return {"error": "Invalid revision"}
+        return {"error": "Invalid revision", "code": "invalid_request"}
     if not isinstance(files, list) or not files:
-        return {"error": "No files selected"}
+        return {"error": "No files selected", "code": "invalid_request"}
     if len(files) > MAX_FILES_PER_DOWNLOAD:
-        return {"error": f"Too many files (max {MAX_FILES_PER_DOWNLOAD})"}
+        return {
+            "error": f"Too many files (max {MAX_FILES_PER_DOWNLOAD})",
+            "code": "invalid_request",
+        }
 
     cleaned_files: list[str] = []
     for f in files:
         if not isinstance(f, str) or not validate_hf_filename(f):
-            return {"error": f"Invalid filename: {f!r}"}
+            return {"error": f"Invalid filename: {f!r}", "code": "invalid_request"}
         cleaned_files.append(f.strip())
 
     # De-duplicate while preserving order.
@@ -286,7 +330,7 @@ def start_download(ctx: AppContext, request: dict) -> dict[str, Any]:
 
     with ctx.state.model_download_lock:
         if ctx.state.model_download_in_progress:
-            return {"error": "A download is already in progress"}
+            return {"error": "A download is already in progress", "code": "already_running"}
         ctx.state.model_download_in_progress = True
         ctx.state.model_download_cancel.clear()
         # Plan a stable job_id: timestamp + sanitized repo tail.
@@ -333,7 +377,11 @@ def _run_downloads(
             try:
                 dest = _safe_destination(ctx.paths.models, filename)
             except ValueError as exc:
-                print(f"[hf_download] unsafe path {filename!r}: {exc}", flush=True)
+                print(
+                    f"[hf_download] unsafe path {filename!r}: {exc}",
+                    file=sys.stderr,
+                    flush=True,
+                )
                 ctx.state.model_download.update(
                     status="error",
                     message=f"Unsafe path: {filename}",
@@ -363,7 +411,7 @@ def _run_downloads(
                     message=f"Failed to download {filename}: {exc}",
                     current_file="",
                 )
-                print(f"[hf_download] {filename}: {exc}", flush=True)
+                print(f"[hf_download] {filename}: {exc}", file=sys.stderr, flush=True)
                 return
 
             completed = list(ctx.state.model_download.snapshot().get("completed_files") or [])

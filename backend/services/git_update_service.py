@@ -4,6 +4,7 @@ Adapted safe-dirty path prefixes for StableDfusion: ``sdcpp/`` (downloaded
 binaries), ``models/``, ``output/``, ``presets/``, ``tools/`` (cloudflared).
 """
 
+import re
 import subprocess
 import sys
 from typing import Any
@@ -50,6 +51,29 @@ SAFE_DIRTY_SUFFIXES = (
     ".tar.gz",
     ".tgz",
 )
+
+_BRANCH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
+
+
+def validate_branch_name(branch: str) -> str:
+    """Validate a git branch name to prevent option injection.
+
+    Rejects empty values, option-like ``-...`` prefixes, and anything outside
+    ``[A-Za-z0-9._/-]``. The validated branch is safe to pass to ``git pull``
+    without a ``--`` separator; ``rev-list`` keeps its ``--`` separator.
+    """
+    text = str(branch or "").strip()
+    if not text or len(text) > 255:
+        raise ValueError("Invalid git branch name.")
+    if text.startswith("-") or text.startswith(".") or ".." in text:
+        raise ValueError("Invalid git branch name.")
+    if text.startswith("/") or text.endswith("/") or "//" in text:
+        raise ValueError("Invalid git branch name.")
+    if text.endswith(".") or "@{" in text:
+        raise ValueError("Invalid git branch name.")
+    if not _BRANCH_RE.match(text):
+        raise ValueError("Invalid git branch name.")
+    return text
 
 
 def normalize_git_path(path: str) -> str:
@@ -107,21 +131,40 @@ def classify_git_dirty_paths(entries: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def run_git(args: list[str], cwd) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True, check=False)
+def run_git(args: list[str], cwd, timeout: float = 30.0) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(
+            ["git", *args],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        return subprocess.CompletedProcess(
+            args=["git", *args],
+            returncode=1,
+            stdout=str(getattr(exc, "stdout", "") or ""),
+            stderr="git command timed out.",
+        )
 
 
 def install_python_dependencies(ctx: AppContext) -> dict[str, Any]:
     requirements_path = ctx.paths.root / "requirements.txt"
     if not requirements_path.exists():
         return {"installed": False, "message": "requirements.txt was not found."}
-    res = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "-r", str(requirements_path)],
-        cwd=str(ctx.paths.root),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        res = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-r", str(requirements_path)],
+            cwd=str(ctx.paths.root),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=600,
+        )
+    except subprocess.TimeoutExpired:
+        return {"installed": False, "error": "Dependency installation timed out."}
     output = (res.stdout or res.stderr or "").strip()
     if res.returncode != 0:
         return {
@@ -202,8 +245,22 @@ def get_app_update_status(ctx: AppContext, fetch: bool = False) -> dict[str, Any
             }
 
     upstream_ref = f"origin/{branch}"
+    try:
+        validate_branch_name(branch)
+    except ValueError:
+        return {
+            "available": True,
+            "can_update": False,
+            "reason": "Invalid git branch name.",
+            "repo_url": repo_url,
+            "origin_url": origin_url,
+            "branch": branch,
+            "dirty": has_local_changes,
+            "has_blocking_changes": has_blocking_changes,
+            **dirty_info,
+        }
     behind_ahead_res = run_git(
-        ["rev-list", "--left-right", "--count", f"HEAD...{upstream_ref}"], base_dir
+        ["rev-list", "--left-right", "--count", f"HEAD...{upstream_ref}", "--"], base_dir
     )
     if behind_ahead_res.returncode != 0:
         return {
@@ -219,8 +276,11 @@ def get_app_update_status(ctx: AppContext, fetch: bool = False) -> dict[str, Any
         }
 
     parts = behind_ahead_res.stdout.strip().split()
-    ahead = int(parts[0]) if len(parts) > 0 else 0
-    behind = int(parts[1]) if len(parts) > 1 else 0
+    try:
+        ahead = int(parts[0]) if len(parts) > 0 else 0
+        behind = int(parts[1]) if len(parts) > 1 else 0
+    except (TypeError, ValueError):
+        ahead, behind = 0, 0
 
     if ahead > 0 and behind > 0:
         state = "diverged"
@@ -308,7 +368,18 @@ def _do_update_app_from_git(ctx: AppContext) -> dict[str, Any]:
             "status": status,
         }
 
-    pull_res = run_git(["pull", "--ff-only", "origin", status["branch"]], base_dir)
+    try:
+        branch = validate_branch_name(status["branch"])
+    except (KeyError, ValueError, TypeError):
+        return {
+            "updated": False,
+            "error": "Invalid git branch name; refusing to pull.",
+            "status": status,
+        }
+    # Branch is strictly validated above (no leading dash, limited charset),
+    # so `git pull` needs no `--` separator (some git variants reject `--`
+    # for pull). `rev-list` keeps its `--` separator elsewhere in this module.
+    pull_res = run_git(["pull", "--ff-only", "origin", branch], base_dir)
     if pull_res.returncode != 0:
         return {
             "updated": False,

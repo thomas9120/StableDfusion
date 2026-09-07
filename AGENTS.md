@@ -2,7 +2,7 @@
 
 ## Project Reference
 
-/docs/directory.md is a good place to start.
+`docs/directory.md` is a good place to start.
 
 ## Relationship to LLama-GUI
 
@@ -33,8 +33,9 @@ directly.
 
 ## Verify After Every Change
 
-- `node --check ui/js/<file>.js` on every JS file you touch.
+- `node --check ui/js/<file>.js` on every JS file you touch (or `npm run test:syntax` for all).
 - `ruff check . && ruff format .` for Python.
+- `pytest` (backend unit tests) and `npm run test:frontend` (flag-core unit + smoke) when touching related code.
 - `python server.py` then `curl http://127.0.0.1:5250/api/status` to confirm the
   backend boots.
 - Serve `ui/` as the web root for browser smoke checks (root-relative `/js/...`
@@ -50,6 +51,10 @@ directly.
 
 - All stateful operations (generation, install, HF download, tunnel, sd-server)
   use locks in `backend/state.py`. Acquire the right lock before mutating.
+  Locks: `process_lock`, `output_buffer_lock`/`stderr_buffer_lock`,
+  `install_lock`, `model_download_lock`, `remote_tunnel_lock` (+
+  `remote_tunnel_install_lock`, `remote_tunnel_log_lock`), `generation_lock`,
+  `preset_lock`, `app_update_lock`, `sd_server_lock` (+ `sd_server_log_lock`).
 - Validate all external input (HF repo ids, filenames, user paths) with strict
   regex + path-traversal checks.
 - Routes return sanitized errors via `Response.error()`; real details go to
@@ -59,7 +64,8 @@ directly.
 
 Service modules that would share a basename with a route module use a `_service`
 suffix (`generate_service`, `hf_download_service`, `tunnel_service`,
-`lifecycle_service`, `file_picker_service`, `git_update_service`) to avoid a
+`lifecycle_service`, `file_picker_service`, `git_update_service`,
+`model_storage_service`) to avoid a
 basename collision between a route and the service it imports. `sdcpp_manager`
 and `process_manager` keep `_manager` (they already differ from any route name).
 
